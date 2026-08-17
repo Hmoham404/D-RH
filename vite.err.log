@@ -1,0 +1,19 @@
+X [ERROR] Cannot read directory "../..": Access is denied.
+
+X [ERROR] Could not resolve "C:\\Users\\DELL\\Desktop\\Rh\\vite.config.js"
+
+[31mfailed to load config from C:\Users\DELL\Desktop\Rh\vite.config.js[39m
+[31merror when starting dev server:
+Error: Build failed with 2 errors:
+error: Cannot read directory "../..": Access is denied.
+error: Could not resolve "C:\\Users\\DELL\\Desktop\\Rh\\vite.config.js"
+    at failureErrorWithLog (C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:1472:15)
+    at C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:945:25
+    at runOnEndCallbacks (C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:1315:45)
+    at buildResponseToResult (C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:943:7)
+    at C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:970:16
+    at responseCallbacks.<computed> (C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:622:9)
+    at handleIncomingPacket (C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:677:12)
+    at Socket.readFromStdout (C:\Users\DELL\Desktop\Rh\node_modules\esbuild\lib\main.js:600:7)
+    at Socket.emit (node:events:508:28)
+    at addChunk (node:internal/streams/readable:563:12)[39m

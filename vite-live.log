@@ -1,0 +1,30 @@
+
+> rh-dashboard-react@1.0.0 dev
+> vite --host 0.0.0.0 --port 4173
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m305[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.100.14:[1m4173[22m/[39m
+[2m01:14:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:14:49[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:15:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:16:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m01:21:15[22m [36m[1m[vite][22m[39m changed tsconfig file detected: C:\Users\DELL\Desktop\Rh\tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+[2m01:22:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:22:39[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:22:47[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:23:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:24:11[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EmployeeEditorModal.tsx[22m
+[2m01:24:12[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/EmployeeEditorModal.tsx[22m
+[2m01:24:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:29:05[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:29:27[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:29:53[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:30:01[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/components/DetailPanel.tsx[22m
+[2m01:30:56[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m01:48:02[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:48:03[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.jsx[22m
+[2m01:52:23[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m01:52:25[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m

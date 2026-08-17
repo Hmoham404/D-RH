@@ -134,6 +134,23 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'hr_staff_directory'
+      and policyname = 'hr_staff_directory_delete'
+  ) then
+    create policy "hr_staff_directory_delete"
+    on public.hr_staff_directory
+    for delete
+    to anon, authenticated
+    using (true);
+  end if;
+end $$;
+
 insert into public.hr_dashboard_store (id, payload)
 values ('rh-homepage', '{}'::jsonb)
 on conflict (id) do nothing;

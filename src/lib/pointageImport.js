@@ -211,6 +211,10 @@ function parseWeeklyCellValue(value) {
     return { raw: text, display: 'Repos', status: 'REPOS' };
   }
 
+  if (normalized === 'STC') {
+    return { raw: text, display: 'STC', status: 'STC' };
+  }
+
   if (/^\d{2}:\d{2}\s*!$/.test(text)) {
     return { raw: text, display: text, status: 'AVR' };
   }

@@ -80,6 +80,291 @@ function formatDateLabel(isoDate) {
   }).format(date);
 }
 
+function parseLooseDate(value) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const parsed = new Date(`${raw}T00:00:00`);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const frMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (frMatch) {
+    const day = Number(frMatch[1]);
+    const month = Number(frMatch[2]) - 1;
+    const year = Number(frMatch[3]);
+    const parsed = new Date(year, month, day);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  const fallback = new Date(raw);
+  return Number.isNaN(fallback.getTime()) ? null : fallback;
+}
+
+function getMonthKey(value) {
+  const date = parseLooseDate(value);
+  if (!date) return '';
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonthLabel(value) {
+  const date = parseLooseDate(value);
+  if (!date) return '--';
+
+  return new Intl.DateTimeFormat('fr-FR', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date);
+}
+
+function formatPeriodLabel(startDate, endDate) {
+  if (!startDate && !endDate) {
+    return '--';
+  }
+
+  if (!startDate || !endDate || startDate === endDate) {
+    return formatShortDateLabel(startDate || endDate);
+  }
+
+  return `${formatShortDateLabel(startDate)} au ${formatShortDateLabel(endDate)}`;
+}
+
+function normalizeLookupText(value) {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+function isFutureMarkerDay(day) {
+  const raw = normalizeLookupText(day?.raw ?? day?.display ?? '');
+  return raw === 'X';
+}
+
+function getWeeklyCellToken(day) {
+  const rawToken = normalizeLookupText(day?.raw ?? day?.display ?? '');
+  const statusToken = normalizeLookupText(day?.status ?? '');
+
+  if (rawToken) {
+    return rawToken;
+  }
+
+  return statusToken;
+}
+
+function hasStartedWorkInPeriod(days) {
+  return days.some((day) => {
+    const token = getWeeklyCellToken(day);
+    return Boolean(token) && token !== 'X' && token !== 'EMPTY';
+  });
+}
+
+function hasWeeklyStc(days) {
+  return days.some((day) => getWeeklyCellToken(day) === 'STC');
+}
+
+function getFirstStcDateInPeriod(days) {
+  const firstStcDay = days.find((day) => getWeeklyCellToken(day) === 'STC');
+  if (!firstStcDay) {
+    return '';
+  }
+
+  if (firstStcDay.isoDate) {
+    return formatShortDateLabel(firstStcDay.isoDate);
+  }
+
+  return String(firstStcDay.label || 'STC').trim();
+}
+
+function getFirstActiveDateInPeriod(days) {
+  const firstActiveDay = days.find((day) => {
+    const token = getWeeklyCellToken(day);
+    return Boolean(token) && token !== 'X' && token !== 'EMPTY';
+  });
+
+  return firstActiveDay?.isoDate || '';
+}
+
+function buildEmployeeLookup(employees) {
+  const byCode = new Map();
+  const byName = new Map();
+
+  employees.forEach((employee) => {
+    [employee.id, employee.finalCode, employee.zk, employee.saber].forEach((code) => {
+      const normalizedCode = normalizeLookupText(code);
+      if (normalizedCode && !byCode.has(normalizedCode)) {
+        byCode.set(normalizedCode, employee);
+      }
+    });
+
+    const normalizedName = normalizeLookupText(employee.fullName);
+    if (normalizedName && !byName.has(normalizedName)) {
+      byName.set(normalizedName, employee);
+    }
+  });
+
+  return function findEmployeeMatch(row) {
+    const codeCandidates = [row?.id, row?.employeeKey];
+
+    for (const candidate of codeCandidates) {
+      const normalizedCode = normalizeLookupText(candidate);
+      if (normalizedCode && byCode.has(normalizedCode)) {
+        return byCode.get(normalizedCode);
+      }
+    }
+
+    const normalizedName = normalizeLookupText(row?.fullName);
+    if (normalizedName && byName.has(normalizedName)) {
+      return byName.get(normalizedName);
+    }
+
+    return null;
+  };
+}
+
+function buildPeriodEmployees(snapshot, periodStart, periodEnd, employees) {
+  if (!periodStart || !periodEnd || !Array.isArray(snapshot?.weeklySheets)) {
+    return [];
+  }
+
+  const findEmployeeMatch = buildEmployeeLookup(employees);
+  const periodEmployees = new Map();
+
+  snapshot.weeklySheets.forEach((sheet) => {
+    const dayIndexes = (sheet.dayColumns || [])
+      .map((day, index) => ({ ...day, index }))
+      .filter((day) => day.isoDate && day.isoDate >= periodStart && day.isoDate <= periodEnd);
+
+    if (!dayIndexes.length) {
+      return;
+    }
+
+    (sheet.rows || []).forEach((row, rowIndex) => {
+      const periodDays = dayIndexes.map((day) => row.days?.[day.index]).filter(Boolean);
+
+      if (!periodDays.length || !hasStartedWorkInPeriod(periodDays)) {
+        return;
+      }
+
+      const matchedEmployee = findEmployeeMatch(row);
+      const uniqueKey =
+        row.employeeKey ||
+        row.id ||
+        normalizeLookupText(row.fullName) ||
+        `${sheet.sheetName || 'period'}-${rowIndex}`;
+
+      if (periodEmployees.has(uniqueKey)) {
+        return;
+      }
+
+      const isPeriodStc = hasWeeklyStc(periodDays);
+      const firstStcDate = isPeriodStc ? getFirstStcDateInPeriod(periodDays) : '';
+
+      periodEmployees.set(uniqueKey, {
+        employeeKey: uniqueKey,
+        id: row.id || matchedEmployee?.finalCode || matchedEmployee?.id || matchedEmployee?.zk || '-',
+        fullName: row.fullName || matchedEmployee?.fullName || '-',
+        department: matchedEmployee?.department || row.department || '-',
+        kind: matchedEmployee?.kind || row.kind || '-',
+        status: isPeriodStc ? 'STC' : matchedEmployee?.status || 'Actif',
+        detail: isPeriodStc ? firstStcDate || 'STC' : matchedEmployee?.contract || row.control || '-',
+      });
+    });
+  });
+
+  return [...periodEmployees.values()].sort((left, right) => left.fullName.localeCompare(right.fullName));
+}
+
+function buildFirstStcDateMap(snapshot, periodStart, periodEnd) {
+  if (!periodStart || !periodEnd || !Array.isArray(snapshot?.weeklySheets)) {
+    return new Map();
+  }
+
+  const stcMap = new Map();
+
+  snapshot.weeklySheets.forEach((sheet) => {
+    const dayIndexes = (sheet.dayColumns || [])
+      .map((day, index) => ({ ...day, index }))
+      .filter((day) => day.isoDate && day.isoDate >= periodStart && day.isoDate <= periodEnd);
+
+    if (!dayIndexes.length) {
+      return;
+    }
+
+    (sheet.rows || []).forEach((row, rowIndex) => {
+      const uniqueKey =
+        row.employeeKey ||
+        row.id ||
+        normalizeLookupText(row.fullName) ||
+        `${sheet.sheetName || 'period'}-${rowIndex}`;
+
+      dayIndexes.forEach((day) => {
+        const cell = row.days?.[day.index];
+        if (getWeeklyCellToken(cell) !== 'STC') {
+          return;
+        }
+
+        const currentValue = stcMap.get(uniqueKey);
+        if (!currentValue || day.isoDate < currentValue) {
+          stcMap.set(uniqueKey, day.isoDate);
+        }
+      });
+    });
+  });
+
+  return stcMap;
+}
+
+function buildFirstActiveDateMap(snapshot, periodStart, periodEnd) {
+  if (!periodStart || !periodEnd || !Array.isArray(snapshot?.weeklySheets)) {
+    return new Map();
+  }
+
+  const activeMap = new Map();
+
+  snapshot.weeklySheets.forEach((sheet) => {
+    const dayIndexes = (sheet.dayColumns || [])
+      .map((day, index) => ({ ...day, index }))
+      .filter((day) => day.isoDate && day.isoDate >= periodStart && day.isoDate <= periodEnd);
+
+    if (!dayIndexes.length) {
+      return;
+    }
+
+    (sheet.rows || []).forEach((row, rowIndex) => {
+      const uniqueKey =
+        row.employeeKey ||
+        row.id ||
+        normalizeLookupText(row.fullName) ||
+        `${sheet.sheetName || 'period'}-${rowIndex}`;
+      const periodDays = dayIndexes.map((day) => row.days?.[day.index]).filter(Boolean);
+      const firstActiveDate = getFirstActiveDateInPeriod(periodDays);
+
+      if (!firstActiveDate) {
+        return;
+      }
+
+      const currentValue = activeMap.get(uniqueKey);
+      if (!currentValue || firstActiveDate < currentValue) {
+        activeMap.set(uniqueKey, firstActiveDate);
+      }
+    });
+  });
+
+  return activeMap;
+}
+
 function formatShortDateLabel(isoDate) {
   if (!isoDate) return '--';
 
@@ -299,7 +584,10 @@ function getDayStatusMeta(day) {
     };
   }
 
-  switch (String(day.status || '').toUpperCase()) {
+  const statusValue = String(day.status || '').toUpperCase();
+  const token = getWeeklyCellToken(day);
+
+  switch (statusValue) {
     case 'POINTAGE':
       return { code: 'POINTAGE', label: 'Present', tone: 'green', isPresent: true };
     case 'AVR':
@@ -312,7 +600,33 @@ function getDayStatusMeta(day) {
       return { code: 'CONGE', label: 'Conge', tone: 'violet', isPresent: false };
     case 'REPOS':
       return { code: 'REPOS', label: 'Repos', tone: 'slate', isPresent: false };
+    case 'STC':
+      return { code: 'STC', label: 'STC', tone: 'blue', isPresent: false };
     default:
+      if (token === 'X') {
+        return { code: 'X', label: 'Non demarre', tone: 'neutral', isPresent: false };
+      }
+
+      if (token === 'STC') {
+        return { code: 'STC', label: 'STC', tone: 'blue', isPresent: false };
+      }
+
+      if (token === 'ABS') {
+        return { code: 'ABS', label: 'Absent', tone: 'red', isPresent: false };
+      }
+
+      if (token === 'CM') {
+        return { code: 'CM', label: 'Conge maladie', tone: 'violet', isPresent: false };
+      }
+
+      if (token === 'CSS' || token.startsWith('CONG')) {
+        return { code: 'CONGE', label: 'Conge', tone: 'violet', isPresent: false };
+      }
+
+      if (token === 'REPOS') {
+        return { code: 'REPOS', label: 'Repos', tone: 'slate', isPresent: false };
+      }
+
       if (parseWorkedMinutes(day.display) > 0) {
         return { code: 'POINTAGE', label: 'Present', tone: 'green', isPresent: true };
       }
@@ -517,6 +831,21 @@ function getNextZkValue(employees) {
   return String(maxValue + 1).padStart(width, '0');
 }
 
+function getNextEmployeeCodeValue(employees) {
+  const codeValues = employees
+    .flatMap((employee) => [
+      String(employee.id || '').trim(),
+      String(employee.finalCode || '').trim(),
+      String(employee.saber || '').trim(),
+    ])
+    .filter((value) => /^\d+$/.test(value));
+
+  const maxValue = codeValues.length ? Math.max(...codeValues.map((value) => Number(value))) : 0;
+  const width = codeValues.length ? Math.max(4, ...codeValues.map((value) => value.length)) : 4;
+
+  return String(maxValue + 1).padStart(width, '0');
+}
+
 const TRACKED_ABSENCE_CODES = new Set(['ABS', 'CM', 'CONGE', 'REPOS']);
 const HIDDEN_ABSENCE_MARKERS = new Set(['X', 'STC']);
 
@@ -602,14 +931,17 @@ function exportEmployeeBaseWorkbook(employees, departmentRows) {
 
 function buildKpiDetailConfig(type, data) {
   const {
-    activeEmployees,
+    monthlyEffectifEmployees,
     presentRoster,
     absentRoster,
+    newRoster,
     stcEmployees,
     selectedDate,
+    periodLabel,
     totalEmployees,
     presentEmployees,
     absentEmployees,
+    newEmployees,
     stcCount,
   } = data;
 
@@ -630,42 +962,102 @@ function buildKpiDetailConfig(type, data) {
     case 'absent':
       return {
         title: 'Liste des absents',
-        subtitle: `ABS du ${formatDateLabel(selectedDate)} | ${absentEmployees} absents`,
+        subtitle: `ABS du ${formatDateLabel(selectedDate)} | ${absentEmployees} personnes`,
         rows: absentRoster
-          .filter((row) => row.statusCode === 'ABS')
+          .filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS')
           .map((row) => ({
             id: row.id || row.employeeKey || '-',
             fullName: row.fullName || '-',
             department: row.department || '-',
             kind: row.kind || '-',
             status: row.statusLabel || 'Absent',
-            detail: row.display || '-',
+            detail: row.rawDisplay || row.display || '-',
           })),
+      };
+    case 'new':
+      return {
+        title: 'Liste des nouveaux',
+        subtitle: `Nouveaux du ${formatDateLabel(selectedDate)} | ${newEmployees} personnes`,
+        rows: newRoster.map((row) => ({
+          id: row.id || row.employeeKey || '-',
+          fullName: row.fullName || '-',
+          department: row.department || '-',
+          kind: row.kind || '-',
+          status: row.statusLabel || 'Non demarre',
+          detail: row.rawDisplay || row.display || 'X',
+        })),
       };
     case 'stc':
       return {
-        title: 'Liste STC solde de compte',
-        subtitle: `${stcCount} employes STC dans la base RH`,
+        title: 'Liste STC du mois',
+        subtitle: `${stcCount} employe(s) STC pour ${periodLabel}`,
+        rows: stcEmployees.map((employee) => ({
+          id: employee.id || employee.employeeKey || '-',
+          fullName: employee.fullName || '-',
+          department: employee.department || '-',
+          kind: employee.kind || '-',
+          status: employee.status || 'STC',
+          detail: employee.detail || '-',
+        })),
+      };
+    case 'total':
+    default:
+      return {
+        title: 'Effectif du mois',
+        subtitle: `${totalEmployees} employe(s) RH suivis pour ${periodLabel}`,
+        rows: monthlyEffectifEmployees.map((employee) => ({
+          id: employee.id || employee.employeeKey || '-',
+          fullName: employee.fullName || '-',
+          department: employee.department || '-',
+          kind: employee.kind || '-',
+          status: employee.status || 'Actif',
+          detail: employee.detail || '-',
+        })),
+      };
+  }
+}
+
+function buildEmployeeBaseDetailConfig(type, data) {
+  const { employees, activeEmployees, stcEmployees } = data;
+
+  switch (type) {
+    case 'active':
+      return {
+        title: 'Liste des employes actifs',
+        subtitle: `${activeEmployees.length} employe(s) actifs dans la base RH`,
+        rows: activeEmployees.map((employee) => ({
+          id: employee.finalCode || employee.id || employee.zk || '-',
+          fullName: employee.fullName || '-',
+          department: employee.department || '-',
+          kind: employee.kind || '-',
+          status: employee.status || 'Actif',
+          detail: employee.contract || employee.service || '-',
+        })),
+      };
+    case 'stc':
+      return {
+        title: 'Liste STC base RH',
+        subtitle: `${stcEmployees.length} employe(s) STC dans la base RH`,
         rows: stcEmployees.map((employee) => ({
           id: employee.finalCode || employee.id || employee.zk || '-',
-          fullName: employee.fullName || `${employee.lastName || ''} ${employee.firstName || ''}`.trim() || '-',
+          fullName: employee.fullName || '-',
           department: employee.department || '-',
           kind: employee.kind || '-',
           status: employee.status || 'STC',
           detail: employee.inactiveFrom || employee.contract || '-',
         })),
       };
-    case 'total':
+    case 'all':
     default:
       return {
-        title: 'Effectif total',
-        subtitle: `${totalEmployees} employes actifs disponibles pour la date du pointage`,
-        rows: activeEmployees.map((employee) => ({
+        title: 'Liste complete base RH',
+        subtitle: `${employees.length} fiche(s) dans la base RH`,
+        rows: employees.map((employee) => ({
           id: employee.finalCode || employee.id || employee.zk || '-',
-          fullName: employee.fullName || `${employee.lastName || ''} ${employee.firstName || ''}`.trim() || '-',
+          fullName: employee.fullName || '-',
           department: employee.department || '-',
           kind: employee.kind || '-',
-          status: employee.status || 'Actif',
+          status: employee.status || '-',
           detail: employee.contract || employee.service || '-',
         })),
       };
@@ -906,6 +1298,9 @@ function EmployeeBaseSurface({
   onCreate,
   onEdit,
   onExport,
+  onOpenAll,
+  onOpenActive,
+  onOpenStc,
   activeEmployeesCount,
   stcEmployeesCount,
   departmentCount,
@@ -930,18 +1325,18 @@ function EmployeeBaseSurface({
       </div>
 
       <div className="admin-stats">
-        <article className="admin-stat-card">
+        <button className="admin-stat-card admin-stat-card--button" type="button" onClick={onOpenAll}>
           <span>Fiches RH</span>
           <strong>{employees.length}</strong>
-        </article>
-        <article className="admin-stat-card">
+        </button>
+        <button className="admin-stat-card admin-stat-card--button" type="button" onClick={onOpenActive}>
           <span>Actifs</span>
           <strong>{activeEmployeesCount}</strong>
-        </article>
-        <article className="admin-stat-card">
+        </button>
+        <button className="admin-stat-card admin-stat-card--button" type="button" onClick={onOpenStc}>
           <span>STC</span>
           <strong>{stcEmployeesCount}</strong>
-        </article>
+        </button>
       </div>
 
       <div className="admin-table-card__header">
@@ -1173,6 +1568,7 @@ export default function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeKpiModal, setActiveKpiModal] = useState('');
+  const [activeEmployeeBaseModal, setActiveEmployeeBaseModal] = useState('');
   const [kpiSearchValue, setKpiSearchValue] = useState('');
   const [employeeEditorMode, setEmployeeEditorMode] = useState('closed');
   const [employeeDraft, setEmployeeDraft] = useState(null);
@@ -1242,12 +1638,26 @@ export default function App() {
     setKpiSearchValue('');
   }
 
+  function handleOpenEmployeeBaseModal(type) {
+    setActiveEmployeeBaseModal(type);
+    setKpiSearchValue('');
+  }
+
+  function handleCloseEmployeeBaseModal() {
+    setActiveEmployeeBaseModal('');
+    setKpiSearchValue('');
+  }
+
   function handleOpenCreateEmployee() {
     const nextZk = getNextZkValue(employees);
+    const nextCode = getNextEmployeeCodeValue(employees);
     setEmployeeEditorMode('create');
     setEmployeeDraft({
       ...createEmptyEmployee(),
+      id: nextCode,
       zk: nextZk,
+      saber: nextCode,
+      finalCode: nextCode,
     });
     setDeleteCode('');
   }
@@ -1289,6 +1699,12 @@ export default function App() {
       };
 
   const dayRoster = useMemo(() => buildDayRoster(selectedWeek, selectedDate), [selectedWeek, selectedDate]);
+  const activePeriodStart = availableDates[0] || '';
+  const activePeriodEnd = availableDates[availableDates.length - 1] || '';
+  const activePeriodLabel = useMemo(
+    () => formatPeriodLabel(activePeriodStart, activePeriodEnd),
+    [activePeriodEnd, activePeriodStart],
+  );
   const activeEmployees = useMemo(
     () => employees.filter((employee) => String(employee.status || '').toLowerCase() === 'actif'),
     [employees],
@@ -1296,6 +1712,77 @@ export default function App() {
   const stcEmployees = useMemo(
     () => employees.filter((employee) => String(employee.status || '').toLowerCase() === 'stc'),
     [employees],
+  );
+  const firstStcDateMap = useMemo(
+    () => buildFirstStcDateMap(snapshot, activePeriodStart, activePeriodEnd),
+    [activePeriodEnd, activePeriodStart, snapshot],
+  );
+  const firstActiveDateMap = useMemo(
+    () => buildFirstActiveDateMap(snapshot, activePeriodStart, activePeriodEnd),
+    [activePeriodEnd, activePeriodStart, snapshot],
+  );
+  const selectedTableEmployees = useMemo(
+    () => buildPeriodEmployees(snapshot, activePeriodStart, activePeriodEnd, employees),
+    [activePeriodEnd, activePeriodStart, employees, snapshot],
+  );
+  const selectedDayEffectifRows = useMemo(
+    () => dayRoster.filter((row) => !['EMPTY', 'X'].includes(String(row.statusCode || '').toUpperCase())),
+    [dayRoster],
+  );
+  const newRoster = useMemo(
+    () =>
+      selectedDayEffectifRows
+        .filter((row) => firstActiveDateMap.get(row.employeeKey) === selectedDate)
+        .map((row) => ({
+          ...row,
+          statusLabel: 'Nouveau',
+          rawDisplay: firstActiveDateMap.get(row.employeeKey)
+            ? formatShortDateLabel(firstActiveDateMap.get(row.employeeKey))
+            : row.rawDisplay || row.display || '-',
+          display: firstActiveDateMap.get(row.employeeKey)
+            ? formatShortDateLabel(firstActiveDateMap.get(row.employeeKey))
+            : row.display || '-',
+        })),
+    [firstActiveDateMap, selectedDate, selectedDayEffectifRows],
+  );
+  const selectedDayStcRows = useMemo(
+    () => selectedDayEffectifRows.filter((row) => String(row.statusCode || '').toUpperCase() === 'STC'),
+    [selectedDayEffectifRows],
+  );
+  const monthlyStcEmployees = useMemo(
+    () =>
+      selectedDayStcRows.map((row) => ({
+        employeeKey: row.employeeKey,
+        id: row.id || row.employeeKey || '-',
+        fullName: row.fullName || '-',
+        department: row.department || '-',
+        kind: row.kind || '-',
+        status: 'STC',
+        detail: firstStcDateMap.get(row.employeeKey)
+          ? formatShortDateLabel(firstStcDateMap.get(row.employeeKey))
+          : row.rawDisplay || row.display || 'STC',
+      })),
+    [firstStcDateMap, selectedDayStcRows],
+  );
+  const monthlyEffectifEmployees = useMemo(
+    () =>
+      selectedDayEffectifRows.map((row) => ({
+        employeeKey: row.employeeKey,
+        id: row.id || row.employeeKey || '-',
+        fullName: row.fullName || '-',
+        department: row.department || '-',
+        kind: row.kind || '-',
+        status: row.statusCode === 'STC' ? 'STC' : row.statusLabel || 'Actif',
+        detail:
+          row.statusCode === 'STC'
+            ? firstStcDateMap.get(row.employeeKey)
+              ? formatShortDateLabel(firstStcDateMap.get(row.employeeKey))
+              : row.rawDisplay || row.display || 'STC'
+            : row.statusCode === 'ABS' || row.statusCode === 'CM' || row.statusCode === 'CONGE'
+              ? row.statusLabel || row.rawDisplay || row.display || '-'
+              : row.rawDisplay || row.display || '-',
+      })),
+    [firstStcDateMap, selectedDayEffectifRows],
   );
   const presentRoster = useMemo(
     () => dayRoster.filter((row) => row.isPresent),
@@ -1396,42 +1883,59 @@ export default function App() {
     [employees],
   );
 
-  const totalEmployees = Number(snapshot?.summary?.activeEmployeesTotal || selectedWeek?.rows?.length || 0);
-  const baseEmployeesTotal = employees.length;
+  const totalEmployees = Number(selectedDayEffectifRows.length || 0);
   const presentEmployees = Number(selectedSummary?.presentEmployees || 0);
   const absentEmployees = useMemo(
-    () => dayRoster.filter((row) => row.statusCode === 'ABS').length,
+    () => dayRoster.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').length,
     [dayRoster],
   );
-  const stcCount = stcEmployees.length;
+  const newEmployees = newRoster.length;
+  const stcCount = monthlyStcEmployees.length;
   const attendanceRate = totalEmployees ? (presentEmployees / totalEmployees) * 100 : 0;
   const kpiDetailConfig = useMemo(
     () =>
       activeKpiModal
         ? buildKpiDetailConfig(activeKpiModal, {
-            activeEmployees,
+            monthlyEffectifEmployees,
             presentRoster,
             absentRoster: absenceRoster,
-            stcEmployees,
+            newRoster,
+            stcEmployees: monthlyStcEmployees,
             selectedDate,
+            periodLabel: activePeriodLabel,
             totalEmployees,
             presentEmployees,
             absentEmployees,
+            newEmployees,
             stcCount,
           })
         : null,
     [
       activeKpiModal,
-      activeEmployees,
+      monthlyEffectifEmployees,
       presentRoster,
       absenceRoster,
-      stcEmployees,
+      newRoster,
+      monthlyStcEmployees,
       selectedDate,
+      activePeriodLabel,
       totalEmployees,
       presentEmployees,
       absentEmployees,
+      newEmployees,
       stcCount,
     ],
+  );
+  const employeeBaseDetailConfig = useMemo(
+    () =>
+      activeEmployeeBaseModal
+        ? buildEmployeeBaseDetailConfig(activeEmployeeBaseModal, {
+            employees,
+            activeEmployees,
+            stcEmployees,
+          })
+        : null,
+    [activeEmployeeBaseModal, activeEmployees, employees, stcEmployees],
   );
 
   const periodRange = availableDates.length
@@ -1484,12 +1988,22 @@ export default function App() {
 
     try {
       setIsEmployeeSaving(true);
-      const result = await saveEmployeeRecord(employeeDraft);
-      setEmployees((current) => {
-        const next = current.filter((item) => item.recordId !== result.employee.recordId);
-        next.push(result.employee);
-        return sortEmployeeRecords(next);
-      });
+      const fallbackCode = getNextEmployeeCodeValue(employees);
+      const fallbackZk = getNextZkValue(employees);
+      const draftToSave =
+        employeeEditorMode === 'create'
+          ? {
+              ...employeeDraft,
+              id: String(employeeDraft.id || '').trim() || fallbackCode,
+              finalCode: String(employeeDraft.finalCode || '').trim() || fallbackCode,
+              saber: String(employeeDraft.saber || '').trim() || fallbackCode,
+              zk: String(employeeDraft.zk || '').trim() || fallbackZk,
+            }
+          : employeeDraft;
+      const result = await saveEmployeeRecord(draftToSave);
+      setEmployees(() =>
+        Array.isArray(result.employees) ? sortEmployeeRecords(result.employees) : [],
+      );
       setStatusMessage(result.message || 'Fiche employe sauvegardee.');
       handleCloseEmployeeEditor();
     } catch (error) {
@@ -1507,8 +2021,8 @@ export default function App() {
     try {
       setIsEmployeeDeleting(true);
       const result = await deleteEmployeeRecord(employeeDraft, employeeDraft.recordId);
-      setEmployees((current) =>
-        sortEmployeeRecords(current.filter((item) => item.recordId !== result.removed?.recordId)),
+      setEmployees(() =>
+        Array.isArray(result.employees) ? sortEmployeeRecords(result.employees) : [],
       );
       setStatusMessage(result.message || 'Fiche employe supprimee.');
       handleCloseEmployeeEditor();
@@ -1577,7 +2091,9 @@ export default function App() {
         </header>
 
         <section className="rh-content">
-          <div className="rh-hero">
+          {isEmployeeSection ? null : (
+            <>
+              <div className="rh-hero">
             <div>
               <p className="rh-eyebrow">Pointage quotidien du personnel</p>
               <h1>TABLEAU DE BORD RH</h1>
@@ -1600,14 +2116,14 @@ export default function App() {
 
               <div className="rh-status-pill">{statusMessage}</div>
             </div>
-          </div>
+              </div>
 
-          <section className="rh-kpi-grid">
+              <section className="rh-kpi-grid">
             <KpiCard
               tone="indigo"
-              label="Effectif total"
+              label="Effectif du mois"
               value={totalEmployees || 0}
-              note="Employes"
+              note={activePeriodLabel}
               isActive={activeKpiModal === 'total'}
               onClick={() => handleOpenKpiModal('total')}
             />
@@ -1628,16 +2144,24 @@ export default function App() {
               onClick={() => handleOpenKpiModal('absent')}
             />
             <KpiCard
+              tone="slate"
+              label="Nouveaux"
+              value={newEmployees}
+              note="Premier pointage du jour"
+              isActive={activeKpiModal === 'new'}
+              onClick={() => handleOpenKpiModal('new')}
+            />
+            <KpiCard
               tone="blue"
-              label="STC solde de compte"
+              label="STC du mois"
               value={stcCount}
-              note={formatPercent(baseEmployeesTotal ? (stcCount / baseEmployeesTotal) * 100 : 0)}
+              note={formatPercent(totalEmployees ? (stcCount / totalEmployees) * 100 : 0)}
               isActive={activeKpiModal === 'stc'}
               onClick={() => handleOpenKpiModal('stc')}
             />
-          </section>
+              </section>
 
-          <section className="rh-chart-grid">
+              <section className="rh-chart-grid">
             <article className="rh-card">
               <div className="rh-card__header">
                 <h2>REPARTITION PAR DEPARTEMENT</h2>
@@ -1678,7 +2202,8 @@ export default function App() {
                 {[
                   { key: 'present', label: 'Presents', value: presentEmployees, tone: 'green' },
                   { key: 'absent', label: 'Absents', value: absentEmployees, tone: 'red' },
-                  { key: 'stc', label: 'STC', value: stcCount, tone: 'blue' },
+                  { key: 'new', label: 'Nouveaux', value: newEmployees, tone: 'slate' },
+                  { key: 'stc', label: 'STC du mois', value: stcCount, tone: 'blue' },
                 ].map((item) => (
                   <button
                     className={`rh-bars__item${activeKpiModal === item.key ? ' is-active' : ''}`}
@@ -1722,7 +2247,9 @@ export default function App() {
                 </div>
               </div>
             </article>
-          </section>
+              </section>
+            </>
+          )}
 
           {isEmployeeSection || isDepartmentSection || isAbsenceSection ? (
             isEmployeeSection ? (
@@ -1735,6 +2262,9 @@ export default function App() {
                 onCreate={handleOpenCreateEmployee}
                 onEdit={handleOpenEditEmployee}
                 onExport={handleExportEmployeeBase}
+                onOpenAll={() => handleOpenEmployeeBaseModal('all')}
+                onOpenActive={() => handleOpenEmployeeBaseModal('active')}
+                onOpenStc={() => handleOpenEmployeeBaseModal('stc')}
                 activeEmployeesCount={activeEmployees.length}
                 stcEmployeesCount={stcEmployees.length}
                 departmentCount={departmentBaseRows.length}
@@ -1908,6 +2438,15 @@ export default function App() {
           searchValue={kpiSearchValue}
           onSearchChange={setKpiSearchValue}
           onClose={handleCloseKpiModal}
+        />
+      ) : null}
+
+      {employeeBaseDetailConfig ? (
+        <KpiDetailModal
+          config={employeeBaseDetailConfig}
+          searchValue={kpiSearchValue}
+          onSearchChange={setKpiSearchValue}
+          onClose={handleCloseEmployeeBaseModal}
         />
       ) : null}
 

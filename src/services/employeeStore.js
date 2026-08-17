@@ -8,6 +8,7 @@ import {
 
 const TABLE_NAME = 'hr_staff_directory';
 const LOCAL_EMPLOYEES_KEY = 'rh_employee_records_local';
+const LOCAL_DELETED_EMPLOYEES_KEY = 'rh_employee_deleted_records_local';
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -236,10 +237,61 @@ function readLocalEmployees() {
       return [];
     }
 
-    return dedupeEmployees(parsed.map((employee, index) => normalizeEmployee(employee, index)));
+    return applyDeletedRecordFilter(
+      dedupeEmployees(parsed.map((employee, index) => normalizeEmployee(employee, index))),
+    );
   } catch {
     return [];
   }
+}
+
+function readDeletedRecordIds() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return new Set();
+  }
+
+  try {
+    const raw = window.localStorage.getItem(LOCAL_DELETED_EMPLOYEES_KEY);
+    if (!raw) {
+      return new Set();
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return new Set();
+    }
+
+    return new Set(parsed.map((value) => cleanText(value)).filter(Boolean));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDeletedRecordIds(recordIds) {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      LOCAL_DELETED_EMPLOYEES_KEY,
+      JSON.stringify([...new Set([...recordIds].map((value) => cleanText(value)).filter(Boolean))]),
+    );
+  } catch {
+    // Ignore local storage write errors so the app stays usable.
+  }
+}
+
+function applyDeletedRecordFilter(employeeList) {
+  const deletedRecordIds = readDeletedRecordIds();
+
+  if (!deletedRecordIds.size) {
+    return Array.isArray(employeeList) ? employeeList : [];
+  }
+
+  return (Array.isArray(employeeList) ? employeeList : []).filter(
+    (employee) => !deletedRecordIds.has(cleanText(employee?.recordId)),
+  );
 }
 
 function writeLocalEmployees(employeeList) {
@@ -248,9 +300,11 @@ function writeLocalEmployees(employeeList) {
   }
 
   try {
-    const normalizedEmployees = dedupeEmployees(
-      (Array.isArray(employeeList) ? employeeList : []).map((employee, index) =>
-        normalizeEmployee(employee, index),
+    const normalizedEmployees = applyDeletedRecordFilter(
+      dedupeEmployees(
+        (Array.isArray(employeeList) ? employeeList : []).map((employee, index) =>
+          normalizeEmployee(employee, index),
+        ),
       ),
     );
     window.localStorage.setItem(LOCAL_EMPLOYEES_KEY, JSON.stringify(normalizedEmployees));
@@ -298,10 +352,20 @@ function mergeLocalOnlyFields(remoteEmployees, localEmployees = []) {
 
 function upsertEmployeeLocally(employee) {
   const normalized = normalizeEmployee(employee);
+  const deletedRecordIds = readDeletedRecordIds();
+
+  if (cleanText(normalized.recordId)) {
+    deletedRecordIds.delete(cleanText(normalized.recordId));
+    writeDeletedRecordIds(deletedRecordIds);
+  }
+
   const currentEmployees = readLocalEmployees();
   const nextEmployees = mergeEmployees(currentEmployees, [normalized]);
   writeLocalEmployees(nextEmployees);
-  return normalized;
+  return {
+    employee: normalized,
+    employees: sortEmployees(nextEmployees),
+  };
 }
 
 function removeEmployeeLocally(employee, fallbackRecordId = '') {
@@ -316,6 +380,14 @@ function removeEmployeeLocally(employee, fallbackRecordId = '') {
       ? currentEmployees.filter((_, index) => index !== targetIndex)
       : currentEmployees;
 
+  const deletedRecordIds = readDeletedRecordIds();
+  const removedRecordId = cleanText(removed?.recordId) || cleanText(targetRecordId);
+
+  if (removedRecordId) {
+    deletedRecordIds.add(removedRecordId);
+    writeDeletedRecordIds(deletedRecordIds);
+  }
+
   writeLocalEmployees(nextEmployees);
 
   return {
@@ -326,7 +398,9 @@ function removeEmployeeLocally(employee, fallbackRecordId = '') {
 
 export async function loadEmployees() {
   const storedEmployees = readLocalEmployees();
-  const localFallbackEmployees = storedEmployees.length ? storedEmployees : sortEmployees(localEmployeesSeed);
+  const localFallbackEmployees = storedEmployees.length
+    ? storedEmployees
+    : applyDeletedRecordFilter(sortEmployees(localEmployeesSeed));
   const configIssue = getSupabaseConfigIssue();
 
   if (!hasSupabaseEnv || !supabase) {
@@ -353,7 +427,9 @@ export async function loadEmployees() {
     }
 
     if (!data?.length) {
-      const emptyRemoteEmployees = storedEmployees.length ? storedEmployees : sortEmployees(localEmployeesSeed);
+      const emptyRemoteEmployees = storedEmployees.length
+        ? storedEmployees
+        : applyDeletedRecordFilter(sortEmployees(localEmployeesSeed));
       return {
         data: emptyRemoteEmployees,
         mode: storedEmployees.length ? 'local-cache' : 'remote-empty',
@@ -363,9 +439,8 @@ export async function loadEmployees() {
       };
     }
 
-    const remoteEmployees = mergeLocalOnlyFields(
-      dedupeEmployees(data.map(mapRowToEmployee)),
-      storedEmployees,
+    const remoteEmployees = applyDeletedRecordFilter(
+      mergeLocalOnlyFields(dedupeEmployees(data.map(mapRowToEmployee)), storedEmployees),
     );
     writeLocalEmployees(remoteEmployees);
 
@@ -386,12 +461,14 @@ export async function loadEmployees() {
 }
 
 export async function saveEmployeeRecord(employee) {
-  const normalized = upsertEmployeeLocally(employee);
+  const localSave = upsertEmployeeLocally(employee);
+  const normalized = localSave.employee;
   const configIssue = getSupabaseConfigIssue();
 
   if (!hasSupabaseEnv || !supabase) {
     return {
       employee: normalized,
+      employees: localSave.employees,
       mode: 'local-disabled',
       message: `${configIssue || 'Supabase indisponible.'} La fiche de ${normalized.fullName || 'ce collaborateur'} est sauvegardee dans la base locale du navigateur.`,
     };
@@ -408,6 +485,7 @@ export async function saveEmployeeRecord(employee) {
     if (error) {
       return {
         employee: normalized,
+        employees: localSave.employees,
         mode: 'local-disabled',
         message: `Connexion Supabase indisponible. La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
       };
@@ -417,16 +495,18 @@ export async function saveEmployeeRecord(employee) {
       ...mapRowToEmployee(data),
       userLevel: normalized.userLevel,
     };
-    upsertEmployeeLocally(savedEmployee);
+    const syncedSave = upsertEmployeeLocally(savedEmployee);
 
     return {
       employee: savedEmployee,
+      employees: syncedSave.employees,
       mode: 'supabase',
       message: `Fiche de ${savedEmployee.fullName} sauvegardee dans Supabase.`,
     };
   } catch {
     return {
       employee: normalized,
+      employees: localSave.employees,
       mode: 'local-disabled',
       message: `Connexion Supabase indisponible. La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
     };
@@ -463,13 +543,14 @@ export async function deleteEmployeeRecord(employee, fallbackRecordId = '') {
     cleanText(fallbackRecordId) ||
     cleanText(employee?.lockedRecordId) ||
     cleanText(employee?.recordId);
-  const { removed } = removeEmployeeLocally(employee, targetRecordId);
+  const { removed, employees } = removeEmployeeLocally(employee, targetRecordId);
   const removedName = removed?.fullName || employee?.fullName || 'cette fiche';
   const configIssue = getSupabaseConfigIssue();
 
   if (!hasSupabaseEnv || !supabase) {
     return {
       removed,
+      employees,
       mode: 'local-disabled',
       message: `${configIssue || 'Supabase indisponible.'} La fiche de ${removedName} est supprimee de la base locale du navigateur.`,
     };
@@ -481,6 +562,7 @@ export async function deleteEmployeeRecord(employee, fallbackRecordId = '') {
     if (error) {
       return {
         removed,
+        employees,
         mode: 'local-disabled',
         message: `Connexion Supabase indisponible. La fiche de ${removedName} reste supprimee de la base locale du navigateur.`,
       };
@@ -488,12 +570,14 @@ export async function deleteEmployeeRecord(employee, fallbackRecordId = '') {
 
     return {
       removed,
+      employees,
       mode: 'supabase',
       message: `Fiche de ${removedName} supprimee dans Supabase.`,
     };
   } catch {
     return {
       removed,
+      employees,
       mode: 'local-disabled',
       message: `Connexion Supabase indisponible. La fiche de ${removedName} reste supprimee de la base locale du navigateur.`,
     };

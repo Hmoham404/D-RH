@@ -65,6 +65,7 @@ const UI_TRANSLATIONS = {
       plant: 'Usine',
       presents: 'Presents',
       absents: 'Absents',
+      late: 'Retards',
       recruitments: 'Nombre de recrutements',
       stcMonth: 'STC du mois',
       productionWorkforce: 'Effectif de production',
@@ -74,6 +75,7 @@ const UI_TRANSLATIONS = {
       title: 'Production',
       employeesFollowed: (count) => `${count} employe(s) suivis`,
       productionTypes: 'Types de production',
+      kindPresence: 'Presence MOD production',
       productionCategories: 'Categories production',
       serviceLabels: {
         injection: 'Injection',
@@ -157,6 +159,7 @@ const UI_TRANSLATIONS = {
       plant: 'المصنع',
       presents: 'الحاضرون',
       absents: 'الغائبون',
+      late: 'المتأخرون',
       recruitments: 'عدد الانتدابات',
       stcMonth: 'مغادرة هذا الشهر',
       productionWorkforce: 'عدد عمال الإنتاج',
@@ -166,6 +169,7 @@ const UI_TRANSLATIONS = {
       title: 'الإنتاج',
       employeesFollowed: (count) => `${count} موظف(ة) متابع`,
       productionTypes: 'أنواع الإنتاج',
+      kindPresence: 'نسبة حضور MOD في الإنتاج',
       productionCategories: 'فئات الإنتاج',
       serviceLabels: {
         injection: 'الحقن',
@@ -249,6 +253,7 @@ const UI_TRANSLATIONS = {
       plant: 'Factory',
       presents: 'Present',
       absents: 'Absent',
+      late: 'Late arrivals',
       recruitments: 'Recruitments',
       stcMonth: 'Monthly STC',
       productionWorkforce: 'Production workforce',
@@ -258,6 +263,7 @@ const UI_TRANSLATIONS = {
       title: 'Production',
       employeesFollowed: (count) => `${count} employee(s) tracked`,
       productionTypes: 'Production types',
+      kindPresence: 'Production MOD presence',
       productionCategories: 'Production categories',
       serviceLabels: {
         injection: 'Injection',
@@ -341,6 +347,7 @@ const UI_TRANSLATIONS = {
       plant: 'Stabilimento',
       presents: 'Presenti',
       absents: 'Assenti',
+      late: 'Ritardi',
       recruitments: 'Numero assunzioni',
       stcMonth: 'STC del mese',
       productionWorkforce: 'Organico produzione',
@@ -350,6 +357,7 @@ const UI_TRANSLATIONS = {
       title: 'Produzione',
       employeesFollowed: (count) => `${count} dipendente(i) monitorati`,
       productionTypes: 'Tipi di produzione',
+      kindPresence: 'Presenza MOD produzione',
       productionCategories: 'Categorie produzione',
       serviceLabels: {
         injection: 'Iniezione',
@@ -432,6 +440,7 @@ const UI_TRANSLATIONS = {
       plant: '工厂',
       presents: '出勤',
       absents: '缺勤',
+      late: '迟到',
       recruitments: '招聘人数',
       stcMonth: '本月 STC',
       productionWorkforce: '生产人数',
@@ -441,6 +450,7 @@ const UI_TRANSLATIONS = {
       title: '生产',
       employeesFollowed: (count) => `跟踪员工 ${count} 人`,
       productionTypes: '生产类型',
+      kindPresence: '生产 MOD 出勤率',
       productionCategories: '生产类别',
       serviceLabels: {
         injection: '注塑',
@@ -559,6 +569,7 @@ const UI_EXT_TRANSLATIONS = {
       present: 'Present',
       verify: 'A verifier',
       absent: 'Absent',
+      late: 'Retard',
       sickLeave: 'Conge maladie',
       leave: 'Conge',
       rest: 'Repos',
@@ -644,7 +655,7 @@ const UI_EXT_TRANSLATIONS = {
       columns: { type: 'Type', detail: 'Detail' },
     },
     section: { noWeek: 'No week', noPeriod: 'No period available' },
-    status: { noData: 'No data', present: 'Present', verify: 'To verify', absent: 'Absent', sickLeave: 'Sick leave', leave: 'Leave', rest: 'Rest', stc: 'STC', notStarted: 'Not started', active: 'Active', suspended: 'Suspended', newHire: 'New hire' },
+    status: { noData: 'No data', present: 'Present', verify: 'To verify', absent: 'Absent', late: 'Late', sickLeave: 'Sick leave', leave: 'Leave', rest: 'Rest', stc: 'STC', notStarted: 'Not started', active: 'Active', suspended: 'Suspended', newHire: 'New hire' },
     employeeFields: {
       finalCode: 'Final code', id: 'Employee ID', fullName: 'Full name', department: 'Department', service: 'Service', kind: 'Category', contract: 'Contract', status: 'Status', payType: 'Pay type', signed: 'Signed contract', hiredAt: 'Hire date', job: 'Job title', inactiveFrom: 'Inactive since',
     },
@@ -709,7 +720,7 @@ const UI_EXT_TRANSLATIONS = {
       columns: { type: 'النوع', detail: 'التفصيل' },
     },
     section: { noWeek: 'لا يوجد أسبوع', noPeriod: 'لا توجد فترة متاحة' },
-    status: { noData: 'لا توجد بيانات', present: 'حاضر', verify: 'للمراجعة', absent: 'غائب', sickLeave: 'إجازة مرضية', leave: 'إجازة', rest: 'راحة', stc: 'STC', notStarted: 'لم يبدأ', active: 'نشط', suspended: 'معلّق', newHire: 'منتدب جديد' },
+    status: { noData: 'لا توجد بيانات', present: 'حاضر', verify: 'للمراجعة', absent: 'غائب', late: 'متأخر', sickLeave: 'إجازة مرضية', leave: 'إجازة', rest: 'راحة', stc: 'STC', notStarted: 'لم يبدأ', active: 'نشط', suspended: 'معلّق', newHire: 'منتدب جديد' },
     employeeFields: {
       finalCode: 'الرمز النهائي', id: 'المعرف الوظيفي', fullName: 'الاسم الكامل', department: 'القسم', service: 'الخدمة', kind: 'الفئة', contract: 'العقد', status: 'الحالة', payType: 'نوع الأجر', signed: 'العقد ممضى', hiredAt: 'تاريخ الانتداب', job: 'المنصب', inactiveFrom: 'غير نشط منذ',
     },
@@ -774,7 +785,7 @@ const UI_EXT_TRANSLATIONS = {
       columns: { type: 'Tipo', detail: 'Dettaglio' },
     },
     section: { noWeek: 'Nessuna settimana', noPeriod: 'Nessun periodo disponibile' },
-    status: { noData: 'Nessun dato', present: 'Presente', verify: 'Da verificare', absent: 'Assente', sickLeave: 'Malattia', leave: 'Congedo', rest: 'Riposo', stc: 'STC', notStarted: 'Non iniziato', active: 'Attivo', suspended: 'Sospeso', newHire: 'Nuovo assunto' },
+    status: { noData: 'Nessun dato', present: 'Presente', verify: 'Da verificare', absent: 'Assente', late: 'Ritardo', sickLeave: 'Malattia', leave: 'Congedo', rest: 'Riposo', stc: 'STC', notStarted: 'Non iniziato', active: 'Attivo', suspended: 'Sospeso', newHire: 'Nuovo assunto' },
     employeeFields: {
       finalCode: 'Codice finale', id: 'Matricola', fullName: 'Nome completo', department: 'Reparto', service: 'Servizio', kind: 'Categoria', contract: 'Contratto', status: 'Stato', payType: 'Tipo paga', signed: 'Contratto firmato', hiredAt: 'Data assunzione', job: 'Ruolo', inactiveFrom: 'Inattivo dal',
     },
@@ -839,7 +850,7 @@ const UI_EXT_TRANSLATIONS = {
       columns: { type: '类型', detail: '详情' },
     },
     section: { noWeek: '无周次', noPeriod: '无可用周期' },
-    status: { noData: '无数据', present: '出勤', verify: '待核查', absent: '缺勤', sickLeave: '病假', leave: '休假', rest: '休息', stc: 'STC', notStarted: '未开始', active: '在职', suspended: '暂停', newHire: '新入职' },
+    status: { noData: '无数据', present: '出勤', verify: '待核查', absent: '缺勤', late: '迟到', sickLeave: '病假', leave: '休假', rest: '休息', stc: 'STC', notStarted: '未开始', active: '在职', suspended: '暂停', newHire: '新入职' },
     employeeFields: {
       finalCode: '最终代码', id: '工号', fullName: '姓名', department: '部门', service: '服务', kind: '类别', contract: '合同', status: '状态', payType: '薪资类型', signed: '合同已签', hiredAt: '入职日期', job: '岗位', inactiveFrom: '停用日期',
     },
@@ -1285,6 +1296,8 @@ function translateStatusValue(value, translate) {
     'A VERIFIER': translate('status.verify', 'A verifier'),
     ABS: translate('status.absent', 'Absent'),
     ABSENT: translate('status.absent', 'Absent'),
+    RETARD: translate('status.late', 'Retard'),
+    LATE: translate('status.late', 'Retard'),
     CM: translate('status.sickLeave', 'Conge maladie'),
     'CONGE MALADIE': translate('status.sickLeave', 'Conge maladie'),
     CONGE: translate('status.leave', 'Conge'),
@@ -1342,6 +1355,18 @@ function formatClockFromMinutes(totalMinutes) {
 function parseWorkedMinutes(value) {
   const match = String(value || '').match(/(\d{1,2}):(\d{2})/);
   if (!match) return 0;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function extractClockFromDateTime(value) {
+  const match = String(value || '').match(/(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return '';
+  return `${match[1]}:${match[2]}`;
+}
+
+function parseClockToMinutes(value) {
+  const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
+  if (!match) return -1;
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
@@ -1983,6 +2008,7 @@ function buildKpiDetailConfig(type, data) {
     monthlyEffectifEmployees,
     presentRoster,
     absentRoster,
+    lateRoster,
     newRoster,
     stcEmployees,
     selectedDate,
@@ -1990,6 +2016,7 @@ function buildKpiDetailConfig(type, data) {
     totalEmployees,
     presentEmployees,
     absentEmployees,
+    lateEmployees,
     newEmployees,
     stcCount,
     locale,
@@ -2025,6 +2052,19 @@ function buildKpiDetailConfig(type, data) {
             status: row.statusLabel || translate('status.absent', 'Absent'),
             detail: row.rawDisplay || row.display || '-',
           })),
+      };
+    case 'late':
+      return {
+        title: labels.lateTitle,
+        subtitle: labels.lateSubtitle(formatDateLabel(selectedDate, locale), lateEmployees),
+        rows: lateRoster.map((row) => ({
+          id: row.id || row.employeeKey || '-',
+          fullName: row.fullName || '-',
+          department: row.department || '-',
+          kind: row.kind || '-',
+          status: row.statusLabel || translate('status.late', 'Retard'),
+          detail: row.detail || row.rawDisplay || row.display || '-',
+        })),
       };
     case 'new':
       return {
@@ -2591,6 +2631,8 @@ function ProductionFocusSection({
   onOpenModal,
   labels,
 }) {
+  const productionModPresence = productionKindBreakdown.find((item) => item.key === 'MOD') || null;
+
   return (
     <section className="rh-section-block">
       <div className="rh-section-block__header">
@@ -2645,7 +2687,78 @@ function ProductionFocusSection({
       </div>
 
       <div className="rh-production-breakdown">
-        <div className="rh-production-breakdown__group">
+        <div className="rh-production-breakdown__topline">
+          <div className="rh-production-breakdown__group rh-production-breakdown__group--presence">
+            <div className="rh-production-breakdown__title">{labels.kindPresence}</div>
+            <div className="rh-production-breakdown__stack">
+              {productionModPresence ? (
+                <button
+                  key={`presence-${productionModPresence.key}`}
+                  className={`rh-production-presence-card rh-production-presence-card--${productionModPresence.tone}${activeModalKey === productionModPresence.modalKey ? ' is-active' : ''}`}
+                  type="button"
+                  onClick={() => onOpenModal(productionModPresence.modalKey)}
+                  style={{ '--presence-angle': `${Math.max(0, Math.min(360, productionModPresence.presentPercent * 3.6))}deg` }}
+                >
+                  <div className="rh-production-presence-card__header">
+                    <span>{productionModPresence.label}</span>
+                    <small>{labels.kindPresence}</small>
+                  </div>
+                  <div className="rh-production-presence-card__body">
+                    <div className={`rh-production-presence-card__ring rh-production-presence-card__ring--${productionModPresence.tone}`}>
+                      <div className="rh-production-presence-card__ring-core">
+                        <strong>{formatPercent(productionModPresence.presentPercent)}</strong>
+                        <span>{labels.presence}</span>
+                      </div>
+                    </div>
+                    <div className="rh-production-presence-card__stats">
+                      <div className="rh-production-presence-card__stat">
+                        <small>{labels.presents}</small>
+                        <b>{productionModPresence.presentCount}</b>
+                      </div>
+                      <div className="rh-production-presence-card__stat">
+                        <small>{labels.total}</small>
+                        <b>{productionModPresence.count}</b>
+                      </div>
+                      <div className="rh-production-presence-card__hint">Clique pour ouvrir la liste</div>
+                    </div>
+                  </div>
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="rh-production-breakdown__group rh-production-breakdown__group--categories">
+            <div className="rh-production-breakdown__title">{labels.productionCategories}</div>
+            <div className="rh-production-breakdown__grid rh-production-breakdown__grid--categories">
+              {productionKindBreakdown.map((item) => (
+                <button
+                  key={item.key}
+                  className={`rh-production-chip rh-production-chip--${item.tone}${activeModalKey === item.modalKey ? ' is-active' : ''}`}
+                  type="button"
+                  onClick={() => onOpenModal(item.modalKey)}
+                >
+                  <span>{item.label}</span>
+                  <div className="rh-production-chip__stats">
+                    <div className="rh-production-chip__stat">
+                      <small>{labels.total}</small>
+                      <strong>{item.count}</strong>
+                    </div>
+                    <div className="rh-production-chip__stat">
+                      <small>{labels.presents}</small>
+                      <strong>{item.presentCount}</strong>
+                    </div>
+                  </div>
+                  <div className="rh-production-chip__percent-row">
+                    <small>{labels.presence}</small>
+                    <strong className="rh-production-chip__percent">{formatPercent(item.presentPercent)}</strong>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="rh-production-breakdown__group rh-production-breakdown__group--full">
           <div className="rh-production-breakdown__title">{labels.productionTypes}</div>
           <div className="rh-production-breakdown__grid">
             {productionServiceBreakdown.map((item) => (
@@ -2656,36 +2769,6 @@ function ProductionFocusSection({
                 onClick={() => onOpenModal(item.modalKey)}
               >
                 <span>{`${labels.prefix} ${labels.serviceLabel(item.key, item.label)}`}</span>
-                <div className="rh-production-chip__stats">
-                  <div className="rh-production-chip__stat">
-                    <small>{labels.total}</small>
-                    <strong>{item.count}</strong>
-                  </div>
-                  <div className="rh-production-chip__stat">
-                    <small>{labels.presents}</small>
-                    <strong>{item.presentCount}</strong>
-                  </div>
-                </div>
-                <div className="rh-production-chip__percent-row">
-                  <small>{labels.presence}</small>
-                  <strong className="rh-production-chip__percent">{formatPercent(item.presentPercent)}</strong>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rh-production-breakdown__group">
-          <div className="rh-production-breakdown__title">{labels.productionCategories}</div>
-          <div className="rh-production-breakdown__grid">
-            {productionKindBreakdown.map((item) => (
-              <button
-                key={item.key}
-                className={`rh-production-chip rh-production-chip--${item.tone}${activeModalKey === item.modalKey ? ' is-active' : ''}`}
-                type="button"
-                onClick={() => onOpenModal(item.modalKey)}
-              >
-                <span>{item.label}</span>
                 <div className="rh-production-chip__stats">
                   <div className="rh-production-chip__stat">
                     <small>{labels.total}</small>
@@ -3033,6 +3116,7 @@ export default function App() {
       recruitments: translate('kpi.recruitments', 'Nombre de recrutements'),
       stcMonth: translate('kpi.stcMonth', 'STC du mois'),
       productionTypes: translate('production.productionTypes', 'Types de production'),
+      kindPresence: translate('production.kindPresence', 'Presence MOI / MOD'),
       productionCategories: translate('production.productionCategories', 'Categories production'),
       serviceLabel: (key, fallback) => getProductionServiceLabel(key, translate, fallback),
       total: translate('production.total', 'Total'),
@@ -3153,6 +3237,8 @@ export default function App() {
       presentSubtitle: (date, count) => `${count} ${translate('kpi.presents', 'Presents').toLowerCase()} | ${date}`,
       absentTitle: translate('kpi.absentListTitle', 'Liste des absents'),
       absentSubtitle: (date, count) => `${count} ${translate('kpi.absents', 'Absents').toLowerCase()} | ${date}`,
+      lateTitle: translate('kpi.lateListTitle', 'Liste des retards'),
+      lateSubtitle: (date, count) => `${count} ${translate('kpi.late', 'Retards').toLowerCase()} | ${date}`,
       newTitle: translate('kpi.newListTitle', 'Liste des nouveaux'),
       newSubtitle: (date, count) => `${count} | ${date}`,
       stcTitle: translate('kpi.stcListTitle', 'Liste STC du mois'),
@@ -3428,6 +3514,25 @@ export default function App() {
     () => dayRoster.filter((row) => row.isPresent),
     [dayRoster],
   );
+  const lateRoster = useMemo(
+    () =>
+      dayRoster
+        .filter((row) => {
+          if (!row.isPresent) return false;
+          const sourceValue = row.rawDisplay || row.display || '';
+          const lateMinutes = parseWorkedMinutes(sourceValue);
+          return lateMinutes > 7 * 60 + 30;
+        })
+        .map((row) => ({
+          id: row.id || row.employeeKey || '-',
+          fullName: row.fullName || '-',
+          department: row.department || '-',
+          kind: row.kind || '-',
+          status: 'Retard',
+          detail: row.rawDisplay || row.display || '-',
+        })),
+    [dayRoster],
+  );
   const productionPresentRows = useMemo(
     () => presentRoster.filter((row) => isProductionDepartment(row.department)),
     [presentRoster],
@@ -3545,6 +3650,8 @@ export default function App() {
     () => dayRoster.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').length,
     [dayRoster],
   );
+  const showLateKpi = Boolean(selectedDate) && selectedDate >= getTodayIsoDate();
+  const lateEmployees = lateRoster.length;
   const newEmployees = newRoster.length;
   const stcCount = monthlyStcEmployees.length;
   const attendanceRate = totalEmployees ? (presentEmployees / totalEmployees) * 100 : 0;
@@ -3576,6 +3683,7 @@ export default function App() {
             monthlyEffectifEmployees,
             presentRoster,
             absentRoster: absenceRoster,
+            lateRoster,
             newRoster,
             stcEmployees: monthlyStcEmployees,
             selectedDate,
@@ -3583,6 +3691,7 @@ export default function App() {
             totalEmployees,
             presentEmployees,
             absentEmployees,
+            lateEmployees,
             newEmployees,
             stcCount,
             locale,
@@ -3595,6 +3704,7 @@ export default function App() {
       monthlyEffectifEmployees,
       presentRoster,
       absenceRoster,
+      lateRoster,
       newRoster,
       monthlyStcEmployees,
       selectedDate,
@@ -3602,6 +3712,7 @@ export default function App() {
       totalEmployees,
       presentEmployees,
       absentEmployees,
+      lateEmployees,
       newEmployees,
       stcCount,
       locale,
@@ -3609,6 +3720,14 @@ export default function App() {
       language,
     ],
   );
+
+  useEffect(() => {
+    if (!showLateKpi && activeKpiModal === 'late') {
+      setActiveKpiModal('');
+      setKpiSearchValue('');
+    }
+  }, [activeKpiModal, showLateKpi]);
+
   const employeeBaseDetailConfig = useMemo(
     () =>
       activeEmployeeBaseModal
@@ -3841,7 +3960,7 @@ export default function App() {
             </div>
               </div>
 
-              <section className="rh-kpi-grid">
+              <section className={`rh-kpi-grid${showLateKpi ? '' : ' rh-kpi-grid--five'}`}>
             <KpiCard
               tone="indigo"
               label={translate('kpi.workforceGlobal', 'Effectif globale')}
@@ -3867,6 +3986,16 @@ export default function App() {
               isActive={activeKpiModal === 'absent'}
               onClick={() => handleOpenKpiModal('absent')}
             />
+            {showLateKpi ? (
+              <KpiCard
+                tone="red"
+                label={translate('kpi.late', 'Retards')}
+                value={lateEmployees}
+                note={formatPercent(presentEmployees ? (lateEmployees / presentEmployees) * 100 : 0)}
+                isActive={activeKpiModal === 'late'}
+                onClick={() => handleOpenKpiModal('late')}
+              />
+            ) : null}
             <KpiCard
               tone="slate"
               label={translate('kpi.recruitments', 'Nombre de recrutements')}

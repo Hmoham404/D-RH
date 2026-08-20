@@ -3942,7 +3942,6 @@ export default function App() {
             <KpiCard
               tone="indigo"
               label={translate('kpi.workforceGlobal', 'Effectif globale')}
-              tag={translate('kpi.plant', 'Usine')}
               value={totalEmployees || 0}
               note={activePeriodLabel}
               isActive={activeKpiModal === 'total'}

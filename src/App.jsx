@@ -76,6 +76,7 @@ const UI_TRANSLATIONS = {
       employeesFollowed: (count) => `${count} employe(s) suivis`,
       productionTypes: 'Types de production',
       kindPresence: 'Presence MOD production',
+      kindAbsence: 'ABS MOI / MOD production',
       productionCategories: 'Categories production',
       serviceLabels: {
         injection: 'Injection',
@@ -87,6 +88,7 @@ const UI_TRANSLATIONS = {
       total: 'Total',
       presents: 'Presents',
       presence: 'Presence',
+      absence: 'ABS',
       prefix: 'Production -',
     },
     charts: {
@@ -1521,8 +1523,10 @@ function buildProductionBreakdown(rows, presentRows) {
         ...meta,
         count,
         presentCount,
+        absentCount: Math.max(0, count - presentCount),
         percent: (count / total) * 100,
         presentPercent: count ? (presentCount / count) * 100 : 0,
+        absentPercent: count ? ((count - presentCount) / count) * 100 : 0,
         modalKey: `production-service:${key}`,
       };
     })
@@ -1541,8 +1545,10 @@ function buildProductionBreakdown(rows, presentRows) {
         ...kindMeta[key],
         count,
         presentCount,
+        absentCount: Math.max(0, count - presentCount),
         percent: (count / total) * 100,
         presentPercent: count ? (presentCount / count) * 100 : 0,
+        absentPercent: count ? ((count - presentCount) / count) * 100 : 0,
         modalKey: `production-kind:${key}`,
       };
     })
@@ -2631,7 +2637,7 @@ function ProductionFocusSection({
   onOpenModal,
   labels,
 }) {
-  const productionModPresence = productionKindBreakdown.find((item) => item.key === 'MOD') || null;
+  const productionPresenceKinds = productionKindBreakdown.filter((item) => ['MOI', 'MOD'].includes(item.key));
 
   return (
     <section className="rh-section-block">
@@ -2689,68 +2695,38 @@ function ProductionFocusSection({
       <div className="rh-production-breakdown">
         <div className="rh-production-breakdown__topline">
           <div className="rh-production-breakdown__group rh-production-breakdown__group--presence">
-            <div className="rh-production-breakdown__title">{labels.kindPresence}</div>
-            <div className="rh-production-breakdown__stack">
-              {productionModPresence ? (
+            <div className="rh-production-breakdown__title">{labels.kindAbsence}</div>
+            <div className="rh-production-breakdown__stack rh-production-breakdown__stack--presence">
+              {productionPresenceKinds.map((item) => (
                 <button
-                  key={`presence-${productionModPresence.key}`}
-                  className={`rh-production-presence-card rh-production-presence-card--${productionModPresence.tone}${activeModalKey === productionModPresence.modalKey ? ' is-active' : ''}`}
+                  key={`presence-${item.key}`}
+                  className={`rh-production-presence-card rh-production-presence-card--${item.tone}${activeModalKey === item.modalKey ? ' is-active' : ''}`}
                   type="button"
-                  onClick={() => onOpenModal(productionModPresence.modalKey)}
-                  style={{ '--presence-angle': `${Math.max(0, Math.min(360, productionModPresence.presentPercent * 3.6))}deg` }}
+                  onClick={() => onOpenModal(item.modalKey)}
+                  style={{ '--presence-angle': `${Math.max(0, Math.min(360, item.absentPercent * 3.6))}deg` }}
                 >
                   <div className="rh-production-presence-card__header">
-                    <span>{productionModPresence.label}</span>
-                    <small>{labels.kindPresence}</small>
+                    <span>{item.label}</span>
+                    <small>{labels.kindAbsence}</small>
                   </div>
                   <div className="rh-production-presence-card__body">
-                    <div className={`rh-production-presence-card__ring rh-production-presence-card__ring--${productionModPresence.tone}`}>
+                    <div className={`rh-production-presence-card__ring rh-production-presence-card__ring--${item.tone}`}>
                       <div className="rh-production-presence-card__ring-core">
-                        <strong>{formatPercent(productionModPresence.presentPercent)}</strong>
-                        <span>{labels.presence}</span>
+                        <strong>{formatPercent(item.absentPercent)}</strong>
+                        <span>{labels.absence}</span>
                       </div>
                     </div>
                     <div className="rh-production-presence-card__stats">
                       <div className="rh-production-presence-card__stat">
                         <small>{labels.presents}</small>
-                        <b>{productionModPresence.presentCount}</b>
+                        <b>{item.presentCount}</b>
                       </div>
                       <div className="rh-production-presence-card__stat">
                         <small>{labels.total}</small>
-                        <b>{productionModPresence.count}</b>
+                        <b>{item.count}</b>
                       </div>
                       <div className="rh-production-presence-card__hint">Clique pour ouvrir la liste</div>
                     </div>
-                  </div>
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="rh-production-breakdown__group rh-production-breakdown__group--categories">
-            <div className="rh-production-breakdown__title">{labels.productionCategories}</div>
-            <div className="rh-production-breakdown__grid rh-production-breakdown__grid--categories">
-              {productionKindBreakdown.map((item) => (
-                <button
-                  key={item.key}
-                  className={`rh-production-chip rh-production-chip--${item.tone}${activeModalKey === item.modalKey ? ' is-active' : ''}`}
-                  type="button"
-                  onClick={() => onOpenModal(item.modalKey)}
-                >
-                  <span>{item.label}</span>
-                  <div className="rh-production-chip__stats">
-                    <div className="rh-production-chip__stat">
-                      <small>{labels.total}</small>
-                      <strong>{item.count}</strong>
-                    </div>
-                    <div className="rh-production-chip__stat">
-                      <small>{labels.presents}</small>
-                      <strong>{item.presentCount}</strong>
-                    </div>
-                  </div>
-                  <div className="rh-production-chip__percent-row">
-                    <small>{labels.presence}</small>
-                    <strong className="rh-production-chip__percent">{formatPercent(item.presentPercent)}</strong>
                   </div>
                 </button>
               ))}
@@ -2780,8 +2756,8 @@ function ProductionFocusSection({
                   </div>
                 </div>
                 <div className="rh-production-chip__percent-row">
-                  <small>{labels.presence}</small>
-                  <strong className="rh-production-chip__percent">{formatPercent(item.presentPercent)}</strong>
+                  <small>{labels.absence}</small>
+                  <strong className="rh-production-chip__percent">{formatPercent(item.absentPercent)}</strong>
                 </div>
               </button>
             ))}
@@ -3117,10 +3093,12 @@ export default function App() {
       stcMonth: translate('kpi.stcMonth', 'STC du mois'),
       productionTypes: translate('production.productionTypes', 'Types de production'),
       kindPresence: translate('production.kindPresence', 'Presence MOI / MOD'),
+      kindAbsence: translate('production.kindAbsence', 'ABS MOI / MOD'),
       productionCategories: translate('production.productionCategories', 'Categories production'),
       serviceLabel: (key, fallback) => getProductionServiceLabel(key, translate, fallback),
       total: translate('production.total', 'Total'),
       presence: translate('production.presence', 'Presence'),
+      absence: translate('production.absence', 'ABS'),
       prefix: translate('production.prefix', 'Production -'),
     }),
     [language],

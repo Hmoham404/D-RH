@@ -934,6 +934,68 @@ button {
   flex-wrap: wrap;
 }
 
+.admin-sync-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 22px;
+  padding: 20px 22px;
+  border-radius: 24px;
+  border: 1px solid rgba(16, 16, 16, 0.08);
+  background:
+    radial-gradient(circle at top left, rgba(47, 109, 246, 0.1), transparent 42%),
+    linear-gradient(135deg, rgba(248, 246, 243, 0.98), rgba(237, 242, 252, 0.95));
+}
+
+.admin-sync-panel__copy {
+  display: grid;
+  gap: 8px;
+  max-width: 760px;
+}
+
+.admin-sync-panel__eyebrow {
+  color: #2951a9;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-sync-panel__copy strong {
+  color: var(--brand-strong);
+  font-size: 1.08rem;
+}
+
+.admin-sync-panel__copy p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.7;
+}
+
+.admin-sync-panel__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-file-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.admin-file-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.admin-file-button.is-disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
 .admin-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1177,6 +1239,7 @@ button {
 
   .pointage-hero,
   .admin-workspace__hero,
+  .admin-sync-panel,
   .admin-table-card__tools,
   .admin-table-card__header,
   .public-hero__actions,

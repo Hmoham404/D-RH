@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
 import { analyzePointageFile } from './lib/pointageImport';
 import {
+  clearEmployeeDirectory,
   createEmptyEmployee,
   deleteEmployeeRecord,
   loadEmployees,
+  replaceEmployeeDirectory,
   saveEmployeeRecord,
 } from './services/employeeStore';
 import { loadPointageSnapshot, replacePointageSnapshot } from './services/pointageSnapshotStore';
@@ -1486,20 +1489,76 @@ function getProductionServiceMeta(value) {
   return PRODUCTION_SERVICE_META[key] || PRODUCTION_SERVICE_META.autres;
 }
 
+function getExcelDepartmentLabel(department, service) {
+  const rawDepartment = String(department || '').trim();
+  if (!rawDepartment) {
+    return '-';
+  }
+
+  if (/^\d+\.\s*/.test(rawDepartment)) {
+    return rawDepartment;
+  }
+
+  const normalizedDepartment = normalizeDepartmentValue(rawDepartment);
+
+  if (normalizedDepartment.includes('production')) {
+    const serviceMeta = getProductionServiceMeta(service);
+    return `02. Production - ${serviceMeta.label}`;
+  }
+
+  if (normalizedDepartment.includes('direction')) {
+    return '01. Direction';
+  }
+
+  if (normalizedDepartment.includes('qualit')) {
+    return '03. Qualite';
+  }
+
+  if (normalizedDepartment.includes('tech') || normalizedDepartment.includes('maint')) {
+    return '04. Maintenance';
+  }
+
+  if (normalizedDepartment.includes('logist')) {
+    return '05. Logistique';
+  }
+
+  if (normalizedDepartment === 'rh' || normalizedDepartment.includes('ressource')) {
+    return '06. RH';
+  }
+
+  return rawDepartment;
+}
+
 function buildProductionBreakdown(rows, presentRows) {
   const total = rows.length || 1;
   const serviceCounts = new Map();
   const servicePresentCounts = new Map();
+  const serviceAbsCounts = new Map();
+  const serviceStcCounts = new Map();
   const kindCounts = new Map();
   const kindPresentCounts = new Map();
+  const kindAbsCounts = new Map();
+  const kindStcCounts = new Map();
 
   rows.forEach((row) => {
     const serviceMeta = getProductionServiceMeta(row.service);
     serviceCounts.set(serviceMeta.key, (serviceCounts.get(serviceMeta.key) || 0) + 1);
+    if (String(row.statusCode || '').toUpperCase() === 'ABS') {
+      serviceAbsCounts.set(serviceMeta.key, (serviceAbsCounts.get(serviceMeta.key) || 0) + 1);
+    }
+    if (String(row.statusCode || '').toUpperCase() === 'STC') {
+      serviceStcCounts.set(serviceMeta.key, (serviceStcCounts.get(serviceMeta.key) || 0) + 1);
+    }
 
     const kindKey = normalizeKindLabel(row.kind);
     if (['MOI', 'MOD'].includes(kindKey)) {
       kindCounts.set(kindKey, (kindCounts.get(kindKey) || 0) + 1);
+      if (String(row.statusCode || '').toUpperCase() === 'ABS') {
+        kindAbsCounts.set(kindKey, (kindAbsCounts.get(kindKey) || 0) + 1);
+      }
+      if (String(row.statusCode || '').toUpperCase() === 'STC') {
+        kindStcCounts.set(kindKey, (kindStcCounts.get(kindKey) || 0) + 1);
+      }
     }
   });
 
@@ -1518,15 +1577,20 @@ function buildProductionBreakdown(rows, presentRows) {
       const meta = PRODUCTION_SERVICE_META[key];
       const count = serviceCounts.get(key) || 0;
       const presentCount = servicePresentCounts.get(key) || 0;
+      const absentCount = serviceAbsCounts.get(key) || 0;
+      const stcCount = serviceStcCounts.get(key) || 0;
+      const effectiveCount = Math.max(0, count - stcCount);
 
       return {
         ...meta,
         count,
+        effectiveCount,
         presentCount,
-        absentCount: Math.max(0, count - presentCount),
+        absentCount,
+        stcCount,
         percent: (count / total) * 100,
-        presentPercent: count ? (presentCount / count) * 100 : 0,
-        absentPercent: count ? ((count - presentCount) / count) * 100 : 0,
+        presentPercent: effectiveCount ? (presentCount / effectiveCount) * 100 : 0,
+        absentPercent: effectiveCount ? (absentCount / effectiveCount) * 100 : 0,
         modalKey: `production-service:${key}`,
       };
     })
@@ -1540,15 +1604,20 @@ function buildProductionBreakdown(rows, presentRows) {
     .map((key) => {
       const count = kindCounts.get(key) || 0;
       const presentCount = kindPresentCounts.get(key) || 0;
+      const absentCount = kindAbsCounts.get(key) || 0;
+      const stcCount = kindStcCounts.get(key) || 0;
+      const effectiveCount = Math.max(0, count - stcCount);
 
       return {
         ...kindMeta[key],
         count,
+        effectiveCount,
         presentCount,
-        absentCount: Math.max(0, count - presentCount),
+        absentCount,
+        stcCount,
         percent: (count / total) * 100,
-        presentPercent: count ? (presentCount / count) * 100 : 0,
-        absentPercent: count ? ((count - presentCount) / count) * 100 : 0,
+        presentPercent: effectiveCount ? (presentCount / effectiveCount) * 100 : 0,
+        absentPercent: effectiveCount ? (absentCount / effectiveCount) * 100 : 0,
         modalKey: `production-kind:${key}`,
       };
     })
@@ -1561,7 +1630,7 @@ function mapRosterRowToModalRow(row, overrides = {}) {
   return {
     id: row.id || row.employeeKey || '-',
     fullName: row.fullName || '-',
-    department: row.department || '-',
+    department: overrides.department || getExcelDepartmentLabel(row.department, row.service),
     kind: row.kind || '-',
     status: overrides.status || row.statusLabel || 'Actif',
     detail: overrides.detail || row.service || row.rawDisplay || row.display || '-',
@@ -1846,9 +1915,17 @@ function matchesSearch(values, searchValue) {
 }
 
 function sortEmployeeRecords(items) {
-  return [...items].sort((left, right) =>
-    String(left.fullName || '').localeCompare(String(right.fullName || '')),
-  );
+  const getEmployeeCode = (employee) =>
+    String(employee.finalCode || employee.id || employee.zk || employee.saber || '').trim();
+
+  return [...items].sort((left, right) => {
+    const codeSort = getEmployeeCode(left).localeCompare(getEmployeeCode(right), undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
+
+    return codeSort || String(left.fullName || '').localeCompare(String(right.fullName || ''));
+  });
 }
 
 function buildDepartmentBaseRows(employees) {
@@ -2234,7 +2311,7 @@ function buildProductionDetailConfig(type, data) {
         rows: productionStcRows.map((row) => ({
           id: row.id || row.employeeKey || '-',
           fullName: row.fullName || '-',
-          department: row.department || '-',
+          department: getExcelDepartmentLabel(row.department, row.service),
           kind: row.kind || '-',
           status: row.status || translate('status.stc', 'STC'),
           detail: row.detail || '-',
@@ -2518,15 +2595,21 @@ function EmployeeBaseSurface({
   onCreate,
   onEdit,
   onExport,
+  onImport,
+  onClear,
   onOpenAll,
   onOpenActive,
   onOpenStc,
   activeEmployeesCount,
   stcEmployeesCount,
   departmentCount,
+  isImporting,
+  isClearing,
   labels,
   translate,
 }) {
+  const isBusy = isImporting || isClearing;
+
   return (
     <article className="admin-table-card">
       <div className="admin-workspace__hero">
@@ -2540,8 +2623,31 @@ function EmployeeBaseSurface({
           <button className="ghost-button" type="button" onClick={onExport}>
             {labels.export}
           </button>
-          <button className="primary-button" type="button" onClick={onCreate}>
+          <button className="primary-button" type="button" onClick={onCreate} disabled={isBusy}>
             {labels.add}
+          </button>
+        </div>
+      </div>
+
+      <div className="admin-sync-panel">
+        <div className="admin-sync-panel__copy">
+          <span className="admin-sync-panel__eyebrow">{labels.replaceEyebrow}</span>
+          <strong>{labels.replaceTitle}</strong>
+          <p>{labels.replaceDescription}</p>
+        </div>
+
+        <div className="admin-sync-panel__actions">
+          <label className={`ghost-button admin-file-button${isBusy ? ' is-disabled' : ''}`}>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={onImport}
+              disabled={isBusy}
+            />
+            {isImporting ? labels.importing : labels.import}
+          </label>
+          <button className="danger-button danger-button--soft" type="button" onClick={onClear} disabled={isBusy}>
+            {isClearing ? labels.clearing : labels.clear}
           </button>
         </div>
       </div>
@@ -2723,7 +2829,7 @@ function ProductionFocusSection({
                       </div>
                       <div className="rh-production-presence-card__stat">
                         <small>{labels.total}</small>
-                        <b>{item.count}</b>
+                        <b>{item.effectiveCount}</b>
                       </div>
                       <div className="rh-production-presence-card__hint">Clique pour ouvrir la liste</div>
                     </div>
@@ -2748,7 +2854,7 @@ function ProductionFocusSection({
                 <div className="rh-production-chip__stats">
                   <div className="rh-production-chip__stat">
                     <small>{labels.total}</small>
-                    <strong>{item.count}</strong>
+                    <strong>{item.effectiveCount}</strong>
                   </div>
                   <div className="rh-production-chip__stat">
                     <small>{labels.presents}</small>
@@ -3042,6 +3148,8 @@ export default function App() {
   const [statusMessage, setStatusMessage] = useState(() => getTranslationValue(getInitialLanguage(), 'messages.initialStatus'));
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
+  const [isEmployeeImporting, setIsEmployeeImporting] = useState(false);
+  const [isEmployeeClearing, setIsEmployeeClearing] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeKpiModal, setActiveKpiModal] = useState('');
   const [activeEmployeeBaseModal, setActiveEmployeeBaseModal] = useState('');
@@ -3148,6 +3256,20 @@ export default function App() {
       description: translate('employeeBase.description', 'Ajoute, modifie ou supprime un utilisateur directement depuis la base RH sauvegardee.'),
       export: translate('employeeBase.export', 'Exporter Excel'),
       add: translate('employeeBase.add', 'Ajouter un employe'),
+      import: translate('employeeBase.import', 'Remplacer par Excel'),
+      importing: translate('employeeBase.importing', 'Import RH...'),
+      clear: translate('employeeBase.clear', 'Vider la base'),
+      clearing: translate('employeeBase.clearing', 'Vidage...'),
+      replaceEyebrow: translate('employeeBase.replaceEyebrow', 'Remplacement complet'),
+      replaceTitle: translate('employeeBase.replaceTitle', 'Charger un nouveau fichier RH'),
+      replaceDescription: translate(
+        'employeeBase.replaceDescription',
+        'Charge un fichier Excel du type "Etat du personnel". Le fichier importe remplace toute la base RH actuelle, puis les cartes et le tableau se recalculent automatiquement.',
+      ),
+      clearConfirm: translate(
+        'employeeBase.clearConfirm',
+        'Vider toute la base RH actuelle ? Cette action supprimera les fiches visibles avant un nouvel import.',
+      ),
       cards: {
         records: translate('employeeBase.cards.records', 'Fiches RH'),
         active: translate('employeeBase.cards.active', 'Actifs'),
@@ -3635,6 +3757,9 @@ export default function App() {
   const attendanceRate = totalEmployees ? (presentEmployees / totalEmployees) * 100 : 0;
   const productionMetrics = useMemo(() => {
     const total = productionDayRows.length;
+    const totalWithoutStc = productionDayRows.filter(
+      (row) => String(row.statusCode || '').toUpperCase() !== 'STC',
+    ).length;
     const present = productionPresentRows.length;
     const absent = productionDayRows.filter(
       (row) => String(row.statusCode || '').toUpperCase() === 'ABS',
@@ -3644,14 +3769,15 @@ export default function App() {
 
     return {
       total,
+      totalWithoutStc,
       present,
       absent,
       stc,
       newEmployees,
       periodLabel: activePeriodLabel,
-      presentRate: total ? (present / total) * 100 : 0,
-      absentRate: total ? (absent / total) * 100 : 0,
-      stcRate: total ? (stc / total) * 100 : 0,
+      presentRate: totalWithoutStc ? (present / totalWithoutStc) * 100 : 0,
+      absentRate: totalWithoutStc ? (absent / totalWithoutStc) * 100 : 0,
+      stcRate: totalWithoutStc ? (stc / totalWithoutStc) * 100 : 0,
     };
   }, [activePeriodLabel, productionDayRows, productionNewRows, productionPresentRows, productionStcRows]);
   const kpiDetailConfig = useMemo(
@@ -3788,7 +3914,49 @@ export default function App() {
 
   function handleExportEmployeeBase() {
     exportEmployeeBaseWorkbook(employees, departmentBaseRows);
-    setStatusMessage(`Export Excel de la base RH genere le 17/08/2026.`);
+    setStatusMessage(`Export Excel de la base RH genere le ${new Date().toLocaleDateString(locale)}.`);
+  }
+
+  async function handleImportEmployeeBaseFile(event) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      setIsEmployeeImporting(true);
+      setStatusMessage(translate('employeeBase.analyzingImport', 'Analyse du fichier base RH en cours...'));
+      const importResult = await analyzeEmployeeBaseFile(file);
+      setStatusMessage(translate('employeeBase.replacingImport', 'Remplacement de la base RH en cours...'));
+      const replaceResult = await replaceEmployeeDirectory(importResult.employees);
+      setEmployees(Array.isArray(replaceResult.employees) ? sortEmployeeRecords(replaceResult.employees) : []);
+      setSearchValue('');
+      setStatusMessage(replaceResult.message || translate('employeeBase.importDone', 'Base RH importee.'));
+    } catch (error) {
+      setStatusMessage(error.message || translate('employeeBase.importError', 'Import de la base RH impossible.'));
+    } finally {
+      setIsEmployeeImporting(false);
+      event.target.value = '';
+    }
+  }
+
+  async function handleClearEmployeeBase() {
+    if (typeof window !== 'undefined' && !window.confirm(employeeBaseLabels.clearConfirm)) {
+      return;
+    }
+
+    try {
+      setIsEmployeeClearing(true);
+      setStatusMessage(translate('employeeBase.clearingMessage', 'Vidage de la base RH en cours...'));
+      const result = await clearEmployeeDirectory();
+      setEmployees([]);
+      setSearchValue('');
+      setStatusMessage(result.message || translate('employeeBase.clearDone', 'Base RH videe.'));
+    } catch (error) {
+      setStatusMessage(error.message || translate('employeeBase.clearError', 'Vidage de la base RH impossible.'));
+    } finally {
+      setIsEmployeeClearing(false);
+    }
   }
 
   async function handleSaveEmployee() {
@@ -4101,12 +4269,16 @@ export default function App() {
                 onCreate={handleOpenCreateEmployee}
                 onEdit={handleOpenEditEmployee}
                 onExport={handleExportEmployeeBase}
+                onImport={handleImportEmployeeBaseFile}
+                onClear={handleClearEmployeeBase}
                 onOpenAll={() => handleOpenEmployeeBaseModal('all')}
                 onOpenActive={() => handleOpenEmployeeBaseModal('active')}
                 onOpenStc={() => handleOpenEmployeeBaseModal('stc')}
                 activeEmployeesCount={activeEmployees.length}
                 stcEmployeesCount={stcEmployees.length}
                 departmentCount={departmentBaseRows.length}
+                isImporting={isEmployeeImporting}
+                isClearing={isEmployeeClearing}
                 labels={employeeBaseLabels}
                 translate={translate}
               />

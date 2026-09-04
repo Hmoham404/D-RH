@@ -7,6 +7,8 @@ import {
 } from '../lib/supabase';
 
 const TABLE_NAME = 'hr_staff_directory';
+const DIRECTORY_STATE_TABLE = 'hr_dashboard_store';
+const DIRECTORY_STATE_ID = 'rh-staff-directory-active-records';
 const LOCAL_EMPLOYEES_KEY = 'rh_employee_records_local';
 const LOCAL_DELETED_EMPLOYEES_KEY = 'rh_employee_deleted_records_local';
 
@@ -139,7 +141,17 @@ export const localEmployeesSeed = employeesDirectory.map((employee, index) =>
 );
 
 function sortEmployees(items) {
-  return [...items].sort((a, b) => a.fullName.localeCompare(b.fullName));
+  const getEmployeeCode = (employee) =>
+    cleanText(employee.finalCode || employee.id || employee.zk || employee.saber);
+
+  return [...items].sort((left, right) => {
+    const codeSort = getEmployeeCode(left).localeCompare(getEmployeeCode(right), undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    });
+
+    return codeSort || left.fullName.localeCompare(right.fullName);
+  });
 }
 
 function getEmployeeIdentityKey(employee) {
@@ -245,6 +257,18 @@ function readLocalEmployees() {
   }
 }
 
+function hasLocalEmployeesCache() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return false;
+  }
+
+  try {
+    return window.localStorage.getItem(LOCAL_EMPLOYEES_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
 function readDeletedRecordIds() {
   if (typeof window === 'undefined' || !window.localStorage) {
     return new Set();
@@ -313,6 +337,41 @@ function writeLocalEmployees(employeeList) {
   }
 }
 
+function clearLocalEmployeesState() {
+  writeDeletedRecordIds(new Set());
+  writeLocalEmployees([]);
+}
+
+async function loadActiveDirectoryRecordIds() {
+  const { data, error } = await supabase
+    .from(DIRECTORY_STATE_TABLE)
+    .select('payload')
+    .eq('id', DIRECTORY_STATE_ID)
+    .maybeSingle();
+
+  if (error || !Array.isArray(data?.payload?.recordIds)) {
+    return null;
+  }
+
+  return new Set(data.payload.recordIds.map((value) => cleanText(value)).filter(Boolean));
+}
+
+async function saveActiveDirectoryRecordIds(employees = []) {
+  const recordIds = employees.map((employee) => cleanText(employee.recordId)).filter(Boolean);
+  const { error } = await supabase.from(DIRECTORY_STATE_TABLE).upsert(
+    {
+      id: DIRECTORY_STATE_ID,
+      payload: { recordIds },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'id' },
+  );
+
+  if (error) {
+    throw error;
+  }
+}
+
 function mergeEmployees(baseEmployees, incomingEmployees) {
   const merged = dedupeEmployees(baseEmployees).map((employee, index) =>
     normalizeEmployee(employee, index),
@@ -348,6 +407,60 @@ function mergeLocalOnlyFields(remoteEmployees, localEmployees = []) {
       userLevel: employee.userLevel || localMatch.userLevel || '',
     };
   });
+}
+
+function buildPreparedEmployeeList(employeeList = [], preservedEmployees = []) {
+  const normalizedEmployees = dedupeEmployees(
+    (Array.isArray(employeeList) ? employeeList : []).map((employee, index) =>
+      normalizeEmployee(employee, index),
+    ),
+  );
+
+  return sortEmployees(mergeLocalOnlyFields(normalizedEmployees, preservedEmployees));
+}
+
+async function deleteAllRemoteEmployees() {
+  const batchSize = 100;
+  let removedCount = 0;
+
+  // Delete in small batches so long record-id lists never exceed the REST URL limit.
+  while (true) {
+    const { data, error } = await supabase.from(TABLE_NAME).select('record_id').limit(batchSize);
+
+    if (error) {
+      throw error;
+    }
+
+    const recordIds = (Array.isArray(data) ? data : [])
+      .map((row) => cleanText(row.record_id))
+      .filter(Boolean);
+
+    if (!recordIds.length) {
+      return removedCount;
+    }
+
+    const { error: deleteError } = await supabase.from(TABLE_NAME).delete().in('record_id', recordIds);
+
+    if (deleteError) {
+      throw deleteError;
+    }
+
+    // PostgREST can return no deleted rows even after success, so verify against the source table.
+    const { data: remainingRows, error: verificationError } = await supabase
+      .from(TABLE_NAME)
+      .select('record_id')
+      .in('record_id', recordIds);
+
+    if (verificationError) {
+      throw verificationError;
+    }
+
+    if (remainingRows?.length) {
+      throw new Error('Aucune fiche n a pu etre supprimee de la base partagee.');
+    }
+
+    removedCount += recordIds.length;
+  }
 }
 
 function upsertEmployeeLocally(employee) {
@@ -398,7 +511,8 @@ function removeEmployeeLocally(employee, fallbackRecordId = '') {
 
 export async function loadEmployees() {
   const storedEmployees = readLocalEmployees();
-  const localFallbackEmployees = storedEmployees.length
+  const localCacheExists = hasLocalEmployeesCache();
+  const localFallbackEmployees = localCacheExists
     ? storedEmployees
     : applyDeletedRecordFilter(sortEmployees(localEmployeesSeed));
   const configIssue = getSupabaseConfigIssue();
@@ -406,8 +520,8 @@ export async function loadEmployees() {
   if (!hasSupabaseEnv || !supabase) {
     return {
       data: localFallbackEmployees,
-      mode: storedEmployees.length ? 'local-cache' : 'local-disabled',
-      message: storedEmployees.length
+      mode: localCacheExists ? 'local-cache' : 'local-disabled',
+      message: localCacheExists
         ? `${storedEmployees.length} fiche(s) employe chargee(s) depuis la base locale du navigateur.`
         : configIssue || 'Supabase indisponible. Aucune sauvegarde locale des employes n est conservee.',
     };
@@ -426,21 +540,23 @@ export async function loadEmployees() {
       };
     }
 
-    if (!data?.length) {
-      const emptyRemoteEmployees = storedEmployees.length
-        ? storedEmployees
-        : applyDeletedRecordFilter(sortEmployees(localEmployeesSeed));
+    const activeRecordIds = await loadActiveDirectoryRecordIds();
+    const directoryRows = activeRecordIds
+      ? (data || []).filter((row) => activeRecordIds.has(cleanText(row.record_id)))
+      : data || [];
+
+    if (!directoryRows.length) {
+      // The shared directory is authoritative: remove stale browser copies when it is empty.
+      clearLocalEmployeesState();
       return {
-        data: emptyRemoteEmployees,
-        mode: storedEmployees.length ? 'local-cache' : 'remote-empty',
-        message: storedEmployees.length
-          ? 'Table Supabase vide. Base RH locale conservee dans ce navigateur.'
-          : 'Table rh_employee_records vide. Clique sur "Publier employes" pour envoyer la base en ligne.',
+        data: [],
+        mode: 'remote-empty',
+        message: 'Table des employes vide. Importez un fichier Excel pour creer la nouvelle base.',
       };
     }
 
     const remoteEmployees = applyDeletedRecordFilter(
-      mergeLocalOnlyFields(dedupeEmployees(data.map(mapRowToEmployee)), storedEmployees),
+      mergeLocalOnlyFields(dedupeEmployees(directoryRows.map(mapRowToEmployee)), storedEmployees),
     );
     writeLocalEmployees(remoteEmployees);
 
@@ -452,8 +568,8 @@ export async function loadEmployees() {
   } catch (error) {
       return {
         data: localFallbackEmployees,
-        mode: storedEmployees.length ? 'local-cache' : 'local-disabled',
-        message: storedEmployees.length
+        mode: localCacheExists ? 'local-cache' : 'local-disabled',
+        message: localCacheExists
           ? 'Connexion Supabase indisponible. Base RH locale chargee depuis ce navigateur.'
           : 'Connexion Supabase indisponible. Aucune sauvegarde locale des employes n est utilisee.',
       };
@@ -514,9 +630,7 @@ export async function saveEmployeeRecord(employee) {
 }
 
 export async function syncEmployeesToSupabase(employeeList = localEmployeesSeed) {
-  const normalizedEmployees = sortEmployees(
-    employeeList.map((employee, index) => normalizeEmployee(employee, index)),
-  );
+  const normalizedEmployees = buildPreparedEmployeeList(employeeList, readLocalEmployees());
   writeLocalEmployees(normalizedEmployees);
   const configIssue = getSupabaseConfigIssue();
 
@@ -535,6 +649,99 @@ export async function syncEmployeesToSupabase(employeeList = localEmployeesSeed)
     return normalizedEmployees;
   } catch (error) {
     throw new Error(formatSupabaseError(error, 'Publication employes'));
+  }
+}
+
+export async function replaceEmployeeDirectory(employeeList = []) {
+  // A replacement must contain only the newly imported Excel records.
+  const normalizedEmployees = buildPreparedEmployeeList(employeeList);
+  writeDeletedRecordIds(new Set());
+  writeLocalEmployees(normalizedEmployees);
+  const configIssue = getSupabaseConfigIssue();
+
+  if (!hasSupabaseEnv || !supabase) {
+    return {
+      employees: normalizedEmployees,
+      mode: 'local-disabled',
+      message: `${configIssue || 'Supabase indisponible.'} La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
+    };
+  }
+
+  try {
+    let retainedLegacyRecords = false;
+
+    try {
+      await deleteAllRemoteEmployees();
+    } catch {
+      // The directory state below keeps legacy records out of the active RH base.
+      retainedLegacyRecords = true;
+    }
+
+    if (normalizedEmployees.length) {
+      const rows = normalizedEmployees.map(mapEmployeeToRow);
+      const { error } = await supabase.from(TABLE_NAME).upsert(rows, { onConflict: 'record_id' });
+
+      if (error) {
+        return {
+          employees: normalizedEmployees,
+          mode: 'local-disabled',
+          message: `Connexion Supabase indisponible. La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
+        };
+      }
+    }
+
+    await saveActiveDirectoryRecordIds(normalizedEmployees);
+
+    return {
+      employees: normalizedEmployees,
+      mode: 'supabase',
+      message: normalizedEmployees.length
+        ? retainedLegacyRecords
+          ? `Base RH active remplacee par ${normalizedEmployees.length} fiche(s).`
+          : `Base RH remplacee par ${normalizedEmployees.length} fiche(s) dans Supabase.`
+        : 'Base RH videe dans Supabase.',
+    };
+  } catch {
+    return {
+      employees: normalizedEmployees,
+      mode: 'local-disabled',
+      message: `Connexion Supabase indisponible. La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
+    };
+  }
+}
+
+export async function clearEmployeeDirectory() {
+  clearLocalEmployeesState();
+  const configIssue = getSupabaseConfigIssue();
+
+  if (!hasSupabaseEnv || !supabase) {
+    return {
+      employees: [],
+      mode: 'local-disabled',
+      message: `${configIssue || 'Supabase indisponible.'} La base RH locale du navigateur est maintenant vide.`,
+    };
+  }
+
+  try {
+    await saveActiveDirectoryRecordIds([]);
+
+    try {
+      await deleteAllRemoteEmployees();
+    } catch {
+      return {
+        employees: [],
+        mode: 'supabase',
+        message: 'Base RH active videe.',
+      };
+    }
+
+    return {
+      employees: [],
+      mode: 'supabase',
+      message: 'Base RH videe dans Supabase.',
+    };
+  } catch (error) {
+    throw new Error(formatSupabaseError(error, 'Vidage de la base RH'));
   }
 }
 

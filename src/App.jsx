@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
+import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
 import { analyzePointageFile } from './lib/pointageImport';
 import {
   clearEmployeeDirectory,
@@ -64,7 +65,7 @@ const UI_TRANSLATIONS = {
       importing: 'Import en cours...',
     },
     kpi: {
-      workforceGlobal: 'Effectif globale',
+      workforceGlobal: 'Effectif global',
       plant: 'Usine',
       presents: 'Presents',
       absents: 'Absents',
@@ -1529,7 +1530,7 @@ function getExcelDepartmentLabel(department, service) {
   return rawDepartment;
 }
 
-function buildProductionBreakdown(rows, presentRows) {
+function buildProductionBreakdown(rows, presentRows, dayRows, stcRows) {
   const total = rows.length || 1;
   const serviceCounts = new Map();
   const servicePresentCounts = new Map();
@@ -1543,23 +1544,23 @@ function buildProductionBreakdown(rows, presentRows) {
   rows.forEach((row) => {
     const serviceMeta = getProductionServiceMeta(row.service);
     serviceCounts.set(serviceMeta.key, (serviceCounts.get(serviceMeta.key) || 0) + 1);
-    if (String(row.statusCode || '').toUpperCase() === 'ABS') {
-      serviceAbsCounts.set(serviceMeta.key, (serviceAbsCounts.get(serviceMeta.key) || 0) + 1);
-    }
-    if (String(row.statusCode || '').toUpperCase() === 'STC') {
-      serviceStcCounts.set(serviceMeta.key, (serviceStcCounts.get(serviceMeta.key) || 0) + 1);
-    }
-
     const kindKey = normalizeKindLabel(row.kind);
     if (['MOI', 'MOD'].includes(kindKey)) {
       kindCounts.set(kindKey, (kindCounts.get(kindKey) || 0) + 1);
-      if (String(row.statusCode || '').toUpperCase() === 'ABS') {
-        kindAbsCounts.set(kindKey, (kindAbsCounts.get(kindKey) || 0) + 1);
-      }
-      if (String(row.statusCode || '').toUpperCase() === 'STC') {
-        kindStcCounts.set(kindKey, (kindStcCounts.get(kindKey) || 0) + 1);
-      }
     }
+  });
+
+  dayRows.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').forEach((row) => {
+    const serviceKey = getProductionServiceMeta(row.service).key;
+    const kindKey = normalizeKindLabel(row.kind);
+    serviceAbsCounts.set(serviceKey, (serviceAbsCounts.get(serviceKey) || 0) + 1);
+    kindAbsCounts.set(kindKey, (kindAbsCounts.get(kindKey) || 0) + 1);
+  });
+  stcRows.forEach((row) => {
+    const serviceKey = getProductionServiceMeta(row.service).key;
+    const kindKey = normalizeKindLabel(row.kind);
+    serviceStcCounts.set(serviceKey, (serviceStcCounts.get(serviceKey) || 0) + 1);
+    kindStcCounts.set(kindKey, (kindStcCounts.get(kindKey) || 0) + 1);
   });
 
   presentRows.forEach((row) => {
@@ -1579,7 +1580,7 @@ function buildProductionBreakdown(rows, presentRows) {
       const presentCount = servicePresentCounts.get(key) || 0;
       const absentCount = serviceAbsCounts.get(key) || 0;
       const stcCount = serviceStcCounts.get(key) || 0;
-      const effectiveCount = Math.max(0, count - stcCount);
+      const effectiveCount = count;
 
       return {
         ...meta,
@@ -1606,7 +1607,7 @@ function buildProductionBreakdown(rows, presentRows) {
       const presentCount = kindPresentCounts.get(key) || 0;
       const absentCount = kindAbsCounts.get(key) || 0;
       const stcCount = kindStcCounts.get(key) || 0;
-      const effectiveCount = Math.max(0, count - stcCount);
+      const effectiveCount = count;
 
       return {
         ...kindMeta[key],
@@ -1628,11 +1629,11 @@ function buildProductionBreakdown(rows, presentRows) {
 
 function mapRosterRowToModalRow(row, overrides = {}) {
   return {
-    id: row.id || row.employeeKey || '-',
+    id: row.finalCode || row.id || row.zk || row.employeeKey || '-',
     fullName: row.fullName || '-',
     department: overrides.department || getExcelDepartmentLabel(row.department, row.service),
     kind: row.kind || '-',
-    status: overrides.status || row.statusLabel || 'Actif',
+    status: overrides.status || row.statusLabel || row.status || 'Actif',
     detail: overrides.detail || row.service || row.rawDisplay || row.display || '-',
   };
 }
@@ -1928,7 +1929,7 @@ function sortEmployeeRecords(items) {
   });
 }
 
-function buildDepartmentBaseRows(employees) {
+function buildDepartmentBaseRows(employees, referenceDate) {
   const counts = new Map();
 
   employees.forEach((employee) => {
@@ -1949,7 +1950,7 @@ function buildDepartmentBaseRows(employees) {
       current.active += 1;
     }
 
-    if (String(employee.status || '').toLowerCase() === 'stc') {
+    if (isEmployeeStcInMonth(employee, referenceDate)) {
       current.stc += 1;
     }
 
@@ -2072,7 +2073,7 @@ function exportEmployeeBaseWorkbook(employees, departmentRows) {
     Departement: department.label,
     Total: department.total,
     Actifs: department.active,
-    STC: department.stc,
+    STC_du_mois: department.stc,
     MOI: department.moi,
     MOD: department.mod,
     Services: department.serviceCount,
@@ -2088,14 +2089,14 @@ function exportEmployeeBaseWorkbook(employees, departmentRows) {
 
 function buildKpiDetailConfig(type, data) {
   const {
-    monthlyEffectifEmployees,
+    workforceEmployees,
     presentRoster,
     absentRoster,
     lateRoster,
     newRoster,
     stcEmployees,
     selectedDate,
-    periodLabel,
+    basePeriodLabel,
     totalEmployees,
     presentEmployees,
     absentEmployees,
@@ -2152,41 +2153,41 @@ function buildKpiDetailConfig(type, data) {
     case 'new':
       return {
         title: labels.newTitle,
-        subtitle: labels.newSubtitle(formatDateLabel(selectedDate, locale), newEmployees),
+        subtitle: labels.newSubtitle(basePeriodLabel, newEmployees),
         rows: newRoster.map((row) => ({
-          id: row.id || row.employeeKey || '-',
+          id: row.finalCode || row.id || row.zk || row.employeeKey || '-',
           fullName: row.fullName || '-',
           department: row.department || '-',
           kind: row.kind || '-',
-          status: row.statusLabel || translate('status.notStarted', 'Non demarre'),
-          detail: row.rawDisplay || row.display || 'X',
+          status: row.status || translate('status.newHire', 'Nouveau'),
+          detail: `${translate('employeeFields.hiredAt', 'Date embauche')} : ${row.hiredAt || row.hired_at || '-'}`,
         })),
       };
     case 'stc':
       return {
         title: labels.stcTitle,
-        subtitle: labels.stcSubtitle(stcCount, periodLabel),
+        subtitle: labels.stcSubtitle(stcCount, basePeriodLabel),
         rows: stcEmployees.map((employee) => ({
-          id: employee.id || employee.employeeKey || '-',
+          id: employee.finalCode || employee.id || employee.zk || employee.employeeKey || '-',
           fullName: employee.fullName || '-',
           department: employee.department || '-',
           kind: employee.kind || '-',
           status: employee.status || translate('status.stc', 'STC'),
-          detail: employee.detail || '-',
+          detail: employee.inactiveFrom || employee.detail || '-',
         })),
       };
     case 'total':
     default:
       return {
         title: labels.totalTitle,
-        subtitle: labels.totalSubtitle(totalEmployees, periodLabel),
-        rows: monthlyEffectifEmployees.map((employee) => ({
-          id: employee.id || employee.employeeKey || '-',
+        subtitle: labels.totalSubtitle(totalEmployees, basePeriodLabel),
+        rows: workforceEmployees.map((employee) => ({
+          id: employee.finalCode || employee.id || employee.zk || employee.employeeKey || '-',
           fullName: employee.fullName || '-',
           department: employee.department || '-',
           kind: employee.kind || '-',
           status: employee.status || translate('status.active', 'Actif'),
-          detail: employee.detail || '-',
+          detail: employee.contract || employee.service || employee.detail || '-',
         })),
       };
   }
@@ -2242,6 +2243,7 @@ function buildEmployeeBaseDetailConfig(type, data) {
 function buildProductionDetailConfig(type, data) {
   const {
     productionMetrics,
+    productionBaseRows,
     productionDayRows,
     productionPresentRows,
     productionNewRows,
@@ -2255,7 +2257,7 @@ function buildProductionDetailConfig(type, data) {
   if (type.startsWith('production-service:')) {
     const serviceKey = type.split(':')[1] || '';
     const serviceMeta = PRODUCTION_SERVICE_META[serviceKey] || PRODUCTION_SERVICE_META.autres;
-    const rows = productionDayRows
+    const rows = productionBaseRows
       .filter((row) => getProductionServiceMeta(row.service).key === serviceKey)
       .map((row) => mapRosterRowToModalRow(row));
 
@@ -2268,7 +2270,7 @@ function buildProductionDetailConfig(type, data) {
 
   if (type.startsWith('production-kind:')) {
     const kindKey = type.split(':')[1] || '';
-    const rows = productionDayRows
+    const rows = productionBaseRows
       .filter((row) => normalizeKindLabel(row.kind) === kindKey)
       .map((row) => mapRosterRowToModalRow(row));
 
@@ -2299,9 +2301,11 @@ function buildProductionDetailConfig(type, data) {
     case 'production-new':
       return {
         title: labels.newTitle,
-        subtitle: labels.newSubtitle(productionNewRows.length, formatDateLabel(selectedDate, locale)),
+        subtitle: labels.newSubtitle(productionNewRows.length, productionMetrics.periodLabel),
         rows: productionNewRows.map((row) =>
-          mapRosterRowToModalRow(row, { status: translate('status.newHire', 'Nouveau'), detail: row.rawDisplay || row.service || '-' }),
+          mapRosterRowToModalRow(row, {
+            detail: `${translate('employeeFields.hiredAt', 'Date embauche')} : ${row.hiredAt || row.hired_at || '-'}`,
+          }),
         ),
       };
     case 'production-stc':
@@ -2309,12 +2313,12 @@ function buildProductionDetailConfig(type, data) {
         title: labels.stcTitle,
         subtitle: labels.stcSubtitle(productionStcRows.length),
         rows: productionStcRows.map((row) => ({
-          id: row.id || row.employeeKey || '-',
+          id: row.finalCode || row.id || row.zk || row.employeeKey || '-',
           fullName: row.fullName || '-',
           department: getExcelDepartmentLabel(row.department, row.service),
           kind: row.kind || '-',
           status: row.status || translate('status.stc', 'STC'),
-          detail: row.detail || '-',
+          detail: row.inactiveFrom || row.detail || '-',
         })),
       };
     case 'production-total':
@@ -2322,7 +2326,7 @@ function buildProductionDetailConfig(type, data) {
       return {
         title: labels.totalTitle,
         subtitle: labels.totalSubtitle(productionMetrics.total),
-        rows: productionDayRows.map((row) => mapRosterRowToModalRow(row)),
+        rows: productionBaseRows.map((row) => mapRosterRowToModalRow(row)),
       };
   }
 }
@@ -2784,7 +2788,7 @@ function ProductionFocusSection({
           tone="slate"
           label={labels.recruitments}
           value={productionMetrics.newEmployees}
-          note=""
+          note={productionMetrics.periodLabel}
           isActive={activeModalKey === 'production-new'}
           onClick={() => onOpenModal('production-new')}
         />
@@ -2938,7 +2942,7 @@ function DepartmentBaseSurface({
                 <th>{labels.columns.department}</th>
                 <th>{labels.columns.totalBase}</th>
                 <th>{labels.columns.active}</th>
-                <th>STC</th>
+                <th>{labels.metrics.stc}</th>
                 <th>MOI</th>
                 <th>MOD</th>
                 <th>{labels.columns.services}</th>
@@ -3161,6 +3165,12 @@ export default function App() {
   const [isEmployeeSaving, setIsEmployeeSaving] = useState(false);
   const [isEmployeeDeleting, setIsEmployeeDeleting] = useState(false);
   const locale = LANGUAGE_LOCALES[language] || LANGUAGE_LOCALES.fr;
+  const currentMonthKey = getTodayIsoDate().slice(0, 7);
+  const currentMonthDate = useMemo(() => {
+    const [year, month] = currentMonthKey.split('-').map(Number);
+    return new Date(year, month - 1, 1);
+  }, [currentMonthKey]);
+  const currentMonthLabel = currentMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const languageDirection = language === 'ar' ? 'rtl' : 'ltr';
   const translate = (path, fallback = path) => {
     const value = getTranslationValue(language, path);
@@ -3273,7 +3283,7 @@ export default function App() {
       cards: {
         records: translate('employeeBase.cards.records', 'Fiches RH'),
         active: translate('employeeBase.cards.active', 'Actifs'),
-        stc: translate('employeeBase.cards.stc', 'STC'),
+        stc: `${translate('kpi.stcMonth', 'STC du mois')} · ${currentMonthLabel}`,
       },
       baseTitle: translate('employeeBase.baseTitle', 'Base du personnel'),
       baseSubtitle: translateFn('employeeBase.baseSubtitle', (count) => `${count} departement(s) relies a cette base.`),
@@ -3293,7 +3303,7 @@ export default function App() {
       edit: translate('employeeBase.edit', 'Modifier'),
       empty: translate('employeeBase.empty', 'Aucun employe trouve pour cette recherche.'),
     }),
-    [language],
+    [language, currentMonthLabel],
   );
   const departmentBaseLabels = useMemo(
     () => ({
@@ -3303,7 +3313,7 @@ export default function App() {
         departments: translate('departmentBase.metrics.departments', 'Departements'),
         services: translate('departmentBase.metrics.services', 'Services'),
         active: translate('departmentBase.metrics.active', 'Actifs'),
-        stc: translate('departmentBase.metrics.stc', 'STC'),
+        stc: `${translate('kpi.stcMonth', 'STC du mois')} · ${currentMonthLabel}`,
       },
       columns: {
         department: translate('departmentBase.columns.department', 'Departement'),
@@ -3314,7 +3324,7 @@ export default function App() {
       },
       empty: translate('departmentBase.empty', 'Aucun departement trouve pour cette recherche.'),
     }),
-    [language],
+    [language, currentMonthLabel],
   );
   const absenceLabels = useMemo(
     () => ({
@@ -3343,7 +3353,7 @@ export default function App() {
       newSubtitle: (date, count) => `${count} | ${date}`,
       stcTitle: translate('kpi.stcListTitle', 'Liste STC du mois'),
       stcSubtitle: (count, periodLabel) => `${count} ${translate('kpi.stcMonth', 'STC du mois')} | ${periodLabel}`,
-      totalTitle: translate('kpi.totalListTitle', 'Effectif du mois'),
+      totalTitle: translate('kpi.workforceGlobal', 'Effectif global'),
       totalSubtitle: (count, periodLabel) => `${count} | ${periodLabel}`,
     }),
     [language],
@@ -3352,12 +3362,12 @@ export default function App() {
     () => ({
       activeTitle: translate('employeeBase.activeListTitle', 'Liste des employes actifs'),
       activeSubtitle: (count) => `${count} ${translate('employeeBase.cards.active', 'Actifs').toLowerCase()}`,
-      stcTitle: translate('employeeBase.stcListTitle', 'Liste STC base RH'),
-      stcSubtitle: (count) => `${count} STC`,
+      stcTitle: translate('kpi.stcListTitle', 'Liste STC du mois'),
+      stcSubtitle: (count) => `${count} STC | ${currentMonthLabel}`,
       allTitle: translate('employeeBase.allListTitle', 'Liste complete base RH'),
       allSubtitle: (count) => `${count} ${translate('employeeBase.cards.records', 'Fiches RH').toLowerCase()}`,
     }),
-    [language],
+    [language, currentMonthLabel],
   );
   const productionDetailLabels = useMemo(
     () => ({
@@ -3370,11 +3380,11 @@ export default function App() {
       newTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.recruitments', 'Nombre de recrutements')}`,
       newSubtitle: (count, date) => `${count} | ${date}`,
       stcTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.stcMonth', 'STC du mois')}`,
-      stcSubtitle: (count) => `${count} STC`,
+      stcSubtitle: (count) => `${count} STC | ${currentMonthLabel}`,
       totalTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.productionWorkforce', 'Effectif de production')}`,
-      totalSubtitle: (count) => `${count} ${translate('production.title', 'Production').toLowerCase()}`,
+      totalSubtitle: (count) => `${count} ${translate('production.title', 'Production').toLowerCase()} | ${currentMonthLabel}`,
     }),
-    [language],
+    [language, currentMonthLabel],
   );
 
   useEffect(() => {
@@ -3523,25 +3533,13 @@ export default function App() {
   );
   const activePeriodStart = availableDates[0] || '';
   const activePeriodEnd = availableDates[availableDates.length - 1] || '';
-  const activePeriodLabel = useMemo(
-    () => formatPeriodLabel(activePeriodStart, activePeriodEnd, locale, translate('common.to', 'au')),
-    [activePeriodEnd, activePeriodStart, language],
-  );
   const activeEmployees = useMemo(
     () => employees.filter((employee) => String(employee.status || '').toLowerCase() === 'actif'),
     [employees],
   );
   const stcEmployees = useMemo(
-    () => employees.filter((employee) => String(employee.status || '').toLowerCase() === 'stc'),
-    [employees],
-  );
-  const firstStcDateMap = useMemo(
-    () => buildFirstStcDateMap(snapshot, activePeriodStart, activePeriodEnd),
-    [activePeriodEnd, activePeriodStart, snapshot],
-  );
-  const firstActiveDateMap = useMemo(
-    () => buildFirstActiveDateMap(snapshot, activePeriodStart, activePeriodEnd),
-    [activePeriodEnd, activePeriodStart, snapshot],
+    () => employees.filter((employee) => isEmployeeStcInMonth(employee, currentMonthDate)),
+    [employees, currentMonthDate],
   );
   const selectedTableEmployees = useMemo(
     () => buildPeriodEmployees(snapshot, activePeriodStart, activePeriodEnd, employees),
@@ -3555,60 +3553,13 @@ export default function App() {
     () => selectedDayEffectifRows.filter((row) => isProductionDepartment(row.department)),
     [selectedDayEffectifRows],
   );
+  const productionBaseRows = useMemo(
+    () => employees.filter((employee) => isProductionDepartment(employee.department)),
+    [employees],
+  );
   const newRoster = useMemo(
-    () =>
-      selectedDayEffectifRows
-        .filter((row) => firstActiveDateMap.get(row.employeeKey) === selectedDate)
-        .map((row) => ({
-          ...row,
-          statusLabel: 'Nouveau',
-          rawDisplay: firstActiveDateMap.get(row.employeeKey)
-            ? formatShortDateLabel(firstActiveDateMap.get(row.employeeKey))
-            : row.rawDisplay || row.display || '-',
-          display: firstActiveDateMap.get(row.employeeKey)
-            ? formatShortDateLabel(firstActiveDateMap.get(row.employeeKey))
-            : row.display || '-',
-        })),
-    [firstActiveDateMap, selectedDate, selectedDayEffectifRows],
-  );
-  const selectedDayStcRows = useMemo(
-    () => selectedDayEffectifRows.filter((row) => String(row.statusCode || '').toUpperCase() === 'STC'),
-    [selectedDayEffectifRows],
-  );
-  const monthlyStcEmployees = useMemo(
-    () =>
-      selectedDayStcRows.map((row) => ({
-        employeeKey: row.employeeKey,
-        id: row.id || row.employeeKey || '-',
-        fullName: row.fullName || '-',
-        department: row.department || '-',
-        kind: row.kind || '-',
-        status: 'STC',
-        detail: firstStcDateMap.get(row.employeeKey)
-          ? formatShortDateLabel(firstStcDateMap.get(row.employeeKey))
-          : row.rawDisplay || row.display || 'STC',
-      })),
-    [firstStcDateMap, selectedDayStcRows],
-  );
-  const monthlyEffectifEmployees = useMemo(
-    () =>
-      selectedDayEffectifRows.map((row) => ({
-        employeeKey: row.employeeKey,
-        id: row.id || row.employeeKey || '-',
-        fullName: row.fullName || '-',
-        department: row.department || '-',
-        kind: row.kind || '-',
-        status: row.statusCode === 'STC' ? 'STC' : row.statusLabel || 'Actif',
-        detail:
-          row.statusCode === 'STC'
-            ? firstStcDateMap.get(row.employeeKey)
-              ? formatShortDateLabel(firstStcDateMap.get(row.employeeKey))
-              : row.rawDisplay || row.display || 'STC'
-            : row.statusCode === 'ABS' || row.statusCode === 'CM' || row.statusCode === 'CONGE'
-              ? row.statusLabel || row.rawDisplay || row.display || '-'
-              : row.rawDisplay || row.display || '-',
-      })),
-    [firstStcDateMap, selectedDayEffectifRows],
+    () => employees.filter((employee) => isEmployeeHiredInMonth(employee, currentMonthDate)),
+    [employees, currentMonthDate],
   );
   const presentRoster = useMemo(
     () => dayRoster.filter((row) => row.isPresent),
@@ -3646,12 +3597,12 @@ export default function App() {
     [newRoster],
   );
   const productionStcRows = useMemo(
-    () => monthlyStcEmployees.filter((row) => isProductionDepartment(row.department)),
-    [monthlyStcEmployees],
+    () => stcEmployees.filter((row) => isProductionDepartment(row.department)),
+    [stcEmployees],
   );
   const { serviceBreakdown: productionServiceBreakdown, kindBreakdown: productionKindBreakdown } = useMemo(
-    () => buildProductionBreakdown(productionDayRows, productionPresentRows),
-    [productionDayRows, productionPresentRows],
+    () => buildProductionBreakdown(productionBaseRows, productionPresentRows, productionDayRows, productionStcRows),
+    [productionBaseRows, productionDayRows, productionPresentRows, productionStcRows],
   );
   const kindComparison = useMemo(
     () => buildKindComparison(activeEmployees, presentRoster),
@@ -3669,7 +3620,10 @@ export default function App() {
       matchesSearch([row.id, row.fullName, row.department, row.kind], searchValue),
     );
   }, [searchValue, selectedWeek]);
-  const departmentBaseRows = useMemo(() => buildDepartmentBaseRows(employees), [employees]);
+  const departmentBaseRows = useMemo(
+    () => buildDepartmentBaseRows(employees, currentMonthDate),
+    [employees, currentMonthDate],
+  );
   const filteredEmployeeBaseRows = useMemo(
     () =>
       employees.filter((employee) =>
@@ -3744,7 +3698,7 @@ export default function App() {
     [employees],
   );
 
-  const totalEmployees = Number(selectedDayEffectifRows.length || 0);
+  const totalEmployees = employees.length;
   const presentEmployees = Number(selectedSummary?.presentEmployees || 0);
   const absentEmployees = useMemo(
     () => dayRoster.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').length,
@@ -3753,13 +3707,10 @@ export default function App() {
   const showLateKpi = Boolean(selectedDate) && selectedDate >= getTodayIsoDate();
   const lateEmployees = lateRoster.length;
   const newEmployees = newRoster.length;
-  const stcCount = monthlyStcEmployees.length;
+  const stcCount = stcEmployees.length;
   const attendanceRate = totalEmployees ? (presentEmployees / totalEmployees) * 100 : 0;
   const productionMetrics = useMemo(() => {
-    const total = productionDayRows.length;
-    const totalWithoutStc = productionDayRows.filter(
-      (row) => String(row.statusCode || '').toUpperCase() !== 'STC',
-    ).length;
+    const total = productionBaseRows.length;
     const present = productionPresentRows.length;
     const absent = productionDayRows.filter(
       (row) => String(row.statusCode || '').toUpperCase() === 'ABS',
@@ -3769,29 +3720,28 @@ export default function App() {
 
     return {
       total,
-      totalWithoutStc,
       present,
       absent,
       stc,
       newEmployees,
-      periodLabel: activePeriodLabel,
-      presentRate: totalWithoutStc ? (present / totalWithoutStc) * 100 : 0,
-      absentRate: totalWithoutStc ? (absent / totalWithoutStc) * 100 : 0,
-      stcRate: totalWithoutStc ? (stc / totalWithoutStc) * 100 : 0,
+      periodLabel: currentMonthLabel,
+      presentRate: total ? (present / total) * 100 : 0,
+      absentRate: total ? (absent / total) * 100 : 0,
+      stcRate: total ? (stc / total) * 100 : 0,
     };
-  }, [activePeriodLabel, productionDayRows, productionNewRows, productionPresentRows, productionStcRows]);
+  }, [currentMonthLabel, productionBaseRows, productionDayRows, productionNewRows, productionPresentRows, productionStcRows]);
   const kpiDetailConfig = useMemo(
     () =>
       activeKpiModal
         ? buildKpiDetailConfig(activeKpiModal, {
-            monthlyEffectifEmployees,
+            workforceEmployees: employees,
             presentRoster,
             absentRoster: absenceRoster,
             lateRoster,
             newRoster,
-            stcEmployees: monthlyStcEmployees,
+            stcEmployees,
             selectedDate,
-            periodLabel: activePeriodLabel,
+            basePeriodLabel: currentMonthLabel,
             totalEmployees,
             presentEmployees,
             absentEmployees,
@@ -3805,14 +3755,14 @@ export default function App() {
         : null,
     [
       activeKpiModal,
-      monthlyEffectifEmployees,
+      employees,
       presentRoster,
       absenceRoster,
       lateRoster,
       newRoster,
-      monthlyStcEmployees,
+      stcEmployees,
       selectedDate,
-      activePeriodLabel,
+      currentMonthLabel,
       totalEmployees,
       presentEmployees,
       absentEmployees,
@@ -3850,6 +3800,7 @@ export default function App() {
       activeProductionModal
         ? buildProductionDetailConfig(activeProductionModal, {
             productionMetrics,
+            productionBaseRows,
             productionDayRows,
             productionPresentRows,
             productionNewRows,
@@ -3863,6 +3814,7 @@ export default function App() {
     [
       activeProductionModal,
       productionMetrics,
+      productionBaseRows,
       productionDayRows,
       productionPresentRows,
       productionNewRows,
@@ -4109,9 +4061,9 @@ export default function App() {
               <section className={`rh-kpi-grid${showLateKpi ? '' : ' rh-kpi-grid--five'}`}>
             <KpiCard
               tone="indigo"
-              label={translate('kpi.workforceGlobal', 'Effectif globale')}
+              label={translate('kpi.workforceGlobal', 'Effectif global')}
               value={totalEmployees || 0}
-              note={activePeriodLabel}
+              note={currentMonthLabel}
               isActive={activeKpiModal === 'total'}
               onClick={() => handleOpenKpiModal('total')}
             />
@@ -4145,7 +4097,7 @@ export default function App() {
               tone="slate"
               label={translate('kpi.recruitments', 'Nombre de recrutements')}
               value={newEmployees}
-              note=""
+              note={currentMonthLabel}
               isActive={activeKpiModal === 'new'}
               onClick={() => handleOpenKpiModal('new')}
             />

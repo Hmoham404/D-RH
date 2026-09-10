@@ -1,4 +1,5 @@
 import employeesDirectory from '../employees.json';
+import { cleanInactiveFrom, hasMeaningfulEmployeeData } from '../lib/employeeValidation.js';
 import {
   formatSupabaseError,
   getSupabaseConfigIssue,
@@ -100,7 +101,7 @@ export function normalizeEmployee(employee, index = 0) {
     payType: cleanText(employee.payType || employee.pay_type),
     signed: cleanText(employee.signed),
     status: cleanText(employee.status),
-    inactiveFrom: cleanText(employee.inactiveFrom || employee.inactive_from),
+    inactiveFrom: cleanInactiveFrom(employee.inactiveFrom || employee.inactive_from),
     userLevel: cleanText(employee.userLevel || employee.user_level),
   };
 }
@@ -136,7 +137,7 @@ function mapEmployeeToRow(employee) {
   };
 }
 
-export const localEmployeesSeed = employeesDirectory.map((employee, index) =>
+export const localEmployeesSeed = employeesDirectory.filter(hasMeaningfulEmployeeData).map((employee, index) =>
   normalizeEmployee(employee, index),
 );
 
@@ -190,6 +191,9 @@ function dedupeEmployees(items) {
 
   items.forEach((employee, index) => {
     const normalized = normalizeEmployee(employee, index);
+    if (!hasMeaningfulEmployeeData(normalized)) {
+      return;
+    }
     const identityKey = getEmployeeIdentityKey(normalized);
     deduped.set(identityKey, normalized);
   });

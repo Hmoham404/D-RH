@@ -1,4 +1,5 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx/xlsx.mjs';
+import { cleanInactiveFrom, hasMeaningfulEmployeeData } from './employeeValidation.js';
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
@@ -54,10 +55,10 @@ const FIELD_ALIASES = {
   service: ['service', 'service atelier', 'atelier', 'unite'],
   job: ['poste', 'poste travail', 'fonction', 'job'],
   hiredAt: ['date embauche', 'date d embauche', 'date entree', 'embauche', 'hired at', 'entry date'],
-  payType: ['type paie', 'mode paie', 'paie', 'pay type'],
+  payType: ['type paie', 'type paye', 'mode paie', 'paie', 'pay type'],
   signed: ['contrat signe', 'signe', 'signature', 'signed'],
-  status: ['statut', 'status', 'situation', 'etat'],
-  inactiveFrom: ['inactif depuis', 'inactive from', 'sortie', 'mois sortie', 'date sortie'],
+  status: ['statut', 'status', 'situation', 'etat', 'actif inactif'],
+  inactiveFrom: ['inactif depuis', 'inactif a partir', 'inactif a part', 'inactive from', 'sortie', 'mois sortie', 'date sortie'],
 };
 
 function resolveFieldFromHeader(header, hasFirstNameColumn) {
@@ -65,11 +66,18 @@ function resolveFieldFromHeader(header, hasFirstNameColumn) {
     return '';
   }
 
-  if (FIELD_ALIASES.fullName.some((alias) => headerMatchesAlias(header, alias))) {
+  if (!hasFirstNameColumn && header === 'nom') {
     return 'fullName';
   }
 
-  if (!hasFirstNameColumn && header === 'nom') {
+  // Prefer exact matches so "Contrat signe" cannot become "Contrat".
+  const exactField = Object.entries(FIELD_ALIASES)
+    .find(([, aliases]) => aliases.includes(header))?.[0];
+  if (exactField) {
+    return exactField;
+  }
+
+  if (FIELD_ALIASES.fullName.some((alias) => headerMatchesAlias(header, alias))) {
     return 'fullName';
   }
 
@@ -95,7 +103,7 @@ function buildHeaderMapping(row) {
 
   headers.forEach((header, index) => {
     const field = resolveFieldFromHeader(header, hasFirstNameColumn);
-    if (field && !mapping.has(field)) {
+    if (field && (!mapping.has(field) || (field === 'kind' && header === 'moi mod'))) {
       mapping.set(field, index);
     }
   });
@@ -199,7 +207,7 @@ function buildEmployeeFromRow(row, mapping) {
   const lastName = getMappedValue(row, mapping, 'lastName');
   const firstName = getMappedValue(row, mapping, 'firstName');
   const fullName = getMappedValue(row, mapping, 'fullName') || `${lastName} ${firstName}`.trim();
-  const inactiveFrom = getMappedValue(row, mapping, 'inactiveFrom');
+  const inactiveFrom = cleanInactiveFrom(getMappedValue(row, mapping, 'inactiveFrom'));
   const id = getMappedValue(row, mapping, 'id');
   const zk = getMappedValue(row, mapping, 'zk');
   const saber = getMappedValue(row, mapping, 'saber');
@@ -228,30 +236,6 @@ function buildEmployeeFromRow(row, mapping) {
   };
 }
 
-function hasMeaningfulEmployeeData(employee) {
-  const values = [
-    employee.finalCode,
-    employee.id,
-    employee.zk,
-    employee.saber,
-    employee.fullName,
-    employee.lastName,
-    employee.firstName,
-    employee.department,
-    employee.service,
-    employee.job,
-  ].map((value) => cleanText(value));
-
-  const hasRealValue = values.some((value) => !['', '-', '0', 'o', 'n/a'].includes(value.toLowerCase()));
-  const nameTokens = cleanText(employee.fullName)
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  const hasRealName = nameTokens.some((token) => !['-', '0', 'o', 'n/a'].includes(token));
-
-  return hasRealValue && (hasRealName || Boolean(cleanText(employee.finalCode || employee.id || employee.zk || employee.saber)));
-}
-
 export async function analyzeEmployeeBaseFile(file) {
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
@@ -268,8 +252,25 @@ export async function analyzeEmployeeBaseFile(file) {
     );
   }
 
-  const employees = selectedSheet.dataRows
-    .map((row) => buildEmployeeFromRow(row, selectedSheet.mapping))
+  const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[selectedSheet.sheetName], {
+    header: 1, defval: '', raw: true,
+  });
+  const hiredAtColumn = selectedSheet.mapping.get('hiredAt');
+  const employees = selectedSheet.rows.slice(selectedSheet.rowIndex + 1)
+    .map((row, index) => {
+      const employee = buildEmployeeFromRow(row, selectedSheet.mapping);
+      const rawHireDate = rawRows[selectedSheet.rowIndex + 1 + index]?.[hiredAtColumn];
+      // Excel stores dates as serial numbers; ignore the cell's display format.
+      if (typeof rawHireDate === 'number') {
+        const date = rawHireDate > 0 ? XLSX.SSF.parse_date_code(rawHireDate, {
+          date1904: Boolean(workbook.Workbook?.WBProps?.date1904),
+        }) : null;
+        employee.hiredAt = date
+          ? `${String(date.d).padStart(2, '0')}/${String(date.m).padStart(2, '0')}/${date.y}`
+          : '';
+      }
+      return employee;
+    })
     .filter(hasMeaningfulEmployeeData);
 
   if (!employees.length) {

@@ -57,3 +57,17 @@ export function isEmployeeHiredInMonth(employee, referenceDate = new Date()) {
   if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return false;
   return year === referenceDate.getFullYear() && month === referenceDate.getMonth() + 1;
 }
+
+export function isEmployeeActiveInMonth(employee, referenceDate = new Date()) {
+  if (String(employee.status ?? '').trim().toLowerCase() !== 'actif' || Number.isNaN(referenceDate.getTime())) return false;
+  const text = String(employee.hiredAt ?? employee.hired_at ?? '').trim();
+  if (!text || text === '0') return true;
+  const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const french = text.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!iso && !french) return false;
+  const [year, month, day] = iso
+    ? [Number(iso[1]), Number(iso[2]), Number(iso[3])]
+    : [Number(french[3]), Number(french[2]), Number(french[1])];
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return false;
+  return new Date(year, month - 1, day) <= new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
+}

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
+import DailyPointageImport from './components/DailyPointageImport';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
-import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
+import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
 import { analyzePointageFile } from './lib/pointageImport';
 import {
   clearEmployeeDirectory,
@@ -1673,6 +1674,9 @@ function getAvailableDates(snapshot) {
 }
 
 function getDefaultSelectedDate(snapshot) {
+  if (snapshot?.calculationRules && snapshot?.rawRows?.length) {
+    return snapshot.rawRows.map((row) => row.isoDate).filter(Boolean).sort().at(-1) || '';
+  }
   const dates = getAvailableDates(snapshot);
   if (!dates.length) {
     return '';
@@ -3281,8 +3285,8 @@ export default function App() {
         'Vider toute la base RH actuelle ? Cette action supprimera les fiches visibles avant un nouvel import.',
       ),
       cards: {
-        records: translate('employeeBase.cards.records', 'Fiches RH'),
-        active: translate('employeeBase.cards.active', 'Actifs'),
+        records: `${translate('employeeBase.cards.records', 'Fiches RH')} · ${currentMonthLabel}`,
+        active: `${translate('employeeBase.cards.active', 'Actifs')} · ${currentMonthLabel}`,
         stc: `${translate('kpi.stcMonth', 'STC du mois')} · ${currentMonthLabel}`,
       },
       baseTitle: translate('employeeBase.baseTitle', 'Base du personnel'),
@@ -3541,6 +3545,18 @@ export default function App() {
     () => employees.filter((employee) => isEmployeeStcInMonth(employee, currentMonthDate)),
     [employees, currentMonthDate],
   );
+  const monthlyActiveEmployees = useMemo(
+    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate)),
+    [employees, currentMonthDate],
+  );
+  const monthlyBaseEmployees = useMemo(
+    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate) || isEmployeeStcInMonth(employee, currentMonthDate)),
+    [employees, currentMonthDate],
+  );
+  const monthlyDepartmentRows = useMemo(
+    () => buildDepartmentBaseRows(monthlyBaseEmployees, currentMonthDate),
+    [monthlyBaseEmployees, currentMonthDate],
+  );
   const selectedTableEmployees = useMemo(
     () => buildPeriodEmployees(snapshot, activePeriodStart, activePeriodEnd, employees),
     [activePeriodEnd, activePeriodStart, employees, snapshot],
@@ -3626,7 +3642,7 @@ export default function App() {
   );
   const filteredEmployeeBaseRows = useMemo(
     () =>
-      employees.filter((employee) =>
+      monthlyBaseEmployees.filter((employee) =>
         matchesSearch(
           [
             employee.finalCode,
@@ -3642,7 +3658,7 @@ export default function App() {
           searchValue,
         ),
       ),
-    [employees, searchValue],
+    [monthlyBaseEmployees, searchValue],
   );
   const filteredDepartmentBaseRows = useMemo(
     () =>
@@ -3786,14 +3802,14 @@ export default function App() {
     () =>
       activeEmployeeBaseModal
         ? buildEmployeeBaseDetailConfig(activeEmployeeBaseModal, {
-            employees,
-            activeEmployees,
+            employees: monthlyBaseEmployees,
+            activeEmployees: monthlyActiveEmployees,
             stcEmployees,
             labels: employeeBaseDetailLabels,
             translate,
           })
         : null,
-    [activeEmployeeBaseModal, activeEmployees, employeeBaseDetailLabels, employees, language, stcEmployees],
+    [activeEmployeeBaseModal, monthlyActiveEmployees, employeeBaseDetailLabels, monthlyBaseEmployees, language, stcEmployees],
   );
   const productionDetailConfig = useMemo(
     () =>
@@ -3833,6 +3849,7 @@ export default function App() {
   const isEmployeeSection = activeSection === 'employees';
   const isDepartmentSection = activeSection === 'departments';
   const isAbsenceSection = activeSection === 'absences';
+  const isSettingsSection = activeSection === 'settings';
   const baseServiceCount = useMemo(
     () =>
       new Set(
@@ -3865,7 +3882,7 @@ export default function App() {
       : translate('table.search', 'Rechercher...');
 
   function handleExportEmployeeBase() {
-    exportEmployeeBaseWorkbook(employees, departmentBaseRows);
+    exportEmployeeBaseWorkbook(monthlyBaseEmployees, monthlyDepartmentRows);
     setStatusMessage(`Export Excel de la base RH genere le ${new Date().toLocaleDateString(locale)}.`);
   }
 
@@ -4028,8 +4045,9 @@ export default function App() {
           </div>
         </header>
 
-        <section className="rh-content">
-          {isEmployeeSection ? null : (
+        <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
+          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} snapshot={snapshot} loading={isLoading} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
+          {isEmployeeSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">
             <div>
@@ -4210,12 +4228,12 @@ export default function App() {
             </>
           )}
 
-          {isEmployeeSection || isDepartmentSection || isAbsenceSection ? (
+          {isSettingsSection ? null : isEmployeeSection || isDepartmentSection || isAbsenceSection ? (
             isEmployeeSection ? (
               <EmployeeBaseSurface
-                employees={employees}
+                employees={monthlyBaseEmployees}
                 filteredEmployees={filteredEmployeeBaseRows}
-                departmentRows={departmentBaseRows}
+                departmentRows={monthlyDepartmentRows}
                 searchValue={searchValue}
                 onSearchChange={setSearchValue}
                 onCreate={handleOpenCreateEmployee}
@@ -4226,9 +4244,9 @@ export default function App() {
                 onOpenAll={() => handleOpenEmployeeBaseModal('all')}
                 onOpenActive={() => handleOpenEmployeeBaseModal('active')}
                 onOpenStc={() => handleOpenEmployeeBaseModal('stc')}
-                activeEmployeesCount={activeEmployees.length}
+                activeEmployeesCount={monthlyActiveEmployees.length}
                 stcEmployeesCount={stcEmployees.length}
-                departmentCount={departmentBaseRows.length}
+                departmentCount={monthlyDepartmentRows.length}
                 isImporting={isEmployeeImporting}
                 isClearing={isEmployeeClearing}
                 labels={employeeBaseLabels}

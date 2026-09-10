@@ -1,9 +1,24 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from './employeeStatus.js';
+import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from './employeeStatus.js';
 
 const september = new Date(2026, 8, 10);
 const stc = (inactiveFrom) => ({ status: 'STC', inactiveFrom });
+
+test('September personnel includes current active staff and September exits only', () => {
+  const employees = [
+    { id: 'older-active', status: 'Actif', hiredAt: '15/08/2025' },
+    { id: 'september-active', status: 'Actif', hiredAt: '30/09/2026' },
+    { id: 'future-active', status: 'Actif', hiredAt: '2026-10-01' },
+    { id: 'undated-active', status: 'Actif', hiredAt: '' },
+    { id: 'august-stc', ...stc('AOUT') },
+    { id: 'september-stc', ...stc('SEPTEMBRE') },
+    { id: 'october-stc', ...stc('OCTOBRE') },
+  ];
+  const filtered = employees.filter((employee) => isEmployeeActiveInMonth(employee, september) || isEmployeeStcInMonth(employee, september));
+  assert.deepEqual(filtered.map((employee) => employee.id), ['older-active', 'september-active', 'undated-active', 'september-stc']);
+  assert.equal(isEmployeeActiveInMonth({ status: 'Actif', hiredAt: '31/02/2026' }, september), false);
+});
 
 test('recruitments use the hire month and year regardless of attendance or current status', () => {
   const employees = [

@@ -61,7 +61,7 @@ function buildEmployeeIndex(employees) {
         byCode.set(code, []);
       }
 
-      byCode.get(code).push(employee);
+      if (!byCode.get(code).includes(employee)) byCode.get(code).push(employee);
     });
 
     const nameKey = normalizeName(employee.fullName);
@@ -82,10 +82,11 @@ function excelSerialToDate(value) {
   const wholeDays = Math.floor(value);
   const dayMilliseconds = 24 * 60 * 60 * 1000;
   const dayFraction = value - wholeDays;
-  return new Date(epoch + wholeDays * dayMilliseconds + Math.round(dayFraction * dayMilliseconds));
+  const date = new Date(epoch + wholeDays * dayMilliseconds + Math.round(dayFraction * dayMilliseconds));
+  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds());
 }
 
-function parseExcelDate(value) {
+function parseExcelDate(value, dateOrder = 'mdy') {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
   }
@@ -109,14 +110,15 @@ function parseExcelDate(value) {
   );
 
   if (numericMatch) {
-    const month = Number(numericMatch[1]) - 1;
-    const day = Number(numericMatch[2]);
+    const month = Number(numericMatch[dateOrder === 'dmy' ? 2 : 1]) - 1;
+    const day = Number(numericMatch[dateOrder === 'dmy' ? 1 : 2]);
     const year = Number(numericMatch[3]);
     const hours = Number(numericMatch[4] || 0);
     const minutes = Number(numericMatch[5] || 0);
     const seconds = Number(numericMatch[6] || 0);
     const parsed = new Date(year, month, day, hours, minutes, seconds);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
+    return parsed.getFullYear() === year && parsed.getMonth() === month && parsed.getDate() === day
+      && hours < 24 && minutes < 60 && seconds < 60 ? parsed : null;
   }
 
   const fallback = new Date(raw);
@@ -656,7 +658,7 @@ function buildExportRows(analysis) {
   return { summaryRows, sheetsRows, dailyRows, weeklyRows, employeesRows, rawRows };
 }
 
-export async function analyzePointageFile(file, employees) {
+export async function analyzePointageFile(file, employees, options = {}) {
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
   const weeklySheets = parseWeeklySheets(workbook);
@@ -703,13 +705,54 @@ export async function analyzePointageFile(file, employees) {
 
   const sourceStats = sheetStatsMap.get(sourcePointageSheetName);
 
-  sourceRows.slice(headerRowIndex + 1).forEach((row, rowIndex) => {
+  const incomingRows = sourceRows.slice(headerRowIndex + 1);
+  if (options.allSourceSheets) {
+    workbook.SheetNames.filter((name) => name !== sourcePointageSheetName).forEach((name) => {
+      const rows = getSheetRows(workbook.Sheets[name]);
+      const layout = findSourcePointageLayout(rows);
+      if (!layout) return;
+      rows.slice(layout.rowIndex + 1).forEach((sourceRow, index) => {
+        const row = [];
+        Object.keys(sourceLayout).filter((key) => key.endsWith('Index') && key !== 'rowIndex').forEach((key) => {
+          if (sourceLayout[key] >= 0) row[sourceLayout[key]] = getRowCell(sourceRow, layout[key]);
+        });
+        row.sourceSheetName = name;
+        row.sourceRowNumber = layout.rowIndex + index + 2;
+        incomingRows.push(row);
+      });
+      sheetStatsMap.set(name, { sheetName: name, totalRows: rows.length - layout.rowIndex - 1,
+        usableRows: 0, employeeKeys: new Set(), isoDates: new Set(), punchCount: 0 });
+    });
+  }
+  const previousRows = (options.previousRows || []).map((item) => {
+    const row = [];
+    row[sourceLayout.idIndex] = item.sourceId;
+    row[sourceLayout.nameIndex] = item.sourceName;
+    row[sourceLayout.timeIndex] = item.pointageAt;
+    row[sourceLayout.terminalIndex] = item.terminal;
+    row[sourceLayout.pointageTypeIndex] = item.pointageType;
+    return row;
+  });
+  const seenPunches = new Set();
+  let rejectedRows = 0;
+  let duplicateRows = 0;
+  let incomingUsable = 0;
+  const incomingDates = new Set();
+  [...incomingRows, ...previousRows].forEach((row, rowIndex) => {
     const sourceId = cleanText(getRowCell(row, sourceLayout.idIndex));
     const sourceName = cleanText(getRowCell(row, sourceLayout.nameIndex));
-    const pointageDate = parseExcelDate(getRowCell(row, sourceLayout.timeIndex));
+    const pointageDate = parseExcelDate(getRowCell(row, sourceLayout.timeIndex), options.dateOrder);
 
     if (!pointageDate || (!sourceId && !sourceName)) {
+      if (rowIndex < incomingRows.length && row.some((cell) => cleanText(cell))) rejectedRows += 1;
       return;
+    }
+
+    if (rowIndex < incomingRows.length) { incomingUsable += 1; incomingDates.add(formatIsoDate(pointageDate)); }
+    if (options.deduplicate) {
+      const key = JSON.stringify([normalizeCode(sourceId) || normalizeName(sourceName), formatIsoDateTime(pointageDate)]);
+      if (seenPunches.has(key)) { duplicateRows += 1; return; }
+      seenPunches.add(key);
     }
 
     const match = matchEmployee(sourceId, sourceName, employeeIndex);
@@ -727,8 +770,8 @@ export async function analyzePointageFile(file, employees) {
     const statusLabel = getStatusLabel(match.matchState, match.matchMethod);
 
     const enrichedRow = {
-      rowNumber: headerRowIndex + rowIndex + 2,
-      sheetName: sourcePointageSheetName,
+      rowNumber: row.sourceRowNumber || headerRowIndex + rowIndex + 2,
+      sheetName: row.sourceSheetName || sourcePointageSheetName,
       selection: cleanText(getRowCell(row, sourceLayout.selectionIndex)),
       sourceId,
       sourceName: safeSourceName,
@@ -752,10 +795,11 @@ export async function analyzePointageFile(file, employees) {
     };
 
     rawRows.push(enrichedRow);
-    sourceStats.usableRows += 1;
-    sourceStats.employeeKeys.add(employeeKey);
-    sourceStats.isoDates.add(isoDate);
-    sourceStats.punchCount += 1;
+    const rowStats = sheetStatsMap.get(enrichedRow.sheetName) || sourceStats;
+    rowStats.usableRows += 1;
+    rowStats.employeeKeys.add(employeeKey);
+    rowStats.isoDates.add(isoDate);
+    rowStats.punchCount += 1;
 
     if (!employeeRowsMap.has(employeeKey)) {
       employeeRowsMap.set(employeeKey, {
@@ -784,7 +828,7 @@ export async function analyzePointageFile(file, employees) {
 
     const employeeRow = employeeRowsMap.get(employeeKey);
     employeeRow.punches.push(pointageDate);
-    employeeRow.sheets.add(sourcePointageSheetName);
+    employeeRow.sheets.add(enrichedRow.sheetName);
     employeeRow.dayKeys.add(isoDate);
     if (pointageDate < employeeRow.firstSeenAt) employeeRow.firstSeenAt = pointageDate;
     if (pointageDate > employeeRow.lastSeenAt) employeeRow.lastSeenAt = pointageDate;
@@ -811,7 +855,7 @@ export async function analyzePointageFile(file, employees) {
 
     const dayEntry = dayMap.get(dayKey);
     dayEntry.punches.push(pointageDate);
-    dayEntry.sheetNames.add(sourcePointageSheetName);
+    dayEntry.sheetNames.add(enrichedRow.sheetName);
 
     if (match.matchState === 'review') {
       reviewKeys.add(employeeKey);
@@ -820,7 +864,7 @@ export async function analyzePointageFile(file, employees) {
     }
   });
 
-  if (!rawRows.length) {
+  if (!rawRows.length || !incomingUsable) {
     throw new Error('Le fichier pointage est vide ou non exploitable dans SOURCE_POINTAGE.');
   }
 
@@ -831,8 +875,9 @@ export async function analyzePointageFile(file, employees) {
       const firstPunch = sortedPunches[0];
       const lastPunch = sortedPunches[sortedPunches.length - 1];
       const bruteMinutes = isOdd ? 0 : Math.max(0, Math.round((lastPunch - firstPunch) / 60000));
-      const afterBreakMinutes = isOdd ? 0 : Math.max(0, bruteMinutes - 30);
-      const roundedMinutes = isOdd ? 0 : Math.floor(afterBreakMinutes / 30) * 30;
+      const afterBreakMinutes = isOdd ? 0 : Math.max(0, bruteMinutes - (options.breakMinutes ?? 30));
+      const rounding = options.roundingMinutes ?? 30;
+      const roundedMinutes = isOdd ? 0 : Math.floor(afterBreakMinutes / Math.max(1, rounding)) * Math.max(1, rounding);
 
       const employeeRow = employeeRowsMap.get(dayRow.employeeKey);
       if (employeeRow) {
@@ -954,13 +999,14 @@ export async function analyzePointageFile(file, employees) {
       [
         ...weeklySheets.map((sheet) => sheet.sheetName),
         monthlySheet?.sheetName || '',
-        sourcePointageSheetName,
+        ...sheetStatsMap.keys(),
       ].filter(Boolean),
     ),
   ];
 
   return {
     fileName: file.name,
+    importDiagnostics: { rejectedRows, duplicateRows, incomingUsable, incomingDates: [...incomingDates].sort() },
     sheetCount: relevantSheetNames.length,
     sheetNames: relevantSheetNames,
     weeklySheets,

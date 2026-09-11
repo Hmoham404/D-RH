@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as XLSX from 'xlsx';
 import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, prepareDailyPointage } from './dailyPointage.js';
+import { analyzePointageFile } from './pointageImport.js';
 
 const employees = [
   { id: '4', zk: '4', fullName: 'ZAIDI SEIFEDDINE', status: 'Actif', department: 'Maintenance', kind: 'MOI' },
@@ -78,6 +79,12 @@ test('French dates, full names, duration, active absence and STC', async () => {
   assert.equal(cell(result, '6', '2026-10-10'), undefined);
   assert.deepEqual(result.weeklySheets[0].dayColumns.map((day) => day.isoDate), ['2026-10-09']);
   assert.equal(result.weeklySheets[0].rows[0].fullName, 'ZAIDI SEIFEDDINE');
+});
+
+test('direct pointage import defaults to French day/month dates', async () => {
+  const result = await analyzePointageFile(file([[4, 'Z', '09/10/2026 07:42']]), employees);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-10-09']);
+  assert.equal(result.rawRows[0].pointageAtDisplay, '09/10/2026 07:42:00');
 });
 
 test('daily accumulation is idempotent and completes an incomplete day', async () => {

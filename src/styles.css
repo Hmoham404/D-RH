@@ -1678,6 +1678,41 @@ button {
 .daily-import__punches dd { margin: 8px 0 0; font-size: 1.3rem; font-weight: 700; }
 .daily-import__attendance { display: grid; gap: 18px; }
 .daily-import__attendance > div > p { color: #64748b; line-height: 1.6; }
+.daily-import__overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.daily-import__overview-card {
+  display: grid;
+  gap: 8px;
+  min-height: 132px;
+  padding: 20px;
+  border: 1px solid #e5eaf0;
+  border-radius: 22px;
+  background: linear-gradient(135deg, #ffffff, #f8fbff);
+  box-shadow: 0 14px 30px #1e3a5f0b;
+}
+.daily-import__overview-card span {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.daily-import__overview-card strong {
+  color: #102447;
+  font: 800 2.45rem 'Cambria', 'Georgia', serif;
+  line-height: 1;
+}
+.daily-import__overview-card small {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+.daily-import__overview-card--present { background: linear-gradient(135deg, #eafaf2, #ffffff 72%); }
+.daily-import__overview-card--abs { background: linear-gradient(135deg, #fff0f1, #ffffff 72%); }
+.daily-import__overview-card--production-present { background: linear-gradient(135deg, #eaf2ff, #ffffff 72%); }
+.daily-import__overview-card--production-abs { background: linear-gradient(135deg, #fff5e8, #ffffff 72%); }
 .daily-import__department-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 14px; }
 .daily-import__department { padding: 16px; background: #f6faf8; border: 1px solid #e0ede5; border-radius: 14px; }
 .daily-import__department > div { display: flex; justify-content: space-between; gap: 16px; align-items: baseline; }
@@ -2849,6 +2884,10 @@ button {
   .rh-base-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .daily-import__overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 980px) {
@@ -3030,6 +3069,10 @@ button {
   }
 
   .rh-base-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .daily-import__overview {
     grid-template-columns: 1fr;
   }
 

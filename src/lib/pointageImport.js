@@ -86,7 +86,7 @@ function excelSerialToDate(value) {
   return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds());
 }
 
-function parseExcelDate(value, dateOrder = 'mdy') {
+function parseExcelDate(value, dateOrder = 'dmy') {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
   }

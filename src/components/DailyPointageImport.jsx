@@ -31,6 +31,28 @@ export default function DailyPointageImport({ employees, snapshot, onSaved, load
   const dayLabel = formatPointageDate;
   const analysisDate = selectedDay && dates.includes(selectedDay) ? selectedDay : dates.at(-1);
   const attendance = useMemo(() => buildAttendanceByDay({ ...table, dayColumns: table.dayColumns.filter((day) => day.isoDate === analysisDate) }), [table, analysisDate]);
+  const attendanceSummary = useMemo(() => {
+    const day = attendance[0];
+    if (!day) {
+      return { present: 0, absent: 0, productionPresent: 0, productionAbsent: 0 };
+    }
+
+    return day.departments.reduce((summary, group) => {
+      const isProduction = String(group.label || '').toLowerCase().startsWith('production');
+      const present = Number(group.present || 0);
+      const absent = Number(group.absent || 0);
+
+      summary.present += present;
+      summary.absent += absent;
+
+      if (isProduction) {
+        summary.productionPresent += present;
+        summary.productionAbsent += absent;
+      }
+
+      return summary;
+    }, { present: 0, absent: 0, productionPresent: 0, productionAbsent: 0 });
+  }, [attendance]);
   async function importFile(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -48,6 +70,7 @@ export default function DailyPointageImport({ employees, snapshot, onSaved, load
       setDetail(null);
       setSelectedDay('');
       setSearch('');
+      const firstDay = info.incomingDates[0];
       setMessage(`Import sauvegardé en base : ${info.incomingUsable} passages lus sur ${info.incomingDates.length} journées, du ${dayLabel(firstDay)} au ${dayLabel(info.incomingDates.at(-1))} · ${info.duplicateRows} doublons ignorés · ${info.rejectedRows} lignes rejetées. Les journées précédentes sont conservées.`);
     } catch (error) { setMessage(`Import non enregistré : ${error.message} Réimportez le fichier après correction.`); }
     finally { setBusy(false); }
@@ -59,6 +82,12 @@ export default function DailyPointageImport({ employees, snapshot, onSaved, load
     </div>
     {attendance.length > 0 && <section className="daily-import__attendance" aria-label="Présence par département et absences">
       <div><h2>Analyse du {dayLabel(analysisDate)}</h2><p>Services regroupés par département ; Gardiennage, Nettoyage et Projet sont séparés. Présents / actifs attendus, hors STC. Un passage à vérifier compte comme présence. Retard : première entrée après 07:30. Choisissez une date ci-dessus pour changer la journée analysée.</p></div>
+      <div className="daily-import__overview" aria-label="Synthese pointage depuis la base">
+        <div className="daily-import__overview-card daily-import__overview-card--present"><span>Presents</span><strong>{attendanceSummary.present}</strong><small>Base pointage</small></div>
+        <div className="daily-import__overview-card daily-import__overview-card--abs"><span>Absents</span><strong>{attendanceSummary.absent}</strong><small>Base pointage</small></div>
+        <div className="daily-import__overview-card daily-import__overview-card--production-present"><span>Presents production</span><strong>{attendanceSummary.productionPresent}</strong><small>Production uniquement</small></div>
+        <div className="daily-import__overview-card daily-import__overview-card--production-abs"><span>Absents production</span><strong>{attendanceSummary.productionAbsent}</strong><small>Production uniquement</small></div>
+      </div>
       {attendance.map((day) => <article className="rh-card daily-import__setup" key={day.isoDate}>
         <h3>{dayLabel(day.isoDate)}</h3>
         <div className="daily-import__department-grid">{day.departments.map((group) => <button type="button" className="daily-import__department daily-import__summary-card" key={group.label} {...detailActions({ title: group.label, date: day.isoDate, people: group.people })} aria-haspopup="dialog">

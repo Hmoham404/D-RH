@@ -245,7 +245,7 @@ export default function AdminPointageImportPanel({ employees, isLoading }) {
     try {
       setIsImporting(true);
       setImportError('');
-      const nextAnalysis = await analyzePointageFile(file, employees);
+      const nextAnalysis = await analyzePointageFile(file, employees, { dateOrder: 'dmy' });
       const saveResult = await savePointageSnapshot(nextAnalysis);
       const historyResult = await loadPointageHistory();
       setAnalysis(saveResult.data);

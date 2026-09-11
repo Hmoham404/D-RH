@@ -3430,7 +3430,7 @@ export default function App() {
     try {
       setIsImporting(true);
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
-      const nextSnapshot = await analyzePointageFile(file, employees);
+      const nextSnapshot = await analyzePointageFile(file, employees, { dateOrder: 'dmy' });
       setStatusMessage(translate('messages.replacingBase', 'Remplacement de la base pointage en cours...'));
       const saveResult = await replacePointageSnapshot(nextSnapshot);
       const savedSnapshot = saveResult.data || nextSnapshot;

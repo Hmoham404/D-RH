@@ -64,10 +64,14 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
     setIsEditing(false);
   }
 
+  const ringSize = '140px';
+  const labelStyle = { fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' };
+  const valueStyle = { fontSize: '2.1rem', color: '#0f172a', fontWeight: '800', lineHeight: '1' };
+
   return (
     <div
       className="production-mod-target"
-      style={{ display: 'flex', gap: '20px', alignItems: 'center', justifyContent: 'center', padding: '16px 24px', width: 'auto' }}
+      style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', padding: '24px 40px', width: 'auto', borderRadius: '32px' }}
     >
       {/* Cercle 1 : Objectif (Target) */}
       <div 
@@ -76,9 +80,9 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
         onDoubleClick={() => setIsEditing(true)}
         title={targetHint}
       >
-        <div className="production-mod-target__ring" style={{ width: '110px', '--target-color': '#94a3b8' }}>
+        <div className="production-mod-target__ring" style={{ width: ringSize, '--target-color': '#cbd5e1' }}>
           <div className="production-mod-target__core">
-            <span>Objectif</span>
+            <span style={labelStyle}>Objectif</span>
             {isEditing ? (
               <input
                 autoFocus
@@ -93,9 +97,10 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
                   if (event.key === 'Enter') saveTarget();
                   if (event.key === 'Escape') cancelEdit();
                 }}
+                style={{ fontSize: '1.6rem', width: '80px', height: '44px', textAlign: 'center' }}
               />
             ) : (
-              <strong>{safeTarget.toLocaleString(locale)}</strong>
+              <strong style={valueStyle}>{safeTarget.toLocaleString(locale)}</strong>
             )}
           </div>
         </div>
@@ -103,20 +108,20 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
 
       {/* Cercle 2 : MOD Présents */}
       <div className={`production-mod-target--${tone}`} style={{ '--target-angle': '360deg' }}>
-        <div className="production-mod-target__ring" style={{ width: '110px' }}>
+        <div className="production-mod-target__ring" style={{ width: ringSize }}>
           <div className="production-mod-target__core">
-            <span>Présents</span>
-            <strong>{Number(presentCount || 0).toLocaleString(locale)}</strong>
+            <span style={labelStyle}>Présents</span>
+            <strong style={valueStyle}>{Number(presentCount || 0).toLocaleString(locale)}</strong>
           </div>
         </div>
       </div>
 
       {/* Cercle 3 : Pourcentage */}
       <div className={`production-mod-target--${tone}`} style={{ '--target-angle': `${clampedPercent * 3.6}deg` }}>
-        <div className="production-mod-target__ring" style={{ width: '110px' }}>
+        <div className="production-mod-target__ring" style={{ width: ringSize }}>
           <div className="production-mod-target__core">
-            <span>Couverture</span>
-            <strong>{formatPercent(percent, locale)}</strong>
+            <span style={labelStyle}>Couverture</span>
+            <strong style={valueStyle}>{formatPercent(percent, locale)}</strong>
           </div>
         </div>
       </div>

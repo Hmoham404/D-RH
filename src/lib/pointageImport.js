@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { getExcelDateCorrections } from './pointageDates.js';
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
@@ -86,7 +87,7 @@ function excelSerialToDate(value) {
   return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds());
 }
 
-function parseExcelDate(value, dateOrder = 'dmy') {
+function parseExcelDate(value, dateOrder = 'mdy') {
   if (value instanceof Date) {
     return Number.isNaN(value.getTime()) ? null : value;
   }
@@ -104,21 +105,29 @@ function parseExcelDate(value, dateOrder = 'dmy') {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   }
 
-  const normalized = raw.replace(/\./g, '/');
+  const normalized = raw.replace(/\./g, '/').replace(/-/g, '/').replace('T', ' ');
+  const isoMatch = normalized.match(
+    /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
   const numericMatch = normalized.match(
     /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
   );
 
-  if (numericMatch) {
-    const month = Number(numericMatch[dateOrder === 'dmy' ? 2 : 1]) - 1;
-    const day = Number(numericMatch[dateOrder === 'dmy' ? 1 : 2]);
-    const year = Number(numericMatch[3]);
-    const hours = Number(numericMatch[4] || 0);
-    const minutes = Number(numericMatch[5] || 0);
-    const seconds = Number(numericMatch[6] || 0);
+  if (isoMatch || numericMatch) {
+    const match = isoMatch || numericMatch;
+    const year = Number(isoMatch ? match[1] : match[3]);
+    const month = Number(isoMatch ? match[2] : match[dateOrder === 'dmy' ? 2 : 1]) - 1;
+    const day = Number(isoMatch ? match[3] : match[dateOrder === 'dmy' ? 1 : 2]);
+    const hours = Number(match[4] || 0);
+    const minutes = Number(match[5] || 0);
+    const seconds = Number(match[6] || 0);
     const parsed = new Date(year, month, day, hours, minutes, seconds);
     return parsed.getFullYear() === year && parsed.getMonth() === month && parsed.getDate() === day
       && hours < 24 && minutes < 60 && seconds < 60 ? parsed : null;
+  }
+
+  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(raw)) {
+    return null;
   }
 
   const fallback = new Date(raw);
@@ -168,12 +177,12 @@ function parseHeaderYear(titleValue) {
   return match ? Number(match[0]) : new Date().getFullYear();
 }
 
-function parseWeeklyIsoDate(label, fallbackYear) {
-  const match = cleanText(label).match(/(\d{2})\/(\d{2})/);
+function parseWeeklyIsoDate(label, fallbackYear, dateOrder = 'mdy') {
+  const match = cleanText(label).match(/(\d{1,2})[./-](\d{1,2})/);
   if (!match) return '';
 
-  const day = match[1];
-  const month = match[2];
+  const month = String(Number(match[dateOrder === 'dmy' ? 2 : 1])).padStart(2, '0');
+  const day = String(Number(match[dateOrder === 'dmy' ? 1 : 2])).padStart(2, '0');
   return `${fallbackYear}-${month}-${day}`;
 }
 
@@ -272,7 +281,7 @@ function getSheetRows(sheet) {
   });
 }
 
-function parseWeeklySheets(workbook) {
+function parseWeeklySheets(workbook, dateOrder = 'mdy') {
   return workbook.SheetNames.filter((sheetName) => isWeeklySheetName(sheetName))
     .map((sheetName) => {
       const sheet = workbook.Sheets[sheetName];
@@ -293,7 +302,7 @@ function parseWeeklySheets(workbook) {
         .map((label, index) => ({
           columnIndex: index + 5,
           label: cleanText(label),
-          isoDate: parseWeeklyIsoDate(label, headerYear),
+          isoDate: parseWeeklyIsoDate(label, headerYear, dateOrder),
         }))
         .filter((day) => day.label);
 
@@ -661,7 +670,7 @@ function buildExportRows(analysis) {
 export async function analyzePointageFile(file, employees, options = {}) {
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
-  const weeklySheets = parseWeeklySheets(workbook);
+  const weeklySheets = parseWeeklySheets(workbook, options.dateOrder);
   const monthlySheet = findMonthlyTotalsSheet(workbook);
   const weeklyDates = buildWeeklyDateList(weeklySheets);
 
@@ -724,6 +733,9 @@ export async function analyzePointageFile(file, employees, options = {}) {
         usableRows: 0, employeeKeys: new Set(), isoDates: new Set(), punchCount: 0 });
     });
   }
+  const sourceDates = incomingRows.map((row) => parseExcelDate(getRowCell(row, sourceLayout.timeIndex), options.dateOrder))
+    .filter(Boolean).map(formatIsoDate);
+  const excelDateCorrections = getExcelDateCorrections(file.name, sourceDates);
   const previousRows = (options.previousRows || []).map((item) => {
     const row = [];
     row[sourceLayout.idIndex] = item.sourceId;
@@ -742,6 +754,14 @@ export async function analyzePointageFile(file, employees, options = {}) {
     const sourceId = cleanText(getRowCell(row, sourceLayout.idIndex));
     const sourceName = cleanText(getRowCell(row, sourceLayout.nameIndex));
     const pointageDate = parseExcelDate(getRowCell(row, sourceLayout.timeIndex), options.dateOrder);
+
+    if (pointageDate && rowIndex < incomingRows.length && typeof getRowCell(row, sourceLayout.timeIndex) === 'number') {
+      const corrected = excelDateCorrections.get(formatIsoDate(pointageDate));
+      if (corrected) {
+        const [year, month, day] = corrected.split('-').map(Number);
+        pointageDate.setFullYear(year, month - 1, day);
+      }
+    }
 
     if (!pointageDate || (!sourceId && !sourceName)) {
       if (rowIndex < incomingRows.length && row.some((cell) => cleanText(cell))) rejectedRows += 1;
@@ -1006,6 +1026,7 @@ export async function analyzePointageFile(file, employees, options = {}) {
 
   return {
     fileName: file.name,
+    dateNormalizationVersion: 3,
     importDiagnostics: { rejectedRows, duplicateRows, incomingUsable, incomingDates: [...incomingDates].sort() },
     sheetCount: relevantSheetNames.length,
     sheetNames: relevantSheetNames,

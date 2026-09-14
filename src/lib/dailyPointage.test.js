@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as XLSX from 'xlsx';
-import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, prepareDailyPointage } from './dailyPointage.js';
+import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, normalizeSavedPointageSnapshot, prepareDailyPointage } from './dailyPointage.js';
 import { analyzePointageFile } from './pointageImport.js';
+import { getDefaultPointageDate, getLocalPointageDate } from './pointageDates.js';
 
 const employees = [
   { id: '4', zk: '4', fullName: 'ZAIDI SEIFEDDINE', status: 'Actif', department: 'Maintenance', kind: 'MOI' },
   { id: '6', fullName: 'ESSID HOUSSEM EDDINE', status: 'Actif' },
   { id: '10', fullName: 'RTIBI MOKHTAR', status: 'STC' },
 ];
-const rules = { dateOrder: 'dmy', breakMinutes: 0, roundingMinutes: 1, closeDays: true };
+const rules = { dateOrder: 'mdy', breakMinutes: 0, roundingMinutes: 1, closeDays: true };
 
 test('French date labels and daily department rates exclude STC and future hires', () => {
   assert.equal(formatPointageDate('2026-09-08'), '08 sept 2026');
@@ -59,12 +60,12 @@ test('latest file view excludes history and exposes entry and exit from that fil
   const next = await prepareDailyPointage(file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05']]), employees, old, rules);
   const current = getCurrentFilePointage(JSON.parse(JSON.stringify(next)));
   const dates = [...new Set(current.rawRows.map((row) => row.isoDate))];
-  assert.deepEqual(dates, ['2026-10-09']);
+  assert.deepEqual(dates, ['2026-09-10']);
   const table = buildDailyTable(current, employees, dates);
   assert.equal(table.dayColumns.length, 1);
   assert.equal(table.rows[0].days[0].display, '10:23');
-  assert.equal(table.rows[0].days[0].entry, '09/10/2026 07:42:00');
-  assert.equal(table.rows[0].days[0].exit, '09/10/2026 18:05:00');
+  assert.equal(table.rows[0].days[0].entry, '10/09/2026 07:42:00');
+  assert.equal(table.rows[0].days[0].exit, '10/09/2026 18:05:00');
   assert.equal(current.rawRows.length, 2);
   assert.equal(next.rawRows.length, 5);
   assert.equal(getCurrentFilePointage({ rawRows: old.rawRows }), null);
@@ -72,37 +73,142 @@ test('latest file view excludes history and exposes entry and exit from that fil
 
 test('French dates, full names, duration, active absence and STC', async () => {
   const result = await prepareDailyPointage(file([[4, 'Seifeddine.Z', '09/10/2026 07:42'], [4, 'Seifeddine.Z', '09/10/2026 18:05']]), employees, null, rules);
-  assert.equal(cell(result, '4', '2026-10-09').display, '10:23');
-  assert.equal(cell(result, '4', '2026-10-09').status, 'POINTAGE');
-  assert.equal(cell(result, '6', '2026-10-09').status, 'ABS');
-  assert.equal(cell(result, '10', '2026-10-09').status, 'STC');
+  assert.equal(cell(result, '4', '2026-09-10').display, '10:23');
+  assert.equal(cell(result, '4', '2026-09-10').status, 'POINTAGE');
+  assert.equal(cell(result, '6', '2026-09-10').status, 'ABS');
+  assert.equal(cell(result, '10', '2026-09-10').status, 'STC');
   assert.equal(cell(result, '6', '2026-10-10'), undefined);
-  assert.deepEqual(result.weeklySheets[0].dayColumns.map((day) => day.isoDate), ['2026-10-09']);
+  assert.deepEqual(result.weeklySheets[0].dayColumns.map((day) => day.isoDate), ['2026-09-10']);
   assert.equal(result.weeklySheets[0].rows[0].fullName, 'ZAIDI SEIFEDDINE');
 });
 
-test('direct pointage import defaults to French day/month dates', async () => {
+test('direct pointage import defaults to source month/day dates', async () => {
   const result = await analyzePointageFile(file([[4, 'Z', '09/10/2026 07:42']]), employees);
-  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-10-09']);
-  assert.equal(result.rawRows[0].pointageAtDisplay, '09/10/2026 07:42:00');
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-09-10']);
+  assert.equal(result.rawRows[0].pointageAtDisplay, '10/09/2026 07:42:00');
+});
+
+test('direct pointage import keeps source month/day order with hyphen dates', async () => {
+  const result = await analyzePointageFile(file([[4, 'Z', '09-10-2026 07:42']]), employees);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-09-10']);
+  assert.equal(result.rawRows[0].pointageAtDisplay, '10/09/2026 07:42:00');
+});
+
+test('direct pointage import reads 09/11 as 11 September', async () => {
+  const result = await analyzePointageFile(file([[4, 'Z', '09/11/2026 07:42']]), employees);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-09-11']);
+  assert.equal(result.rawRows[0].pointageAtDisplay, '11/09/2026 07:42:00');
+});
+
+test('legacy saved dmy current file dates are corrected for settings display', () => {
+  const snapshot = {
+    currentFilePointage: {
+      calculationRules: { dateOrder: 'dmy' },
+      closedDates: ['2026-11-09'],
+      importDiagnostics: { incomingDates: ['2026-11-09'] },
+      rawRows: [{ employeeKey: '4', isoDate: '2026-11-09', pointageAtDisplay: '09/11/2026 07:42:00' }],
+      dayRows: [{
+        employeeKey: '4',
+        isoDate: '2026-11-09',
+        entry: '09/11/2026 07:42:00',
+        exit: '09/11/2026 18:05:00',
+        punchesDisplay: '09/11/2026 07:42:00 | 09/11/2026 18:05:00',
+      }],
+    },
+  };
+
+  const current = getCurrentFilePointage(snapshot);
+  assert.deepEqual(current.importDiagnostics.incomingDates, ['2026-09-11']);
+  assert.equal(current.rawRows[0].isoDate, '2026-09-11');
+  assert.equal(current.rawRows[0].pointageAtDisplay, '11/09/2026 07:42:00');
+  assert.equal(current.dayRows[0].entry, '11/09/2026 07:42:00');
+});
+
+test('legacy saved inverted dates are corrected even without date order metadata', () => {
+  const snapshot = {
+    currentFilePointage: {
+      closedDates: ['2026-11-09'],
+      importDiagnostics: { incomingDates: ['2026-11-09'] },
+      rawRows: [{ employeeKey: '4', isoDate: '2026-11-09', pointageAtDisplay: '09/11/2026 07:42:00' }],
+      dayRows: [{
+        employeeKey: '4',
+        isoDate: '2026-11-09',
+        entry: '09/11/2026 07:42:00',
+        exit: '09/11/2026 18:05:00',
+        punchesDisplay: '09/11/2026 07:42:00 | 09/11/2026 18:05:00',
+      }],
+    },
+  };
+
+  const current = getCurrentFilePointage(snapshot);
+  assert.deepEqual(current.closedDates, ['2026-09-11']);
+  assert.deepEqual(current.importDiagnostics.incomingDates, ['2026-09-11']);
+  assert.equal(current.rawRows[0].isoDate, '2026-09-11');
+  assert.equal(formatPointageDate(current.rawRows[0].isoDate), '11 sept 2026');
+});
+
+test('saved mdy snapshots with incoherent iso dates use the file date text', () => {
+  const snapshot = {
+    currentFilePointage: {
+      calculationRules: { dateOrder: 'mdy' },
+      closedDates: ['2026-11-09'],
+      importDiagnostics: { incomingDates: ['2026-11-09'] },
+      rawRows: [{ employeeKey: '4', isoDate: '2026-11-09', pointageAtDisplay: '09/10/2026 07:42:00' }],
+      dayRows: [{
+        employeeKey: '4',
+        isoDate: '2026-11-09',
+        entry: '09/10/2026 07:42:00',
+        exit: '09/10/2026 18:05:00',
+        punchesDisplay: '09/10/2026 07:42:00 | 09/10/2026 18:05:00',
+      }],
+    },
+  };
+
+  const current = getCurrentFilePointage(snapshot);
+  assert.deepEqual(current.closedDates, ['2026-09-10']);
+  assert.deepEqual(current.importDiagnostics.incomingDates, ['2026-09-10']);
+  assert.equal(formatPointageDate(current.rawRows[0].isoDate), '10 sept 2026');
+  assert.equal(current.rawRows[0].pointageAtDisplay, '10/09/2026 07:42:00');
+});
+
+test('weekly sheet headers use source month/day order too', async () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Semaine 2026'],
+    ['ID', 'Nom', 'Prenom', 'Departement', 'Categorie', '09/11', 'Heures standard', 'Total', 'Controle'],
+    [4, 'ZAIDI', 'SEIFEDDINE', 'PRODUCTION', 'MOD', '08:00', '', '', ''],
+  ]), 'S1');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['ID Emp.', 'Nom', 'Temps du Ptg', 'Terminal'],
+    [4, 'Z', '09/11/2026 07:42'],
+  ]), 'Export');
+
+  const result = await analyzePointageFile(
+    { name: 'weekly.xlsx', arrayBuffer: async () => XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) },
+    employees,
+    { dateOrder: 'mdy' },
+  );
+
+  assert.deepEqual(result.weeklySheets[0].dayColumns.map((day) => day.isoDate), ['2026-09-11']);
+  assert.deepEqual(result.dailySummaries.map((day) => day.isoDate), ['2026-09-11']);
 });
 
 test('daily accumulation is idempotent and completes an incomplete day', async () => {
   const first = await prepareDailyPointage(file([[4, 'Z', '09/10/2026 07:42']]), employees, null, rules);
-  assert.equal(cell(first, '4', '2026-10-09').display, '07:42 !');
+  assert.equal(cell(first, '4', '2026-09-10').display, '07:42 !');
   const upload = file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05'], [4, 'Z', '10/10/2026 07:45']]);
   const second = await prepareDailyPointage(upload, employees, first, rules);
   const third = await prepareDailyPointage(upload, employees, JSON.parse(JSON.stringify(second)), rules);
   assert.equal(third.rawRows.length, 3);
-  assert.equal(cell(third, '4', '2026-10-09').display, '10:23');
+  assert.equal(cell(third, '4', '2026-09-10').display, '10:23');
   assert.equal(cell(third, '4', '2026-10-10').status, 'AVR');
   assert.deepEqual(third.weeklySheets, second.weeklySheets);
 });
 
 test('optional pause and rounding apply, open days do not imply absence', async () => {
   const result = await prepareDailyPointage(file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05']]), employees, null, { ...rules, breakMinutes: 30, roundingMinutes: 30, closeDays: false });
-  assert.equal(cell(result, '4', '2026-10-09').display, '09:30');
-  assert.equal(cell(result, '6', '2026-10-09').status, 'EMPTY');
+  assert.equal(cell(result, '4', '2026-09-10').display, '09:30');
+  assert.equal(cell(result, '6', '2026-09-10').status, 'EMPTY');
 });
 
 test('invalid dates are reported and wholly invalid new imports fail', async () => {
@@ -117,6 +223,84 @@ test('Excel serial dates retain their calendar date and time', async () => {
   assert.equal(cell(result, '4', '2026-10-09').display, '10:00');
 });
 
+test('1109 export repairs Excel serial inversion, keeps times and survives reload', async () => {
+  const serial = (Date.UTC(2026, 9, 9, 7, 45, 1) - Date.UTC(1899, 11, 30)) / 86400000;
+  const nextDay = (Date.UTC(2026, 10, 9, 7, 47, 12) - Date.UTC(1899, 11, 30)) / 86400000;
+  const upload = { ...file([[4, 'Z', serial], [4, 'Z', serial + 10 / 24], [4, 'Z', nextDay]]), name: '1109.xlsx' };
+  const result = await prepareDailyPointage(upload, employees, null, rules);
+  const current = getCurrentFilePointage(JSON.parse(JSON.stringify(result)));
+  assert.deepEqual(current.importDiagnostics.incomingDates, ['2026-09-10', '2026-09-11']);
+  assert.equal(current.rawRows[0].pointageAtDisplay, '10/09/2026 07:45:01');
+  assert.equal(cell(result, '4', '2026-09-10').display, '10:00');
+  assert.equal(current.dayRows[1].entry, '11/09/2026 07:47:12');
+  const second = await prepareDailyPointage(upload, employees, result, rules);
+  assert.equal(second.rawRows.length, 3);
+  assert.deepEqual(second.importDiagnostics.incomingDates, current.importDiagnostics.incomingDates);
+});
+
+test('1109 export does not invert already correct numeric Excel dates', async () => {
+  const serial = (Date.UTC(2026, 8, 11, 8) - Date.UTC(1899, 11, 30)) / 86400000;
+  const upload = { ...file([[4, 'Z', serial], [4, 'Z', serial + 9 / 24]]), name: '1109.xlsx' };
+  const result = await prepareDailyPointage(upload, employees, null, rules);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-09-11']);
+  assert.equal(cell(result, '4', '2026-09-11').display, '09:00');
+});
+
+test('1409 export repairs mixed serial dates without moving the 13th and 14th', async () => {
+  const serial = (month, day) => (Date.UTC(2026, month - 1, day, 8) - Date.UTC(1899, 11, 30)) / 86400000;
+  const upload = { ...file([
+    [4, 'Z', serial(11, 9)], [4, 'Z', serial(12, 9)],
+    [4, 'Z', '09/13/2026 08:00'], [4, 'Z', '09/14/2026 08:00'],
+  ]), name: '1409.xlsx' };
+  const result = await prepareDailyPointage(upload, employees, null, rules);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-09-11', '2026-09-12', '2026-09-13', '2026-09-14']);
+  assert.deepEqual(getCurrentFilePointage(JSON.parse(JSON.stringify(result))).closedDates, result.importDiagnostics.incomingDates);
+});
+
+test('version 2 stored mixed dates are corrected once while valid days keep their times', async () => {
+  const original = await prepareDailyPointage(file([
+    [4, 'Z', '11/09/2026 08:10'], [4, 'Z', '12/09/2026 08:20'],
+    [4, 'Z', '09/13/2026 08:30'], [4, 'Z', '09/14/2026 08:40'],
+  ]), employees, null, rules);
+  original.fileName = original.currentFilePointage.fileName = '1409.xlsx';
+  original.dateNormalizationVersion = original.currentFilePointage.dateNormalizationVersion = 2;
+  const restored = await normalizeSavedPointageSnapshot(original, employees);
+  assert.deepEqual(restored.importDiagnostics.incomingDates, ['2026-09-11', '2026-09-12', '2026-09-13', '2026-09-14']);
+  assert.equal(restored.currentFilePointage.dayRows[2].entry, '13/09/2026 08:30:00');
+  assert.equal(restored.currentFilePointage.dayRows[3].entry, '14/09/2026 08:40:00');
+  assert.deepEqual(await normalizeSavedPointageSnapshot(restored, employees), restored);
+});
+
+test('automatic day selection prefers today and never creates a date outside the file', () => {
+  assert.equal(getDefaultPointageDate(['2026-09-15', '2026-09-13', '2026-09-14'], '2026-09-14'), '2026-09-14');
+  assert.equal(getDefaultPointageDate(['2026-09-12', '2026-09-11'], '2026-09-14'), '2026-09-12');
+  assert.equal(getDefaultPointageDate([], '2026-09-14'), '');
+  const now = new Date(2026, 8, 14, 0, 5);
+  assert.equal(getLocalPointageDate(now), '2026-09-14');
+});
+
+test('stored 1109 mdy snapshots repair coherent but inverted dates and accumulated history', async () => {
+  const original = await prepareDailyPointage(file([[4, 'Z', '10/09/2026 08:00'], [4, 'Z', '10/09/2026 18:00'], [4, 'Z', '11/09/2026 08:00']]), employees, null, rules);
+  const previous = JSON.parse(JSON.stringify(original));
+  previous.fileName = previous.currentFilePointage.fileName = '1109.xlsx';
+  delete previous.dateNormalizationVersion;
+  delete previous.currentFilePointage.dateNormalizationVersion;
+  const current = getCurrentFilePointage(previous);
+  assert.deepEqual(current.closedDates, ['2026-09-10', '2026-09-11']);
+  assert.equal(current.dayRows[0].entry, '10/09/2026 08:00:00');
+  assert.deepEqual(getCurrentFilePointage({ currentFilePointage: current }), current);
+  const restored = await normalizeSavedPointageSnapshot(previous, employees);
+  assert.deepEqual(restored.dailySummaries.map((day) => day.isoDate), ['2026-09-10', '2026-09-11']);
+  assert.deepEqual(restored.weeklySheets.flatMap((week) => week.dayColumns.map((day) => day.isoDate)), ['2026-09-10', '2026-09-11']);
+  assert.equal(restored.generatedAt, previous.generatedAt);
+  assert.deepEqual(await normalizeSavedPointageSnapshot(restored, employees), restored);
+  const next = await prepareDailyPointage(file([[4, 'Z', '09/11/2026 18:00']]), employees, previous, rules);
+  assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-09-10', '2026-09-11']);
+  assert.equal(cell(next, '4', '2026-09-11').display, '10:00');
+  assert.deepEqual(previous, JSON.parse(JSON.stringify({ ...original, dateNormalizationVersion: undefined,
+    fileName: '1109.xlsx', currentFilePointage: { ...original.currentFilePointage, fileName: '1109.xlsx', dateNormalizationVersion: undefined } })));
+});
+
 test('all source sheets and dates are grouped even with reordered columns and unsorted rows', async () => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
@@ -129,15 +313,15 @@ test('all source sheets and dates are grouped even with reordered columns and un
     ['09/10/2026 18:00', 'Z', 4],
   ]), 'Pointeuse B');
   const result = await prepareDailyPointage({ name: 'plusieurs-jours.xlsx', arrayBuffer: async () => XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) }, employees, null, rules);
-  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-10-08', '2026-10-09', '2026-10-12']);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-08-10', '2026-09-10', '2026-12-10']);
   assert.equal(result.rawRows.length, 6);
   assert.equal(result.importDiagnostics.duplicateRows, 1);
-  assert.equal(result.weeklySheets.length, 2);
-  assert.equal(cell(result, '4', '2026-10-08').display, '10:00');
-  assert.equal(cell(result, '4', '2026-10-09').display, '10:00');
-  assert.equal(cell(result, '4', '2026-10-12').display, '08:00');
-  assert.equal(cell(result, '6', '2026-10-08').status, 'ABS');
-  assert.equal(cell(result, '10', '2026-10-12').status, 'STC');
+  assert.equal(result.weeklySheets.length, 3);
+  assert.equal(cell(result, '4', '2026-08-10').display, '10:00');
+  assert.equal(cell(result, '4', '2026-09-10').display, '10:00');
+  assert.equal(cell(result, '4', '2026-12-10').display, '08:00');
+  assert.equal(cell(result, '6', '2026-08-10').status, 'ABS');
+  assert.equal(cell(result, '10', '2026-12-10').status, 'STC');
   assert.ok(result.rawRows.some((row) => row.sheetName === 'Pointeuse B'));
 });
 
@@ -149,16 +333,16 @@ test('table uses base personnel and actual file dates, ignoring old weekly table
   ]), employees, first, rules);
   next.weeklySheets = [{ dayColumns: [{ isoDate: '2026-08-24' }], rows: [] }];
   const table = buildDailyTable(next, employees, next.importDiagnostics.incomingDates);
-  assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-09-10']);
+  assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-10-09']);
   assert.deepEqual(table.rows.map((row) => row.id), ['4', '6', '10']);
   assert.equal(table.rows[0].totalHours, '09:00');
   assert.equal(table.rows[1].days[0].status, 'ABS');
   assert.equal(table.rows[2].days[0].status, 'STC');
   assert.equal(next.rawRows.length, 5);
-  const combined = buildDailyTable(next, employees, ['2026-09-04', '2026-09-10']);
+  const combined = buildDailyTable(next, employees, ['2026-04-09', '2026-10-09']);
   assert.equal(combined.dayColumns.length, 2);
   assert.equal(combined.rows[0].totalHours, '17:00');
-  const filteredBase = buildDailyTable(next, employees.slice(0, 2), ['2026-09-10']);
+  const filteredBase = buildDailyTable(next, employees.slice(0, 2), ['2026-10-09']);
   assert.equal(filteredBase.rows.length, 2);
 });
 
@@ -173,7 +357,7 @@ test('saved imports keep previous days and use the current RH department and ser
   const reloaded = JSON.parse(JSON.stringify(next));
   const dates = [...new Set(reloaded.rawRows.map((row) => row.isoDate))].sort();
   const table = buildDailyTable(reloaded, base, dates);
-  assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-09-08', '2026-09-09']);
+  assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-08-09', '2026-09-09']);
   assert.deepEqual(table.rows[0].days.map((day) => day.display), ['08:00', '09:00']);
   assert.equal(table.rows[0].department, 'PRODUCTION');
   assert.equal(table.rows[0].service, 'INJ');

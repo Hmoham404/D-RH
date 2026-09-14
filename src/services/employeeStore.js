@@ -498,7 +498,7 @@ function removeEmployeeLocally(employee, fallbackRecordId = '') {
       : currentEmployees;
 
   const deletedRecordIds = readDeletedRecordIds();
-  const removedRecordId = cleanText(removed?.recordId) || cleanText(targetRecordId);
+  const removedRecordId = cleanText(removed?.recordId) || cleanText(fallbackRecordId);
 
   if (removedRecordId) {
     deletedRecordIds.add(removedRecordId);

@@ -100,8 +100,8 @@ export default function ImportedPointageFilePage({ onNavigateHome, onNavigateAdm
     if (!selectedDate) return weeklySheets;
 
     return [...weeklySheets].sort((left, right) => {
-      const leftHasDate = left.dayColumns.some((day) => day.isoDate === selectedDate);
-      const rightHasDate = right.dayColumns.some((day) => day.isoDate === selectedDate);
+      const leftHasDate = left.dayColumns?.some((day) => day.isoDate === selectedDate) || false;
+      const rightHasDate = right.dayColumns?.some((day) => day.isoDate === selectedDate) || false;
 
       if (leftHasDate === rightHasDate) {
         return left.sheetName.localeCompare(right.sheetName);

@@ -44,6 +44,7 @@ function normalizeSnapshot(snapshot) {
   return {
     importId,
     fileName: snapshot.fileName || '',
+    dateNormalizationVersion: snapshot.dateNormalizationVersion || null,
     sheetCount: Number(snapshot.sheetCount || 0),
     sheetNames: Array.isArray(snapshot.sheetNames) ? snapshot.sheetNames : [],
     generatedAt,
@@ -128,35 +129,9 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false) {
   }
 
   const updatedAt = new Date().toISOString();
+  let historyResetError = '';
 
   try {
-    if (resetBeforeSave) {
-      const { error: currentDeleteError } = await supabase
-        .from(TABLE_NAME)
-        .delete()
-        .eq('id', CURRENT_RECORD_ID);
-
-      if (currentDeleteError) {
-        return {
-          data: normalized,
-          mode: 'local-disabled',
-          message: formatSupabaseError(currentDeleteError, 'Reset pointage'),
-        };
-      }
-
-      const { error: historyDeleteError } = await supabase
-        .from(TABLE_NAME)
-        .delete()
-        .like('id', `${HISTORY_RECORD_PREFIX}%`);
-
-      if (historyDeleteError) {
-        return {
-          data: normalized,
-          mode: 'local-disabled',
-          message: formatSupabaseError(historyDeleteError, 'Reset historique pointage'),
-        };
-      }
-    }
 
     const rows = [
       {
@@ -180,6 +155,17 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false) {
         message: formatSupabaseError(error, 'Publication pointage'),
       };
     }
+    // Publish the replacement before removing history, keeping the old data if publication fails.
+    if (resetBeforeSave) {
+      try {
+        const { error: historyDeleteError } = await supabase.from(TABLE_NAME).delete()
+          .like('id', `${HISTORY_RECORD_PREFIX}%`)
+          .neq('id', `${HISTORY_RECORD_PREFIX}${normalized.importId}`);
+        if (historyDeleteError) historyResetError = formatSupabaseError(historyDeleteError, 'Suppression de l ancien historique');
+      } catch (error) {
+        historyResetError = formatSupabaseError(error, 'Suppression de l ancien historique');
+      }
+    }
   } catch (error) {
     return {
       data: normalized,
@@ -191,8 +177,11 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false) {
   return {
     data: normalized,
     mode: 'supabase',
+    historyResetFailed: Boolean(historyResetError),
     message: resetBeforeSave
-      ? 'Base pointage videe puis nouveau fichier importe dans Supabase.'
+      ? historyResetError
+        ? `Nouveau pointage enregistre. ${historyResetError}`
+        : 'Le nouveau fichier remplace le pointage precedent. Ancien historique supprime.'
       : 'Pointage importe, analyse et sauvegarde dans Supabase.',
   };
 }

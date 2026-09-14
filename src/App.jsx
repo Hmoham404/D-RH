@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import DailyPointageImport from './components/DailyPointageImport';
+import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './components/AttendanceDashboard';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
 import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
 import { analyzePointageFile } from './lib/pointageImport';
+import { normalizeSavedPointageSnapshot } from './lib/dailyPointage.js';
+import { dailyPointageTranslations } from './lib/dailyPointageTranslations.js';
 import {
   clearEmployeeDirectory,
   createEmptyEmployee,
@@ -17,6 +20,8 @@ import { loadPointageSnapshot, replacePointageSnapshot } from './services/pointa
 const mycLogoUrl = new URL('../MYC beauty innovation TUNISIA @300x-100.png', import.meta.url).href;
 const rhManagerAvatarUrl = new URL('./assets/rh-manager-avatar.svg', import.meta.url).href;
 const LANGUAGE_STORAGE_KEY = 'rh-dashboard-language';
+const PRODUCTION_MOD_TARGET_STORAGE_KEY = 'rh-dashboard-production-mod-target';
+const DEFAULT_PRODUCTION_MOD_TARGET = 65;
 const LANGUAGE_OPTIONS = [
   { key: 'fr', shortLabel: 'FR', label: 'Francais' },
   { key: 'ar', shortLabel: 'AR', label: 'العربية' },
@@ -54,7 +59,7 @@ const UI_TRANSLATIONS = {
         departments: { label: 'Departements', note: 'Repartition active' },
         reports: { label: 'Rapports', note: 'Synthese du fichier' },
         absences: { label: 'Absences & Conges', note: 'ABS, CM, conges' },
-        settings: { label: 'Parametres', note: 'Import et base' },
+        settings: { label: 'ZK Dashboard', note: 'Import et pointage' },
       },
     },
     hero: {
@@ -150,7 +155,7 @@ const UI_TRANSLATIONS = {
         departments: { label: 'الأقسام', note: 'التوزيع النشط' },
         reports: { label: 'التقارير', note: 'ملخص الملف' },
         absences: { label: 'الغيابات والإجازات', note: 'غياب ومرض وإجازات' },
-        settings: { label: 'الإعدادات', note: 'الاستيراد والقاعدة' },
+        settings: { label: 'ZK Dashboard', note: 'الاستيراد والقاعدة' },
       },
     },
     hero: {
@@ -244,7 +249,7 @@ const UI_TRANSLATIONS = {
         departments: { label: 'Departments', note: 'Active distribution' },
         reports: { label: 'Reports', note: 'File summary' },
         absences: { label: 'Absences & leave', note: 'ABS, sick leave, leave' },
-        settings: { label: 'Settings', note: 'Import and base' },
+        settings: { label: 'ZK Dashboard', note: 'Import and attendance' },
       },
     },
     hero: {
@@ -338,7 +343,7 @@ const UI_TRANSLATIONS = {
         departments: { label: 'Reparti', note: 'Ripartizione attiva' },
         reports: { label: 'Report', note: 'Sintesi del file' },
         absences: { label: 'Assenze e congedi', note: 'ABS, malattia, congedi' },
-        settings: { label: 'Impostazioni', note: 'Import e base' },
+        settings: { label: 'ZK Dashboard', note: 'Import e base' },
       },
     },
     hero: {
@@ -432,7 +437,7 @@ const UI_TRANSLATIONS = {
         departments: { label: '部门', note: '在岗分布' },
         reports: { label: '报表', note: '文件摘要' },
         absences: { label: '缺勤与休假', note: '缺勤、病假、休假' },
-        settings: { label: '设置', note: '导入与基础库' },
+        settings: { label: 'ZK Dashboard', note: '导入与基础库' },
       },
     },
     hero: {
@@ -866,6 +871,11 @@ const UI_EXT_TRANSLATIONS = {
 
 const SIDEBAR_ITEMS = [
   {
+    key: 'settings',
+    label: 'ZK Dashboard',
+    note: 'Import et pointage',
+  },
+  {
     key: 'dashboard',
     label: 'Tableau de bord',
     note: 'Vue globale RH',
@@ -894,11 +904,6 @@ const SIDEBAR_ITEMS = [
     key: 'absences',
     label: 'Absences & Conges',
     note: 'ABS, CM, conges',
-  },
-  {
-    key: 'settings',
-    label: 'Parametres',
-    note: 'Import et base',
   },
 ];
 
@@ -1217,17 +1222,13 @@ function buildFirstActiveDateMap(snapshot, periodStart, periodEnd) {
   return activeMap;
 }
 
-function formatShortDateLabel(isoDate, locale = 'fr-FR') {
+function formatShortDateLabel(isoDate) {
   if (!isoDate) return '--';
 
-  const date = new Date(`${isoDate}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return isoDate;
+  const match = String(isoDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return isoDate;
 
-  return new Intl.DateTimeFormat(locale, {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date);
+  return `${match[3]}/${match[2]}/${match[1]}`;
 }
 
 function formatDateTimeLabel(value, locale = 'fr-FR') {
@@ -1252,8 +1253,10 @@ function getTranslationValue(language, path) {
   const dictionaries = [
     UI_TRANSLATIONS[language],
     UI_EXT_TRANSLATIONS[language],
+    { daily: dailyPointageTranslations[language] },
     UI_TRANSLATIONS.fr,
     UI_EXT_TRANSLATIONS.fr,
+    { daily: dailyPointageTranslations.fr },
   ].filter(Boolean);
 
   for (const dictionary of dictionaries) {
@@ -1282,6 +1285,22 @@ function getInitialLanguage() {
   }
 
   return 'fr';
+}
+
+function normalizePositiveTarget(value, fallback = DEFAULT_PRODUCTION_MOD_TARGET) {
+  const numeric = Math.round(Number(value));
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
+function getInitialProductionModTarget() {
+  if (typeof window === 'undefined') {
+    return DEFAULT_PRODUCTION_MOD_TARGET;
+  }
+
+  return normalizePositiveTarget(
+    window.localStorage.getItem(PRODUCTION_MOD_TARGET_STORAGE_KEY),
+    DEFAULT_PRODUCTION_MOD_TARGET,
+  );
 }
 
 function getProductionServiceLabel(key, translate, fallback) {
@@ -2335,34 +2354,6 @@ function buildProductionDetailConfig(type, data) {
   }
 }
 
-function KpiCard({ tone, label, value, note, tag = '', isActive = false, onClick }) {
-  const Component = onClick ? 'button' : 'article';
-  const isPercentNote = /%/.test(String(note || ''));
-  const hasNote = Boolean(String(note || '').trim());
-  const isCompactLabel = String(label || '').length > 18;
-
-  return (
-    <Component
-      className={`rh-kpi-card rh-kpi-card--${tone}${onClick ? ' is-clickable' : ''}${isActive ? ' is-active' : ''}`}
-      type={onClick ? 'button' : undefined}
-      onClick={onClick}
-    >
-      <div className={`rh-kpi-card__icon rh-kpi-card__icon--${tone}`} />
-      <div className={`rh-kpi-card__body${tag ? ' has-tag' : ''}${isPercentNote ? ' has-percent' : ''}`}>
-        {tag ? <small className="rh-kpi-card__tag">{tag}</small> : null}
-        <span className={`rh-kpi-card__label${isCompactLabel ? ' is-compact' : ''}`}>{label}</span>
-        <strong className={isPercentNote ? 'rh-kpi-card__value rh-kpi-card__value--accent' : 'rh-kpi-card__value'}>
-          {value}
-        </strong>
-        {hasNote ? (
-          <p className={isPercentNote ? 'rh-kpi-card__note rh-kpi-card__note--percent' : 'rh-kpi-card__note'}>
-            {note}
-          </p>
-        ) : null}
-      </div>
-    </Component>
-  );
-}
 
 function LanguageSwitcher({ language, onChange, title }) {
   return (
@@ -2594,6 +2585,7 @@ function EmployeeEditorModal({
   );
 }
 
+
 function EmployeeBaseSurface({
   employees,
   filteredEmployees,
@@ -2743,144 +2735,6 @@ function EmployeeBaseSurface({
   );
 }
 
-function ProductionFocusSection({
-  productionMetrics,
-  productionServiceBreakdown,
-  productionKindBreakdown,
-  activeModalKey,
-  onOpenModal,
-  labels,
-}) {
-  const productionPresenceKinds = productionKindBreakdown.filter((item) => ['MOI', 'MOD'].includes(item.key));
-
-  return (
-    <section className="rh-section-block">
-      <div className="rh-section-block__header">
-        <div>
-          <p className="rh-eyebrow">{labels.focus}</p>
-          <h3>{labels.title}</h3>
-        </div>
-        <span className="rh-panel-pill">{labels.employeesFollowed(productionMetrics.total)}</span>
-      </div>
-
-      <div className="rh-kpi-grid rh-kpi-grid--department">
-        <KpiCard
-          tone="indigo"
-          label={labels.productionWorkforce}
-          value={productionMetrics.total}
-          note={productionMetrics.periodLabel}
-          isActive={activeModalKey === 'production-total'}
-          onClick={() => onOpenModal('production-total')}
-        />
-        <KpiCard
-          tone="green"
-          label={labels.presents}
-          value={productionMetrics.present}
-          note={formatPercent(productionMetrics.presentRate)}
-          isActive={activeModalKey === 'production-present'}
-          onClick={() => onOpenModal('production-present')}
-        />
-        <KpiCard
-          tone="orange"
-          label={labels.absents}
-          value={productionMetrics.absent}
-          note={formatPercent(productionMetrics.absentRate)}
-          isActive={activeModalKey === 'production-absent'}
-          onClick={() => onOpenModal('production-absent')}
-        />
-        <KpiCard
-          tone="slate"
-          label={labels.recruitments}
-          value={productionMetrics.newEmployees}
-          note={productionMetrics.periodLabel}
-          isActive={activeModalKey === 'production-new'}
-          onClick={() => onOpenModal('production-new')}
-        />
-        <KpiCard
-          tone="blue"
-          label={labels.stcMonth}
-          value={productionMetrics.stc}
-          note={formatPercent(productionMetrics.stcRate)}
-          isActive={activeModalKey === 'production-stc'}
-          onClick={() => onOpenModal('production-stc')}
-        />
-      </div>
-
-      <div className="rh-production-breakdown">
-        <div className="rh-production-breakdown__topline">
-          <div className="rh-production-breakdown__group rh-production-breakdown__group--presence">
-            <div className="rh-production-breakdown__title">{labels.kindAbsence}</div>
-            <div className="rh-production-breakdown__stack rh-production-breakdown__stack--presence">
-              {productionPresenceKinds.map((item) => (
-                <button
-                  key={`presence-${item.key}`}
-                  className={`rh-production-presence-card rh-production-presence-card--${item.tone}${activeModalKey === item.modalKey ? ' is-active' : ''}`}
-                  type="button"
-                  onClick={() => onOpenModal(item.modalKey)}
-                  style={{ '--presence-angle': `${Math.max(0, Math.min(360, item.absentPercent * 3.6))}deg` }}
-                >
-                  <div className="rh-production-presence-card__header">
-                    <span>{item.label}</span>
-                    <small>{labels.kindAbsence}</small>
-                  </div>
-                  <div className="rh-production-presence-card__body">
-                    <div className={`rh-production-presence-card__ring rh-production-presence-card__ring--${item.tone}`}>
-                      <div className="rh-production-presence-card__ring-core">
-                        <strong>{formatPercent(item.absentPercent)}</strong>
-                        <span>{labels.absence}</span>
-                      </div>
-                    </div>
-                    <div className="rh-production-presence-card__stats">
-                      <div className="rh-production-presence-card__stat">
-                        <small>{labels.presents}</small>
-                        <b>{item.presentCount}</b>
-                      </div>
-                      <div className="rh-production-presence-card__stat">
-                        <small>{labels.total}</small>
-                        <b>{item.effectiveCount}</b>
-                      </div>
-                      <div className="rh-production-presence-card__hint">Clique pour ouvrir la liste</div>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="rh-production-breakdown__group rh-production-breakdown__group--full">
-          <div className="rh-production-breakdown__title">{labels.productionTypes}</div>
-          <div className="rh-production-breakdown__grid">
-            {productionServiceBreakdown.map((item) => (
-              <button
-                key={item.key}
-                className={`rh-production-chip rh-production-chip--${item.tone}${activeModalKey === item.modalKey ? ' is-active' : ''}`}
-                type="button"
-                onClick={() => onOpenModal(item.modalKey)}
-              >
-                <span>{`${labels.prefix} ${labels.serviceLabel(item.key, item.label)}`}</span>
-                <div className="rh-production-chip__stats">
-                  <div className="rh-production-chip__stat">
-                    <small>{labels.total}</small>
-                    <strong>{item.effectiveCount}</strong>
-                  </div>
-                  <div className="rh-production-chip__stat">
-                    <small>{labels.presents}</small>
-                    <strong>{item.presentCount}</strong>
-                  </div>
-                </div>
-                <div className="rh-production-chip__percent-row">
-                  <small>{labels.absence}</small>
-                  <strong className="rh-production-chip__percent">{formatPercent(item.absentPercent)}</strong>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
 
 function DepartmentBaseSurface({
   tableTitle,
@@ -3152,7 +3006,10 @@ export default function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [selectedDate, setSelectedDate] = useState('');
   const [searchValue, setSearchValue] = useState('');
-  const [activeSection, setActiveSection] = useState('dashboard');
+  const [activeSection, setActiveSection] = useState('settings');
+  useEffect(() => {
+    document.title = activeSection === 'settings' ? 'ZK Dashboard' : 'Dashboard RH';
+  }, [activeSection]);
   const [statusMessage, setStatusMessage] = useState(() => getTranslationValue(getInitialLanguage(), 'messages.initialStatus'));
   const [isLoading, setIsLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
@@ -3162,6 +3019,7 @@ export default function App() {
   const [activeKpiModal, setActiveKpiModal] = useState('');
   const [activeEmployeeBaseModal, setActiveEmployeeBaseModal] = useState('');
   const [activeProductionModal, setActiveProductionModal] = useState('');
+  const [productionModTarget, setProductionModTarget] = useState(getInitialProductionModTarget);
   const [kpiSearchValue, setKpiSearchValue] = useState('');
   const [employeeEditorMode, setEmployeeEditorMode] = useState('closed');
   const [employeeDraft, setEmployeeDraft] = useState(null);
@@ -3176,9 +3034,9 @@ export default function App() {
   }, [currentMonthKey]);
   const currentMonthLabel = currentMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const languageDirection = language === 'ar' ? 'rtl' : 'ltr';
-  const translate = (path, fallback = path) => {
+  const translate = (path, fallback = path, values = {}) => {
     const value = getTranslationValue(language, path);
-    return typeof value === 'string' ? value : fallback;
+    return (typeof value === 'string' ? value : fallback).replace(/\{(\w+)\}/g, (match, key) => values[key] ?? match);
   };
   const translateFn = (path, fallback) => {
     const value = getTranslationValue(language, path);
@@ -3399,12 +3257,13 @@ export default function App() {
         loadEmployees(),
         loadPointageSnapshot(),
       ]);
+      const normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || []);
       if (cancelled) return;
 
       setEmployees(Array.isArray(employeesResult.data) ? employeesResult.data : []);
-      setSnapshot(snapshotResult.data || null);
+      setSnapshot(normalizedSnapshot || null);
       setStatusMessage(snapshotResult.message || employeesResult.message || translate('messages.dashboardReady', 'Dashboard RH pret.'));
-      setSelectedDate(getDefaultSelectedDate(snapshotResult.data));
+      setSelectedDate(getDefaultSelectedDate(normalizedSnapshot));
       setIsLoading(false);
     }
 
@@ -3423,6 +3282,12 @@ export default function App() {
     document.documentElement.dir = languageDirection;
   }, [language, locale, languageDirection]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(PRODUCTION_MOD_TARGET_STORAGE_KEY, String(productionModTarget));
+    }
+  }, [productionModTarget]);
+
   async function handleImportFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -3430,7 +3295,7 @@ export default function App() {
     try {
       setIsImporting(true);
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
-      const nextSnapshot = await analyzePointageFile(file, employees, { dateOrder: 'dmy' });
+      const nextSnapshot = await analyzePointageFile(file, employees, { dateOrder: 'mdy' });
       setStatusMessage(translate('messages.replacingBase', 'Remplacement de la base pointage en cours...'));
       const saveResult = await replacePointageSnapshot(nextSnapshot);
       const savedSnapshot = saveResult.data || nextSnapshot;
@@ -3570,8 +3435,8 @@ export default function App() {
     [selectedDayEffectifRows],
   );
   const productionBaseRows = useMemo(
-    () => employees.filter((employee) => isProductionDepartment(employee.department)),
-    [employees],
+    () => monthlyActiveEmployees.filter((employee) => isProductionDepartment(employee.department)),
+    [monthlyActiveEmployees],
   );
   const newRoster = useMemo(
     () => employees.filter((employee) => isEmployeeHiredInMonth(employee, currentMonthDate)),
@@ -3619,6 +3484,10 @@ export default function App() {
   const { serviceBreakdown: productionServiceBreakdown, kindBreakdown: productionKindBreakdown } = useMemo(
     () => buildProductionBreakdown(productionBaseRows, productionPresentRows, productionDayRows, productionStcRows),
     [productionBaseRows, productionDayRows, productionPresentRows, productionStcRows],
+  );
+  const productionModPresentCount = useMemo(
+    () => productionKindBreakdown.find((item) => item.key === 'MOD')?.presentCount || 0,
+    [productionKindBreakdown],
   );
   const kindComparison = useMemo(
     () => buildKindComparison(activeEmployees, presentRoster),
@@ -3714,7 +3583,7 @@ export default function App() {
     [employees],
   );
 
-  const totalEmployees = employees.length;
+  const totalEmployees = monthlyActiveEmployees.length;
   const presentEmployees = Number(selectedSummary?.presentEmployees || 0);
   const absentEmployees = useMemo(
     () => dayRoster.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').length,
@@ -3750,7 +3619,7 @@ export default function App() {
     () =>
       activeKpiModal
         ? buildKpiDetailConfig(activeKpiModal, {
-            workforceEmployees: employees,
+            workforceEmployees: monthlyActiveEmployees,
             presentRoster,
             absentRoster: absenceRoster,
             lateRoster,
@@ -3771,7 +3640,7 @@ export default function App() {
         : null,
     [
       activeKpiModal,
-      employees,
+      monthlyActiveEmployees,
       presentRoster,
       absenceRoster,
       lateRoster,
@@ -4019,7 +3888,7 @@ export default function App() {
               title={translate('switcher.title', 'Traduction')}
             />
 
-            <label className="rh-topbar__date">
+            {!isSettingsSection && <label className="rh-topbar__date">
               <span>{translate('topbar.dateSelected', 'Date selectionnee')}</span>
               <select
                 value={selectedDate}
@@ -4033,7 +3902,7 @@ export default function App() {
                   </option>
                 ))}
               </select>
-            </label>
+            </label>}
 
             <div className="rh-user-chip">
               <img className="rh-user-chip__avatar" src={rhManagerAvatarUrl} alt={translate('topbar.userRole', 'RH Manager')} />
@@ -4046,7 +3915,7 @@ export default function App() {
         </header>
 
         <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
-          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} snapshot={snapshot} loading={isLoading} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
+          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
           {isEmployeeSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">
@@ -4059,6 +3928,14 @@ export default function App() {
                   'Dashboard alimente par le fichier Excel de pointage. Clique sur un bouton a gauche ou sur une carte pour ouvrir une vraie liste de suivi RH.',
                 )}
               </p>
+            </div>
+
+            <div className="rh-hero__center">
+              <ProductionModTargetGauge
+                presentCount={productionModPresentCount}
+                target={productionModTarget}
+                onTargetChange={setProductionModTarget}
+              />
             </div>
 
             <div className="rh-toolbar">

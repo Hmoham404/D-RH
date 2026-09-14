@@ -38,7 +38,12 @@ function capitalizeWords(value) {
 }
 
 function parseFrenchDate(value) {
-  if (!value || !/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return null;
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const date = new Date(value + 'T00:00:00');
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return null;
   const [day, month, year] = value.split('/').map(Number);
   const date = new Date(year, month - 1, day);
   return Number.isNaN(date.getTime()) ? null : date;
@@ -61,7 +66,7 @@ function getRecentHires(employees) {
 
 export function buildDashboardData(baseData = defaultHrData, employees = []) {
   const allEmployees = Array.isArray(employees) ? employees : [];
-  const activeEmployees = allEmployees.filter((employee) => employee.status === 'Actif');
+  const activeEmployees = allEmployees.filter((employee) => (employee.status || '').toLowerCase() === 'actif');
   const signedContracts = allEmployees.filter((employee) => isSigned(employee.signed)).length;
 
   const alertsSource = baseData.alerts?.length ? baseData.alerts : defaultHrData.alerts;
@@ -71,7 +76,7 @@ export function buildDashboardData(baseData = defaultHrData, employees = []) {
     totals: {
       employees: allEmployees.length,
       active: activeEmployees.length,
-      stc: allEmployees.filter((employee) => employee.status === 'STC').length,
+      stc: allEmployees.filter((employee) => (employee.status || '').toLowerCase() === 'stc').length,
       signedContracts,
       unsignedContracts: allEmployees.length - signedContracts,
     },

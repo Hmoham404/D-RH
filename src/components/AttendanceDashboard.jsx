@@ -69,18 +69,16 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
   const valueStyle = { fontSize: '2.1rem', color: '#0f172a', fontWeight: '800', lineHeight: '1' };
 
   return (
-    <div
-      className="production-mod-target"
-      style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', padding: '24px 40px', width: 'auto', borderRadius: '32px' }}
-    >
-      {/* Cercle 1 : Objectif (Target) */}
+    <div style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', width: 'auto' }}>
+      
+      {/* Cadre 1 : Objectif (Target) */}
       <div 
-        className="production-mod-target--slate" 
-        style={{ '--target-angle': '360deg', cursor: 'pointer' }}
+        className="production-mod-target"
+        style={{ cursor: 'pointer', padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
         onDoubleClick={() => setIsEditing(true)}
         title={targetHint}
       >
-        <div className="production-mod-target__ring" style={{ width: ringSize, '--target-color': '#cbd5e1' }}>
+        <div className="production-mod-target__ring" style={{ width: ringSize, '--target-color': '#cbd5e1', '--target-angle': '360deg' }}>
           <div className="production-mod-target__core">
             <span style={labelStyle}>Objectif</span>
             {isEditing ? (
@@ -97,7 +95,7 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
                   if (event.key === 'Enter') saveTarget();
                   if (event.key === 'Escape') cancelEdit();
                 }}
-                style={{ fontSize: '1.6rem', width: '80px', height: '44px', textAlign: 'center' }}
+                style={{ fontSize: '1.6rem', width: '80px', height: '44px', textAlign: 'center', border: '2px solid #3b82f6', borderRadius: '12px', background: '#fff' }}
               />
             ) : (
               <strong style={valueStyle}>{safeTarget.toLocaleString(locale)}</strong>
@@ -106,9 +104,12 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
         </div>
       </div>
 
-      {/* Cercle 2 : MOD Présents */}
-      <div className={`production-mod-target--${tone}`} style={{ '--target-angle': '360deg' }}>
-        <div className="production-mod-target__ring" style={{ width: ringSize }}>
+      {/* Cadre 2 : MOD Présents */}
+      <div 
+        className="production-mod-target"
+        style={{ padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
+      >
+        <div className={`production-mod-target__ring production-mod-target--${tone}`} style={{ width: ringSize, '--target-angle': '360deg' }}>
           <div className="production-mod-target__core">
             <span style={labelStyle}>Présents</span>
             <strong style={valueStyle}>{Number(presentCount || 0).toLocaleString(locale)}</strong>
@@ -116,15 +117,19 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
         </div>
       </div>
 
-      {/* Cercle 3 : Pourcentage */}
-      <div className={`production-mod-target--${tone}`} style={{ '--target-angle': `${clampedPercent * 3.6}deg` }}>
-        <div className="production-mod-target__ring" style={{ width: ringSize }}>
+      {/* Cadre 3 : Pourcentage (Couverture) */}
+      <div 
+        className="production-mod-target"
+        style={{ padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
+      >
+        <div className={`production-mod-target__ring production-mod-target--${tone}`} style={{ width: ringSize, '--target-angle': `${clampedPercent * 3.6}deg` }}>
           <div className="production-mod-target__core">
             <span style={labelStyle}>Couverture</span>
             <strong style={valueStyle}>{formatPercent(percent, locale)}</strong>
           </div>
         </div>
       </div>
+
     </div>
   );
 }

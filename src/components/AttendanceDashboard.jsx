@@ -44,7 +44,8 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
   const safeTarget = normalizePositiveTarget(target);
   const percent = safeTarget ? (Number(presentCount || 0) / safeTarget) * 100 : 0;
   const clampedPercent = Math.max(0, Math.min(100, percent));
-  const tone = percent >= 100 ? 'green' : percent >= 95 ? 'yellow' : 'red';
+  // Couleur : >= 95 vert, >= 90 jaune, < 90 rouge
+  const tone = percent >= 95 ? 'green' : percent >= 90 ? 'yellow' : 'red';
 
   useEffect(() => {
     if (!isEditing) {
@@ -65,32 +66,58 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
 
   return (
     <div
-      className={`production-mod-target production-mod-target--${tone}`}
-      style={{ '--target-angle': `${clampedPercent * 3.6}deg` }}
-      onDoubleClick={() => setIsEditing(true)}
-      title={targetHint}
+      className="production-mod-target"
+      style={{ display: 'flex', gap: '20px', alignItems: 'center', justifyContent: 'center', padding: '16px 24px', width: 'auto' }}
     >
-      <div className="production-mod-target__ring">
-        <div className="production-mod-target__core">
-          {isEditing ? (
-            <input
-              autoFocus
-              aria-label={targetLabel}
-              type="number"
-              min="1"
-              step="1"
-              value={draftTarget}
-              onChange={(event) => setDraftTarget(event.target.value)}
-              onBlur={saveTarget}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') saveTarget();
-                if (event.key === 'Escape') cancelEdit();
-              }}
-            />
-          ) : (
+      {/* Cercle 1 : Objectif (Target) */}
+      <div 
+        className="production-mod-target--slate" 
+        style={{ '--target-angle': '360deg', cursor: 'pointer' }}
+        onDoubleClick={() => setIsEditing(true)}
+        title={targetHint}
+      >
+        <div className="production-mod-target__ring" style={{ width: '110px', '--target-color': '#94a3b8' }}>
+          <div className="production-mod-target__core">
+            <span>Objectif</span>
+            {isEditing ? (
+              <input
+                autoFocus
+                aria-label={targetLabel}
+                type="number"
+                min="1"
+                step="1"
+                value={draftTarget}
+                onChange={(event) => setDraftTarget(event.target.value)}
+                onBlur={saveTarget}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') saveTarget();
+                  if (event.key === 'Escape') cancelEdit();
+                }}
+              />
+            ) : (
+              <strong>{safeTarget.toLocaleString(locale)}</strong>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Cercle 2 : MOD Présents */}
+      <div className={`production-mod-target--${tone}`} style={{ '--target-angle': '360deg' }}>
+        <div className="production-mod-target__ring" style={{ width: '110px' }}>
+          <div className="production-mod-target__core">
+            <span>Présents</span>
+            <strong>{Number(presentCount || 0).toLocaleString(locale)}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Cercle 3 : Pourcentage */}
+      <div className={`production-mod-target--${tone}`} style={{ '--target-angle': `${clampedPercent * 3.6}deg` }}>
+        <div className="production-mod-target__ring" style={{ width: '110px' }}>
+          <div className="production-mod-target__core">
+            <span>Couverture</span>
             <strong>{formatPercent(percent, locale)}</strong>
-          )}
-          <small><bdi>{Number(presentCount || 0).toLocaleString(locale)} / {safeTarget.toLocaleString(locale)}</bdi></small>
+          </div>
         </div>
       </div>
     </div>

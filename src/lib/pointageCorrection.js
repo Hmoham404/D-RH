@@ -8,23 +8,23 @@ export async function verifyPointageCorrectionCode(value) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('') === RH_CODE_DIGEST;
 }
 
-export async function correctDailyPointage(snapshot, employees, { employeeKey, isoDate, entry, exit }) {
+export async function correctDailyPointage(snapshot, employees, { employeeKey, isoDate, entry = '', exit = '' }) {
   const current = getCurrentFilePointage(snapshot);
   const table = buildDailyTable(current, employees, [isoDate]);
   const person = table.rows.find((row) => row.employeeKey === employeeKey);
   const day = person?.days.find((item) => item.isoDate === isoDate);
-  if (!day || !['AVR', 'ABS'].includes(day.status)) throw new Error('Seuls les pointages à vérifier et les ABS peuvent être corrigés.');
-  if (![entry, exit].every((value) => /^([01]\d|2[0-3]):[0-5]\d$/.test(value))) {
-    throw new Error('Renseignez une heure d’entrée et une heure de sortie valides.');
+  if (!day || !['POINTAGE', 'AVR', 'ABS'].includes(day.status)) throw new Error('Seuls les pointages présents, à vérifier et les ABS peuvent être corrigés.');
+  if ((!entry && !exit) || ![entry, exit].every((value) => value === '' || /^([01]\d|2[0-3]):[0-5]\d$/.test(value))) {
+    throw new Error('Renseignez au moins une heure ; les heures saisies doivent être valides.');
   }
-  if (exit <= entry) throw new Error('La sortie doit être après l’entrée, dans la même journée.');
+  if (entry && exit && exit <= entry) throw new Error('La sortie doit être après l’entrée, dans la même journée.');
   const matches = (row) => row.employeeKey === employeeKey && row.isoDate === isoDate;
   const originalRows = current.rawRows.filter(matches);
   const sourceRows = current.rawRows.filter((row) => !matches(row));
   const workbook = XLSX.utils.book_new();
   const rows = [['ID Emp.', 'Nom', 'Temps du Ptg', 'Terminal', 'Type de pointage'],
     ...sourceRows.map((row) => [row.sourceId, row.sourceName, row.pointageAt, row.terminal, row.pointageType]),
-    ...[entry, exit].map((time) => [person.id, person.fullName, `${isoDate}T${time}:00`, 'Correction RH', '']),
+    ...[entry, exit].filter(Boolean).map((time) => [person.id, person.fullName, `${isoDate}T${time}:00`, 'Correction RH', '']),
   ];
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Pointage');
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });

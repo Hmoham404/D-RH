@@ -129,6 +129,7 @@ export function buildDailyWeeks(analysis, employees, closedDates = []) {
     department: e.department, kind: e.kind, service: e.service, employee: e,
   }]));
   const days = new Map(analysis.dayRows.map((row) => [`${row.employeeKey}|${row.isoDate}`, row]));
+  const corrections = new Map((analysis.manualCorrections || []).map((item) => [`${item.employeeKey}|${item.isoDate}`, item.after]));
   return starts.map((start) => {
     const end = new Date(`${start}T12:00:00Z`);
     end.setUTCDate(end.getUTCDate() + 6);
@@ -140,12 +141,14 @@ export function buildDailyWeeks(analysis, employees, closedDates = []) {
       let total = 0;
       const cells = dayColumns.map((column) => {
         const day = days.get(`${row.employeeKey}|${column.isoDate}`);
+        const correction = corrections.get(`${row.employeeKey}|${column.isoDate}`);
+        const exitOnly = day && !day.exit && correction?.exit && correction.entry === '';
         let status = 'EMPTY';
         let display = '-';
         if (day) {
           const review = day.state !== 'OK' || day.matchState !== 'matched';
           status = review ? 'AVR' : 'POINTAGE';
-          display = day.state !== 'OK' ? `${day.entry.slice(11, 16)} !` : `${day.roundedClock}${review ? ' !' : ''}`;
+          display = day.state !== 'OK' ? day.entry.slice(11, 16) : `${day.roundedClock}${review ? ' !' : ''}`;
           total += day.roundedMinutes;
         } else if (closed.has(column.isoDate) && String(employee?.status).toLowerCase() === 'stc') {
           status = 'STC'; display = 'STC';
@@ -155,7 +158,7 @@ export function buildDailyWeeks(analysis, employees, closedDates = []) {
           const hire = frenchHire ? `${frenchHire[3]}-${frenchHire[2]}-${frenchHire[1]}` : rawHire;
           if (!/^\d{4}-\d{2}-\d{2}$/.test(hire) || hire <= column.isoDate) { status = 'ABS'; display = 'ABS'; }
         }
-        return { ...column, status, display, raw: display, workedMinutes: day?.roundedMinutes || 0, detail: day?.punchesDisplay || '', entry: day?.entry || '', exit: day?.exit || '' };
+        return { ...column, status, display, raw: display, workedMinutes: day?.roundedMinutes || 0, detail: day?.punchesDisplay || '', entry: exitOnly ? '' : day?.entry || '', exit: exitOnly ? day.entry : day?.exit || '' };
       });
       return { ...row, employeeStatus: employee.status, hiredAt: employee.hiredAt, days: cells, totalHours: clock(total), control: cells.some((day) => day.status === 'AVR') ? 'À vérifier' : '' };
     }).sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));

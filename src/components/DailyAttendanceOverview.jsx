@@ -3,6 +3,7 @@ import { formatPointageDate } from '../lib/dailyPointage.js';
 import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
 import factoryPhoto from '../../DSC01462.jpg';
 import AttendanceCharts from './AttendanceCharts';
+import DashboardIcon from './DashboardIcon';
 
 const percent = (count, total) => total ? count / total * 100 : 0;
 const isPresent = (person) => ['POINTAGE', 'AVR'].includes(person.status);
@@ -17,7 +18,7 @@ const serviceTypes = [
 
 export default function DailyAttendanceOverview({ day, history, dates, analysisDate, onDateChange,
   baseEmployees, baseMonthDate, onOpen, target, onTargetChange, onImport,
-  busy, importDisabled, fileName, importedAt, message, translate: t, locale, productionLabels }) {
+  busy, importDisabled, message, translate: t, locale, productionLabels }) {
   const number = (value) => Number(value || 0).toLocaleString(locale);
   const formatPercent = (count, total) => new Intl.NumberFormat(locale, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(percent(count, total) / 100);
   const people = (day?.departments || []).flatMap((group) => group.people);
@@ -77,10 +78,10 @@ export default function DailyAttendanceOverview({ day, history, dates, analysisD
         </div>
       </div>
       <div className="rh-hero__center"><ProductionModTargetGauge presentCount={productionKinds.find((item) => item.key === 'MOD')?.presentCount || 0} target={target} onTargetChange={onTargetChange} locale={locale} targetHint={t('daily.targetHint')} targetLabel={t('daily.targetLabel')} /></div>
-      <div className="rh-toolbar">
-        <label className="rh-import-button"><input type="file" accept=".xlsx,.xls" disabled={busy || importDisabled} onChange={onImport} />{busy ? t('hero.importing') : t('hero.importExcel')}</label>
-        {fileName && <span className="rh-status-pill">{fileName}{importedAt ? ` · ${new Date(importedAt).toLocaleString(locale)}` : ''}</span>}
-      </div>
+    </div>
+    <div className="daily-dashboard__actions">
+      <div><h2>{t('daily.summary', 'Vue d’ensemble')}</h2></div>
+      <label className="rh-import-button"><DashboardIcon type="upload" /><input type="file" accept=".xlsx,.xls" disabled={busy || importDisabled} onChange={onImport} />{busy ? t('hero.importing') : t('hero.importExcel')}</label>
     </div>
     {message && <p className="daily-dashboard__message" role="status">{message}</p>}
     <section className="rh-kpi-grid" aria-label={t('daily.summary')}>

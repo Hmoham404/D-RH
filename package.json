@@ -7,17 +7,23 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test": "node --test src/lib/*.test.js",
+    "test:ui": "playwright test",
     "pointeuses:diagnostic": "node scripts/check-pointeuses.mjs",
     "pointage:generate": "powershell -ExecutionPolicy Bypass -File scripts/generate-classeur1-pointage.ps1"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
     "@supabase/supabase-js": "^2.56.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^4.3.2",
+    "tailwindcss": "^4.3.3",
     "vite": "^5.4.10"
   }
 }

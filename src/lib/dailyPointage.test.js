@@ -195,7 +195,7 @@ test('weekly sheet headers use source month/day order too', async () => {
 
 test('daily accumulation is idempotent and completes an incomplete day', async () => {
   const first = await prepareDailyPointage(file([[4, 'Z', '09/10/2026 07:42']]), employees, null, rules);
-  assert.equal(cell(first, '4', '2026-09-10').display, '07:42 !');
+  assert.equal(cell(first, '4', '2026-09-10').display, '07:42');
   const upload = file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05'], [4, 'Z', '10/10/2026 07:45']]);
   const second = await prepareDailyPointage(upload, employees, first, rules);
   const third = await prepareDailyPointage(upload, employees, JSON.parse(JSON.stringify(second)), rules);

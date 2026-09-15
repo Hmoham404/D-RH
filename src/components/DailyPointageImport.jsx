@@ -16,6 +16,7 @@ export default function DailyPointageImport({ employees, baseEmployees = employe
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedDay, setSelectedDay] = useState('');
   const [today, setToday] = useState(getLocalPointageDate);
   const [detail, setDetail] = useState(null);
@@ -39,14 +40,13 @@ export default function DailyPointageImport({ employees, baseEmployees = employe
   useEffect(() => {
     if (listDetail) listDialogRef.current?.showModal();
   }, [listDetail]);
-  function detailActions(value) {
-    return { onClick: () => setListDetail(value) };
-  }
   const dates = useMemo(() => [...new Set((data?.rawRows || []).map((row) => row.isoDate).filter(Boolean))].sort(), [data]);
   const table = useMemo(() => buildDailyTable(data, employees, dates), [data, employees, dates]);
-  const filteredRows = table.rows.filter((row) => `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase()));
   const dayLabel = formatPointageDate;
   const analysisDate = selectedDay && dates.includes(selectedDay) ? selectedDay : getDefaultPointageDate(dates, today);
+  const filteredRows = table.rows.filter((row) =>
+    `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase())
+    && (statusFilter === 'ALL' || row.days.some((day) => day.isoDate === analysisDate && day.status === statusFilter)));
   const baseMonthDate = useMemo(() => getCurrentMonthDate(), []);
   const attendanceHistory = useMemo(() => buildAttendanceByDay(table), [table]);
   const attendance = useMemo(() => attendanceHistory.filter((day) => day.isoDate === analysisDate), [attendanceHistory, analysisDate]);
@@ -75,6 +75,7 @@ export default function DailyPointageImport({ employees, baseEmployees = employe
       setListDetail(null);
       setSelectedDay('');
       setSearch('');
+      setStatusFilter('ALL');
       const firstDay = info.incomingDates[0];
       setMessage(`Import sauvegardé : ${info.incomingUsable} passages sur ${info.incomingDates.length} journées, du ${dayLabel(firstDay)} au ${dayLabel(info.incomingDates.at(-1))} · ${info.duplicateRows} doublons ignorés · ${info.rejectedRows} lignes rejetées. ${result.message}`);
     } catch (error) { setMessage(`Import non enregistré : ${error.message} Réimportez le fichier après correction.`); }
@@ -84,30 +85,21 @@ export default function DailyPointageImport({ employees, baseEmployees = employe
     <DailyAttendanceOverview day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={setSelectedDay}
       baseEmployees={baseEmployees} baseMonthDate={baseMonthDate} onOpen={setListDetail}
       target={productionModTarget} onTargetChange={onProductionModTargetChange} onImport={importFile}
-      busy={busy || correcting} importDisabled={loading || !employees.length} fileName={data?.fileName} importedAt={snapshot?.generatedAt} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
-    {attendance.length > 0 && <details className="daily-dashboard__departments">
-      <summary>Présence par département</summary>
-      {attendance.map((day) => <article className="rh-card daily-import__setup" key={day.isoDate}>
-        <h3>{dayLabel(day.isoDate)}</h3>
-        <div className="daily-import__department-grid">{day.departments.map((group) => <button type="button" className="daily-import__department daily-import__summary-card" key={group.label} {...detailActions({ title: group.label, date: day.isoDate, people: group.people })} aria-haspopup="dialog">
-          <div><strong>{group.label}</strong><b>{group.percent.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %</b></div>
-          <progress max="100" value={group.percent} aria-label={`Présence ${group.label}`} />
-          <div className="daily-import__metrics"><span><small>Actifs</small><strong>{group.expected}</strong></span><span><small>Présents</small><strong>{group.present}</strong></span><span><small>Absents</small><strong>{group.absent}</strong></span><span><small>Retards</small><strong>{group.late}</strong></span></div>
-          <div className="daily-import__kinds">{group.kinds.map((kind) => <span key={kind.label}><strong>{kind.label}</strong><b>{kind.percent.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} %</b><small>{kind.present}/{kind.expected} présents · {kind.absent} ABS · {kind.late} retards</small></span>)}</div>
-          {(group.review > 0 || group.unknown > 0) && <p>{group.review} à vérifier · {group.unknown} sans pointage</p>}
-        </button>)}</div>
-        {!day.departments.length && <p>Aucun actif attendu dans la base RH pour cette journée.</p>}
-        <div className="daily-import__event-cards">
-          <button type="button" className="daily-import__summary-card daily-import__summary-card--abs" aria-haspopup="dialog" {...detailActions({ title: 'Absents', date: day.isoDate, people: day.absences.map((person) => ({ ...person, status: 'ABS' })) })}>
-            <span>Absents</span><strong>{day.absences.length}</strong>
-          </button>
-          <button type="button" className="daily-import__summary-card daily-import__summary-card--late" aria-haspopup="dialog" {...detailActions({ title: 'Retards après 07:30', date: day.isoDate, people: day.late.map((person) => ({ ...person, status: 'Retard' })) })}>
-            <span>Retards après 07:30</span><strong>{day.late.length}</strong>
-          </button>
-        </div>
-      </article>)}
-    </details>}
-    <article className="rh-card rh-card--table"><div className="rh-card__header rh-card__header--table"><div><h2>Pointage enregistré</h2><p>{table.dayColumns.length} journée(s) · {filteredRows.length} personne(s) · Vert : heures · Orange : à vérifier · Rouge : ABS · Bleu : STC</p></div><div className="rh-table-tools"><input aria-label="Rechercher un employé" placeholder="Nom ou matricule…" value={search} onChange={(e) => setSearch(e.target.value)} /></div></div>
+      busy={busy || correcting} importDisabled={loading || !employees.length} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
+    <article className="rh-card rh-card--table"><div className="rh-card__header rh-card__header--table"><div><h2>Pointage enregistré</h2></div><div className="rh-table-tools">
+      <input aria-label="Rechercher un employé" placeholder="Nom ou matricule…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <label className="daily-import__filter">Statut<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+        <option value="ALL">Tous les statuts</option>
+        <option value="ABS">ABS uniquement</option>
+        <option value="AVR">À vérifier</option>
+        <option value="POINTAGE">Pointages complets</option>
+        <option value="STC">STC uniquement</option>
+        <option value="EMPTY">Sans pointage</option>
+      </select></label>
+      {statusFilter !== 'ALL' && <label className="daily-import__filter">Pour le<select value={analysisDate} onChange={(event) => setSelectedDay(event.target.value)} disabled={!dates.length}>
+        {dates.map((date) => <option key={date} value={date}>{dayLabel(date)}</option>)}
+      </select></label>}
+    </div></div>
       <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>ID Emp.</th><th>Nom</th><th>Département / Service</th><th>Catégorie</th>{table.dayColumns.map((d) => <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => setSelectedDay(d.isoDate)}>{dayLabel(d.isoDate)}</button></th>)}</tr></thead><tbody>{table.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={`${r.fullName}, ${dayLabel(d.isoDate)} : voir l’entrée et la sortie`} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + table.dayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? 'Importez votre fichier pour créer le pointage des personnes de la base RH.' : 'Aucune personne de la base RH ne correspond à cette recherche.'}</td></tr>}</tbody></table></div>
     </article>
     {detail && <dialog ref={dialogRef} className="daily-import__dialog" aria-labelledby="punch-detail-title" onClose={() => setDetail(null)} onCancel={(event) => { if (correcting) event.preventDefault(); }} onClick={(event) => { if (!correcting && event.target === event.currentTarget) dialogRef.current.close(); }}>
@@ -116,7 +108,7 @@ export default function DailyPointageImport({ employees, baseEmployees = employe
         <dl className="daily-import__punches"><div><dt>Entrée</dt><dd>{detail.entry.slice(11) || 'Non disponible'}</dd></div><div><dt>Sortie</dt><dd>{detail.exit.slice(11) || 'Manquante — à vérifier'}</dd></div></dl>
         <p>Heures calculées : <strong>{detail.status === 'POINTAGE' ? detail.display : detail.status === 'ABS' ? 'Absent' : 'À vérifier'}</strong></p>
         <p>Passages du {dayLabel(detail.isoDate)} : {detail.detail.split(' | ').map((value) => value.slice(11)).join(' · ') || 'Aucun'}</p>
-        {['AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} />}
+        {['POINTAGE', 'AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} />}
       </div>
     </dialog>}
     {listDetail && <dialog ref={listDialogRef} className="daily-import__dialog daily-import__dialog--list" aria-labelledby="attendance-detail-title" onClose={() => setListDetail(null)} onClick={(event) => { if (event.target === event.currentTarget) listDialogRef.current.close(); }}>

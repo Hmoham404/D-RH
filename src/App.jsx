@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import DailyPointageImport from './components/DailyPointageImport';
+import DashboardIcon from './components/DashboardIcon';
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './components/AttendanceDashboard';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
 import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
@@ -2956,7 +2957,7 @@ function Sidebar({
   labels,
 }) {
   return (
-    <aside className={`rh-sidebar${sidebarOpen ? ' is-open' : ''}`}>
+    <aside id="rh-navigation" className={`rh-sidebar${sidebarOpen ? ' is-open' : ''}`}>
       <div className="rh-sidebar__brand">
         <img src={mycLogoUrl} alt="MYC Beauty Innovation Tunisia" />
         <div>
@@ -2972,10 +2973,11 @@ function Sidebar({
           <button
             key={item.key}
             className={`rh-sidebar__item${activeSection === item.key ? ' is-active' : ''}`}
+            aria-current={activeSection === item.key ? 'page' : undefined}
             type="button"
             onClick={() => onSelect(item.key)}
           >
-            <span className="rh-sidebar__bullet" />
+            <DashboardIcon type={{ settings: 'grid', dashboard: 'chart', pointage: 'clock', employees: 'people', departments: 'building', reports: 'file', absences: 'calendar' }[item.key]} />
             <span className="rh-sidebar__item-copy">
               <strong>{item.label}</strong>
               <small>{item.note}</small>
@@ -3874,6 +3876,8 @@ export default function App() {
             className={`rh-menu-button${sidebarOpen ? ' is-active' : ''}`}
             type="button"
             aria-label={translate('topbar.menu', 'Menu')}
+            aria-controls="rh-navigation"
+            aria-expanded={sidebarOpen}
             onClick={() => setSidebarOpen((current) => !current)}
           >
             <span />
@@ -3881,7 +3885,7 @@ export default function App() {
             <span />
           </button>
 
-          {isSettingsSection && <div className="pointage-topbar-title"><strong>Pointage &amp; Gestion du Personnel</strong><span>Pilotez la présence, la performance et la productivité</span></div>}
+          <div className="pointage-topbar-title"><strong>{isSettingsSection ? 'Pointage & Gestion du Personnel' : sidebarItems.find((item) => item.key === activeSection)?.label}</strong><span>{isSettingsSection ? 'Pilotez la présence, la performance et la productivité' : sidebarItems.find((item) => item.key === activeSection)?.note}</span></div>
           <div className="rh-topbar__actions">
             <LanguageSwitcher
               language={language}

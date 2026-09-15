@@ -65,76 +65,41 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
     setIsEditing(false);
   }
 
-  const ringSize = '140px';
-  const labelStyle = { fontSize: '0.75rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '2px' };
-  const valueStyle = { fontSize: '2.1rem', color: '#0f172a', fontWeight: '800', lineHeight: '1' };
+  const tones = { green: '#0d9f76', yellow: '#d69620', red: '#e76868' };
+  const ring = (value, label, color, amount = 100) => (
+    <div className="flex min-w-0 flex-col items-center gap-4">
+      <div className="grid size-[84px] shrink-0 place-items-center rounded-full p-[6px] sm:size-[104px]"
+        style={{ background: `conic-gradient(${color} ${amount * 3.6}deg, #edf0f5 0deg)` }}>
+        <div className="flex size-full items-center justify-center rounded-full bg-white">
+          <strong className="text-lg font-extrabold tracking-tight text-ink tabular-nums sm:text-2xl">{value}</strong>
+        </div>
+      </div>
+      <span className="text-center text-[10px] font-semibold text-slate-500 sm:text-xs">{label}</span>
+    </div>
+  );
 
   return (
-    <div className="dashboard-gauges" style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', width: 'auto' }}>
-      
-      {/* Cadre 1 : Objectif (Target) */}
-      <div 
-        className="production-mod-target"
-        style={{ cursor: 'pointer', padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
-        onDoubleClick={() => setIsEditing(true)}
-        role="button"
-        tabIndex={0}
-        aria-label={targetLabel}
-        onKeyDown={(event) => { if (!isEditing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); setIsEditing(true); } }}
-        title={targetHint}
-      >
-        <div className="production-mod-target__ring" style={{ width: ringSize, '--target-color': '#cbd5e1', '--target-angle': '360deg' }}>
-          <div className="production-mod-target__core">
-            <span style={labelStyle}>Objectif</span>
-            {isEditing ? (
-              <input
-                autoFocus
-                aria-label={targetLabel}
-                type="number"
-                min="1"
-                step="1"
-                value={draftTarget}
-                onChange={(event) => setDraftTarget(event.target.value)}
-                onBlur={saveTarget}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') saveTarget();
-                  if (event.key === 'Escape') cancelEdit();
-                }}
-                style={{ fontSize: '1.6rem', width: '80px', height: '44px', textAlign: 'center', border: '2px solid #3b82f6', borderRadius: '12px', background: '#fff' }}
-              />
-            ) : (
-              <strong style={valueStyle}>{safeTarget.toLocaleString(locale)}</strong>
-            )}
-          </div>
-        </div>
+    <div className="dashboard-gauges flex h-full min-h-56 flex-col justify-center gap-6 rounded-2xl border border-slate-200/80 bg-white p-4 shadow-panel sm:p-6">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs font-bold text-ink">{targetLabel}</span>
+        <button type="button" className="rounded-md px-2 py-1 text-[10px] font-semibold text-brand transition-colors hover:bg-blue-50"
+          aria-label={targetHint} onClick={() => setIsEditing(true)}><DashboardIcon type="edit" /></button>
       </div>
-
-      {/* Cadre 2 : MOD Présents */}
-      <div 
-        className="production-mod-target"
-        style={{ padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
-      >
-        <div className={`production-mod-target__ring production-mod-target--${tone}`} style={{ width: ringSize, '--target-angle': '360deg' }}>
-          <div className="production-mod-target__core">
-            <span style={labelStyle}>MOD présents</span>
-            <strong style={valueStyle}>{Number(presentCount || 0).toLocaleString(locale)}</strong>
-          </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="min-w-0" onDoubleClick={() => setIsEditing(true)}>
+          {isEditing ? <form className="flex h-full flex-col items-center justify-center gap-2" onSubmit={(event) => { event.preventDefault(); saveTarget(); }}>
+            <input autoFocus aria-label={targetLabel} type="number" min="1" step="1" required
+              className="w-20 text-center" value={draftTarget} onChange={(event) => setDraftTarget(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Escape') cancelEdit(); }} />
+            <div className="flex gap-2">
+              <button type="submit" aria-label="Enregistrer l’objectif" className="rounded-md bg-brand px-2 py-1 text-xs text-white">✓</button>
+              <button type="button" aria-label="Annuler" onClick={cancelEdit} className="rounded-md bg-slate-100 px-2 py-1 text-xs">×</button>
+            </div>
+          </form> : ring(safeTarget.toLocaleString(locale), 'Objectif', '#346fda')}
         </div>
+        {ring(Number(presentCount || 0).toLocaleString(locale), 'MOD présents', '#0d9f76')}
+        {ring(formatPercent(percent, locale), 'Couverture', tones[tone], clampedPercent)}
       </div>
-
-      {/* Cadre 3 : Pourcentage (Couverture) */}
-      <div 
-        className="production-mod-target"
-        style={{ padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
-      >
-        <div className={`production-mod-target__ring production-mod-target--${tone}`} style={{ width: ringSize, '--target-angle': `${clampedPercent * 3.6}deg` }}>
-          <div className="production-mod-target__core">
-            <span style={labelStyle}>Couverture</span>
-            <strong style={valueStyle}>{formatPercent(percent, locale)}</strong>
-          </div>
-        </div>
-      </div>
-
     </div>
   );
 }

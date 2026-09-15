@@ -41,14 +41,36 @@ test('ABS correction creates a presence, recalculates late arrivals and keeps hi
   assert.equal(next.currentFilePointage.rawRows.some((row) => row.isoDate === '2026-09-14'), false);
   assert.equal(next.manualCorrections[0].before.status, 'ABS');
 });
-test('correction rejects invalid hours, reverse times, unrelated dates and completed attendance', async () => {
+test('correction rejects invalid hours, empty hours, reverse times and unrelated dates', async () => {
   const original = await snapshot([[4, 'Employé A', '09/15/2026 07:09']]);
   const change = { employeeKey: '4', isoDate: '2026-09-15', entry: '07:00', exit: '16:00' };
   await assert.rejects(correctDailyPointage(original, employees, { ...change, entry: '25:00' }), /valides/);
   await assert.rejects(correctDailyPointage(original, employees, { ...change, exit: '06:00' }), /après/);
   await assert.rejects(correctDailyPointage(original, employees, { ...change, isoDate: '2026-09-16' }), /Seuls/);
-  const corrected = await correctDailyPointage(original, employees, change);
-  await assert.rejects(correctDailyPointage(corrected, employees, change), /Seuls/);
+  await assert.rejects(correctDailyPointage(original, employees, { ...change, entry: '', exit: '' }), /au moins/);
+  await assert.rejects(correctDailyPointage(original, employees, { ...change, exit: '07:00' }), /après/);
+});
+test('green attendance can be corrected repeatedly, made odd and completed again', async () => {
+  const original = await snapshot([[4, 'Employé A', '09/15/2026 07:00'], [4, 'Employé A', '09/15/2026 16:00']]);
+  const change = { employeeKey: '4', isoDate: '2026-09-15', entry: '08:00', exit: '17:30' };
+  const revised = await correctDailyPointage(original, employees, change);
+  assert.equal(table(revised).rows[0].days[0].display, '09:30');
+  for (const hours of [{ entry: '08:00', exit: '' }, { entry: '', exit: '17:30' }]) {
+    const partial = JSON.parse(JSON.stringify(await correctDailyPointage(revised, employees, { ...change, ...hours })));
+    const day = table(partial).rows[0].days[0];
+    assert.equal(day.status, 'AVR');
+    assert.equal(day.display, hours.entry || hours.exit);
+    assert.equal(day.workedMinutes, 0);
+    assert.equal(day.entry.slice(11, 16), hours.entry);
+    assert.equal(day.exit.slice(11, 16), hours.exit);
+    assert.equal(partial.currentFilePointage.rawRows.length, 1);
+    const completed = await correctDailyPointage(partial, employees, change);
+    assert.equal(table(completed).rows[0].days[0].status, 'POINTAGE');
+    assert.equal(table(completed).rows[0].days[0].display, '09:30');
+    assert.equal(completed.rawRows.length, 2);
+    assert.equal(completed.manualCorrections.length, 3);
+    assert.equal(completed.manualCorrections[1].before.status, 'POINTAGE');
+  }
 });
 test('an empty or incorrect RH code is rejected', async () => {
   assert.equal(await verifyPointageCorrectionCode(''), false);

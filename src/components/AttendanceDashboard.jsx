@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import DashboardIcon from './DashboardIcon';
 
 const DEFAULT_PRODUCTION_MOD_TARGET = 65;
 const formatPercent = (value, locale) => locale
@@ -21,7 +22,7 @@ export function KpiCard({ tone, label, value, note, tag = '', isActive = false, 
       type={onClick ? 'button' : undefined}
       onClick={onClick}
     >
-      <div className={`rh-kpi-card__icon rh-kpi-card__icon--${tone}`} />
+      <div className={`rh-kpi-card__icon rh-kpi-card__icon--${tone}`}><DashboardIcon type={tone === 'red' ? 'clock' : tone === 'blue' ? 'file' : tone === 'slate' ? 'recruit' : 'people'} /></div>
       <div className={`rh-kpi-card__body${tag ? ' has-tag' : ''}${isPercentNote ? ' has-percent' : ''}`}>
         {tag ? <small className="rh-kpi-card__tag">{tag}</small> : null}
         <span className={`rh-kpi-card__label${isCompactLabel ? ' is-compact' : ''}`}>{label}</span>
@@ -69,13 +70,17 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
   const valueStyle = { fontSize: '2.1rem', color: '#0f172a', fontWeight: '800', lineHeight: '1' };
 
   return (
-    <div style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', width: 'auto' }}>
+    <div className="dashboard-gauges" style={{ display: 'flex', gap: '32px', alignItems: 'center', justifyContent: 'center', width: 'auto' }}>
       
       {/* Cadre 1 : Objectif (Target) */}
       <div 
         className="production-mod-target"
         style={{ cursor: 'pointer', padding: '24px 32px', borderRadius: '32px', background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(244, 247, 252, 0.92))', boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)' }}
         onDoubleClick={() => setIsEditing(true)}
+        role="button"
+        tabIndex={0}
+        aria-label={targetLabel}
+        onKeyDown={(event) => { if (!isEditing && ['Enter', ' '].includes(event.key)) { event.preventDefault(); setIsEditing(true); } }}
         title={targetHint}
       >
         <div className="production-mod-target__ring" style={{ width: ringSize, '--target-color': '#cbd5e1', '--target-angle': '360deg' }}>
@@ -111,7 +116,7 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
       >
         <div className={`production-mod-target__ring production-mod-target--${tone}`} style={{ width: ringSize, '--target-angle': '360deg' }}>
           <div className="production-mod-target__core">
-            <span style={labelStyle}>Présents</span>
+            <span style={labelStyle}>MOD présents</span>
             <strong style={valueStyle}>{Number(presentCount || 0).toLocaleString(locale)}</strong>
           </div>
         </div>
@@ -142,12 +147,13 @@ export function ProductionFocusSection({
   onOpenModal,
   labels,
   locale,
+  dashboardCharts,
 }) {
   const number = (value) => locale ? Number(value || 0).toLocaleString(locale) : value;
   const productionPresenceKinds = productionKindBreakdown.filter((item) => ['MOI', 'MOD'].includes(item.key));
 
   return (
-    <section className="rh-section-block">
+    <section className={`rh-section-block${dashboardCharts ? ' rh-section-block--dashboard' : ''}`}>
       <div className="rh-section-block__header">
         <div>
           <p className="rh-eyebrow">{labels.focus}</p>
@@ -270,6 +276,7 @@ export function ProductionFocusSection({
           </div>
         </div>
       </div>
+      {dashboardCharts}
     </section>
   );
 }

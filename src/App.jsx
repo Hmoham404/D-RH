@@ -3850,7 +3850,7 @@ export default function App() {
   }
 
   return (
-    <main className={`rh-shell${sidebarOpen ? ' is-sidebar-open' : ''}`}>
+    <main className={`rh-shell${sidebarOpen ? ' is-sidebar-open' : ''}${isSettingsSection ? ' rh-shell--pointage' : ''}`}>
       <div
         className={`rh-overlay${sidebarOpen ? ' is-visible' : ''}`}
         onClick={() => setSidebarOpen(false)}
@@ -3881,6 +3881,7 @@ export default function App() {
             <span />
           </button>
 
+          {isSettingsSection && <div className="pointage-topbar-title"><strong>Pointage &amp; Gestion du Personnel</strong><span>Pilotez la présence, la performance et la productivité</span></div>}
           <div className="rh-topbar__actions">
             <LanguageSwitcher
               language={language}

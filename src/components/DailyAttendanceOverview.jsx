@@ -1,6 +1,8 @@
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './AttendanceDashboard';
 import { formatPointageDate } from '../lib/dailyPointage.js';
 import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
+import factoryPhoto from '../../DSC01462.jpg';
+import AttendanceCharts from './AttendanceCharts';
 
 const percent = (count, total) => total ? count / total * 100 : 0;
 const isPresent = (person) => ['POINTAGE', 'AVR'].includes(person.status);
@@ -13,7 +15,7 @@ const serviceTypes = [
   { key: 'autres', label: 'Autres', tone: 'slate' },
 ];
 
-export default function DailyAttendanceOverview({ day, dates, analysisDate, onDateChange,
+export default function DailyAttendanceOverview({ day, history, dates, analysisDate, onDateChange,
   baseEmployees, baseMonthDate, onOpen, target, onTargetChange, onImport,
   busy, importDisabled, fileName, importedAt, message, translate: t, locale, productionLabels }) {
   const number = (value) => Number(value || 0).toLocaleString(locale);
@@ -62,9 +64,10 @@ export default function DailyAttendanceOverview({ day, dates, analysisDate, onDa
 
   return <>
     <div className="rh-hero daily-dashboard__header">
-      <div>
-        <p className="rh-eyebrow">{t('hero.eyebrow')}</p>
+      <div className="daily-dashboard__welcome" style={{ '--factory-photo': `url("${factoryPhoto}")` }}>
+        <p className="rh-eyebrow">{t('daily.greeting', 'Bonjour,')}</p>
         <h1>ZK Dashboard</h1>
+        <p className="daily-dashboard__subtitle">{t('daily.subtitle', 'Suivi en temps réel de la présence du personnel')}</p>
         <div className="daily-dashboard__date">
           <label htmlFor="daily-analysis-date">{t('daily.analysisDate')}</label>
           <select id="daily-analysis-date" value={analysisDate || ''} onChange={(event) => onDateChange(event.target.value)} disabled={!dates.length}>
@@ -89,11 +92,13 @@ export default function DailyAttendanceOverview({ day, dates, analysisDate, onDa
       <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={formatPercent(stc.length, people.length)} onClick={() => open(t('kpi.stcMonth'), stc)} />
     </section>
     <ProductionFocusSection
+      dashboardCharts={<AttendanceCharts history={history} analysisDate={analysisDate} absent={absent.length} late={late.length} stc={stc.length} locale={locale} translate={t} />}
       productionMetrics={{ total: production.length, present: productionPresent.length, absent: productionAbsent.length,
         presentRate: percent(productionPresent.length, production.length), absentRate: percent(productionAbsent.length, production.length),
         newEmployees: productionRecruits.length, stc: productionStc.length, stcRate: percent(productionStc.length, production.length), periodLabel: monthLabel }}
       productionServiceBreakdown={productionServices} productionKindBreakdown={productionKinds}
       onOpenModal={(key) => onOpen({ ...lists[key], date: analysisDate })} labels={productionLabels} locale={locale}
     />
+    <footer className="daily-dashboard__footer"><span>“Excellence People. Innovative Beauty.”</span><i /><span>MYC Beauty Innovation Tunisia</span></footer>
   </>;
 }

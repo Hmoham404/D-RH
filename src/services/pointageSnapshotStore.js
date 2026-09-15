@@ -56,6 +56,7 @@ function normalizeSnapshot(snapshot) {
     calculationRules: snapshot.calculationRules || null,
     importDiagnostics: snapshot.importDiagnostics || null,
     currentFilePointage: snapshot.currentFilePointage || null,
+    manualCorrections: Array.isArray(snapshot.manualCorrections) ? snapshot.manualCorrections : [],
     dayRows: Array.isArray(snapshot.dayRows) ? snapshot.dayRows : [],
     dailySummaries: Array.isArray(snapshot.dailySummaries) ? snapshot.dailySummaries : [],
     sheetSummaries: Array.isArray(snapshot.sheetSummaries) ? snapshot.sheetSummaries : [],

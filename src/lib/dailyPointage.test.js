@@ -67,7 +67,8 @@ test('latest file view excludes history and exposes entry and exit from that fil
   assert.equal(table.rows[0].days[0].entry, '10/09/2026 07:42:00');
   assert.equal(table.rows[0].days[0].exit, '10/09/2026 18:05:00');
   assert.equal(current.rawRows.length, 2);
-  assert.equal(next.rawRows.length, 5);
+  assert.equal(next.rawRows.length, 3);
+  assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-04-09', '2026-09-10']);
   assert.equal(getCurrentFilePointage({ rawRows: old.rawRows }), null);
 });
 
@@ -205,6 +206,26 @@ test('daily accumulation is idempotent and completes an incomplete day', async (
   assert.deepEqual(third.weeklySheets, second.weeklySheets);
 });
 
+test('reimporting an existing date replaces that date and keeps other saved dates', async () => {
+  const first = await prepareDailyPointage(file([
+    [4, 'Z', '09/10/2026 07:42'],
+    [4, 'Z', '09/10/2026 18:05'],
+    [4, 'Z', '09/11/2026 07:45'],
+    [4, 'Z', '09/11/2026 17:45'],
+  ]), employees, null, rules);
+  const second = await prepareDailyPointage(file([
+    [4, 'Z', '09/11/2026 08:10'],
+    [4, 'Z', '09/11/2026 18:00'],
+    [4, 'Z', '09/12/2026 07:50'],
+  ]), employees, first, rules);
+
+  assert.equal(cell(second, '4', '2026-09-10').display, '10:23');
+  assert.equal(cell(second, '4', '2026-09-11').display, '09:50');
+  assert.equal(cell(second, '4', '2026-09-12').display, '07:50');
+  assert.deepEqual(second.rawRows.filter((row) => row.isoDate === '2026-09-11').map((row) => row.pointageAt.slice(11, 16)), ['08:10', '18:00']);
+  assert.equal(second.rawRows.length, 5);
+});
+
 test('optional pause and rounding apply, open days do not imply absence', async () => {
   const result = await prepareDailyPointage(file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05']]), employees, null, { ...rules, breakMinutes: 30, roundingMinutes: 30, closeDays: false });
   assert.equal(cell(result, '4', '2026-09-10').display, '09:30');
@@ -296,7 +317,7 @@ test('stored 1109 mdy snapshots repair coherent but inverted dates and accumulat
   assert.deepEqual(await normalizeSavedPointageSnapshot(restored, employees), restored);
   const next = await prepareDailyPointage(file([[4, 'Z', '09/11/2026 18:00']]), employees, previous, rules);
   assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-09-10', '2026-09-11']);
-  assert.equal(cell(next, '4', '2026-09-11').display, '10:00');
+  assert.equal(cell(next, '4', '2026-09-11').display, '18:00');
   assert.deepEqual(previous, JSON.parse(JSON.stringify({ ...original, dateNormalizationVersion: undefined,
     fileName: '1109.xlsx', currentFilePointage: { ...original.currentFilePointage, fileName: '1109.xlsx', dateNormalizationVersion: undefined } })));
 });

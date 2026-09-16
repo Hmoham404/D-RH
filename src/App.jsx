@@ -3920,7 +3920,7 @@ export default function App() {
         </header>
 
         <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
-          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
+          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
           {isEmployeeSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">

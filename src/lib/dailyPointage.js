@@ -187,17 +187,18 @@ export async function prepareDailyPointage(file, employees, previous, rules) {
   const previousFile = previous?.currentFilePointage;
   const correctedFile = getCurrentFilePointage(previous);
   const historyDateMap = new Map((previousFile?.rawRows || []).map((row, index) => [row.isoDate, correctedFile?.rawRows[index]?.isoDate || row.isoDate]));
+  const fileAnalysis = await analyzePointageFile(file, employees, { ...rules, allSourceSheets: true, deduplicate: true });
+  const newDates = fileAnalysis.importDiagnostics.incomingDates;
+  const newDateSet = new Set(newDates);
   const previousRows = (previous?.rawRows || []).map((row) => {
     const corrected = historyDateMap.get(row.isoDate);
     return corrected && corrected !== row.isoDate
       ? { ...row, isoDate: corrected, pointageAt: `${corrected}${row.pointageAt.slice(10)}` }
       : row;
-  });
-  const fileAnalysis = await analyzePointageFile(file, employees, { ...rules, allSourceSheets: true, deduplicate: true });
+  }).filter((row) => !newDateSet.has(row.isoDate));
   const analysis = await analyzePointageFile(file, employees, {
     ...rules, allSourceSheets: true, deduplicate: true, previousRows,
   });
-  const newDates = analysis.importDiagnostics.incomingDates;
   const closedDates = [...new Set([...(previous?.closedDates || []).map((date) => historyDateMap.get(date) || date), ...(rules.closeDays ? newDates : [])])];
   const currentFilePointage = {
     dateNormalizationVersion: 3,

@@ -1,6 +1,6 @@
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './AttendanceDashboard';
 import { formatPointageDate } from '../lib/dailyPointage.js';
-import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
+import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
 import factoryPhoto from '../../DSC01462.jpg';
 import AttendanceCharts from './AttendanceCharts';
 import DashboardIcon from './DashboardIcon';
@@ -8,6 +8,7 @@ import DashboardIcon from './DashboardIcon';
 const percent = (count, total) => total ? count / total * 100 : 0;
 const isPresent = (person) => ['POINTAGE', 'AVR'].includes(person.status);
 const isProduction = (person) => /^production/i.test(person.department || '');
+const getPersonKey = (person) => String(person.employeeKey || person.zk || person.id || person.finalCode || person.saber || person.fullName || '').trim();
 const serviceTypes = [
   { key: 'injection', label: 'Injection', tone: 'blue' },
   { key: 'metallisation', label: 'Métallisation', tone: 'orange' },
@@ -23,13 +24,17 @@ export default function DailyAttendanceOverview({ day, history, dates, analysisD
   const formatPercent = (count, total) => new Intl.NumberFormat(locale, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(percent(count, total) / 100);
   const people = (day?.departments || []).flatMap((group) => group.people);
   const present = people.filter(isPresent);
-  const absent = people.filter((person) => person.status === 'ABS');
   const late = people.filter((person) => person.delay > 0);
-  const production = people.filter(isProduction);
-  const productionPresent = production.filter(isPresent);
-  const productionAbsent = production.filter((person) => person.status === 'ABS');
   const toPerson = (employee) => ({ ...employee, employeeKey: employee.zk || employee.id,
     id: employee.zk || employee.id, status: employee.status });
+  const activeBase = baseEmployees.filter((employee) => isEmployeeActiveInMonth(employee, baseMonthDate)).map(toPerson);
+  const presentKeys = new Set(present.map(getPersonKey).filter(Boolean));
+  const peopleByKey = new Map(people.map((person) => [getPersonKey(person), person]));
+  const workforce = activeBase.length ? activeBase.map((employee) => ({ ...employee, ...(peopleByKey.get(getPersonKey(employee)) || {}) })) : people;
+  const absent = workforce.filter((person) => !presentKeys.has(getPersonKey(person))).map((person) => ({ ...person, status: 'ABS' }));
+  const production = workforce.filter(isProduction);
+  const productionPresent = present.filter(isProduction);
+  const productionAbsent = production.filter((person) => !presentKeys.has(getPersonKey(person))).map((person) => ({ ...person, status: 'ABS' }));
   const recruits = baseEmployees.filter((employee) => isEmployeeHiredInMonth(employee, baseMonthDate)).map(toPerson);
   const stc = baseEmployees.filter((employee) => isEmployeeStcInMonth(employee, baseMonthDate)).map(toPerson);
   const productionRecruits = recruits.filter(isProduction);
@@ -85,12 +90,12 @@ export default function DailyAttendanceOverview({ day, history, dates, analysisD
     </div>
     {message && <p className="daily-dashboard__message" role="status">{message}</p>}
     <section className="rh-kpi-grid" aria-label={t('daily.summary')}>
-      <KpiCard tone="indigo" label={t('kpi.workforceGlobal')} value={number(people.length)} note={monthLabel} onClick={() => open(t('kpi.workforceGlobal'), people)} />
-      <KpiCard tone="green" label={t('kpi.presents')} value={number(present.length)} note={formatPercent(present.length, people.length)} onClick={() => open(t('kpi.presents'), present)} />
-      <KpiCard tone="orange" label={t('kpi.absents')} value={number(absent.length)} note={formatPercent(absent.length, people.length)} onClick={() => open(t('kpi.absents'), absent)} />
+      <KpiCard tone="indigo" label={t('kpi.workforceGlobal')} value={number(workforce.length)} note={monthLabel} onClick={() => open(t('kpi.workforceGlobal'), workforce)} />
+      <KpiCard tone="green" label={t('kpi.presents')} value={number(present.length)} note={formatPercent(present.length, workforce.length)} onClick={() => open(t('kpi.presents'), present)} />
+      <KpiCard tone="orange" label={t('kpi.absents')} value={number(absent.length)} note={formatPercent(absent.length, workforce.length)} onClick={() => open(t('kpi.absents'), absent)} />
       <KpiCard tone="red" label={t('kpi.late')} value={number(late.length)} note={formatPercent(late.length, present.length)} onClick={() => open(t('kpi.late'), late)} />
       <KpiCard tone="slate" label={t('kpi.recruitments')} value={number(recruits.length)} note={monthLabel} onClick={() => open(t('kpi.recruitments'), recruits)} />
-      <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={formatPercent(stc.length, people.length)} onClick={() => open(t('kpi.stcMonth'), stc)} />
+      <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={formatPercent(stc.length, workforce.length)} onClick={() => open(t('kpi.stcMonth'), stc)} />
     </section>
     <ProductionFocusSection
       dashboardCharts={<AttendanceCharts history={history} analysisDate={analysisDate} absent={absent.length} late={late.length} stc={stc.length} locale={locale} translate={t} />}

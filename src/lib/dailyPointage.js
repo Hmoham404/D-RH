@@ -8,6 +8,11 @@ const clock = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}
 const iso = (date) => date.toISOString().slice(0, 10);
 const localIso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
+function isPrestationEmployee(employee) {
+  return [employee?.contract, employee?.payType, employee?.employmentType]
+    .some((value) => /^PRESTAT/i.test(String(value || '').trim()));
+}
+
 function parseMdyDateTime(value) {
   const match = String(value || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (!match) return null;
@@ -126,7 +131,8 @@ export function buildDailyWeeks(analysis, employees, closedDates = []) {
   }))];
   const roster = new Map(employees.filter((e) => employeeKey(e)).map((e) => [employeeKey(e), {
     employeeKey: employeeKey(e), id: code(e.zk || e.id || e.finalCode), fullName: e.fullName,
-    department: e.department, kind: e.kind, service: e.service, employee: e,
+    department: e.department, kind: e.kind, service: e.service, contract: e.contract,
+    payType: e.payType, employmentType: e.employmentType, employee: e,
   }]));
   const days = new Map(analysis.dayRows.map((row) => [`${row.employeeKey}|${row.isoDate}`, row]));
   const corrections = new Map((analysis.manualCorrections || []).map((item) => [`${item.employeeKey}|${item.isoDate}`, item.after]));
@@ -152,6 +158,8 @@ export function buildDailyWeeks(analysis, employees, closedDates = []) {
           total += day.roundedMinutes;
         } else if (closed.has(column.isoDate) && String(employee?.status).toLowerCase() === 'stc') {
           status = 'STC'; display = 'STC';
+        } else if (closed.has(column.isoDate) && String(employee?.status).toLowerCase() === 'actif' && isPrestationEmployee(employee)) {
+          status = 'PRESTATION'; display = 'PREST.';
         } else if (closed.has(column.isoDate) && String(employee?.status).toLowerCase() === 'actif') {
           const rawHire = String(employee?.hiredAt || '');
           const frenchHire = rawHire.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -261,6 +269,7 @@ export function buildAttendanceByDay(table) {
     table.rows.forEach((row) => {
       const day = row.days.find((item) => item.isoDate === isoDate);
       if (!day) return;
+      if (day.status === 'PRESTATION') return;
       const service = String(row.service || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
       const department = String(row.department || '').trim();
       const production = /PRODUCTION/i.test(department);

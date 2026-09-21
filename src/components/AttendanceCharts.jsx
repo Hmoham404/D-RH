@@ -1,6 +1,55 @@
 import { useId, useState } from 'react';
 import DashboardIcon from './DashboardIcon';
 
+export function ModProductionTrend({ history = [], analysisDate, locale, compact = false }) {
+  const [range, setRange] = useState(7);
+  const gradientId = useId().replace(/:/g, '');
+  const accent = compact ? '#2187fa' : '#0d9f76';
+  const end = analysisDate ? new Date(`${analysisDate}T12:00:00Z`) : null;
+  const points = end ? Array.from({ length: range }, (_, index) => {
+    const date = new Date(end);
+    date.setUTCDate(date.getUTCDate() - range + index + 1);
+    const isoDate = date.toISOString().slice(0, 10);
+    const day = history.find((item) => item.isoDate === isoDate);
+    const mod = (day?.departments || [])
+      .filter((group) => /^production/i.test(group.label || ''))
+      .flatMap((group) => group.kinds || [])
+      .filter((kind) => String(kind.label || '').toUpperCase() === 'MOD')
+      .reduce((total, kind) => ({ expected: total.expected + kind.expected, present: total.present + kind.present }), { expected: 0, present: 0 });
+    return { isoDate, expected: mod.expected, present: mod.present, value: mod.expected ? mod.present / mod.expected * 100 : null,
+      label: date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit', timeZone: 'UTC' }) };
+  }) : [];
+  const x = (index) => 48 + index * 492 / (range - 1);
+  const y = (value) => 112 - value * 0.86;
+  const segments = [];
+  points.forEach((point, index) => {
+    if (point.value === null) return;
+    if (index === 0 || points[index - 1].value === null) segments.push([]);
+    segments.at(-1).push([x(index), y(point.value)]);
+  });
+  const availablePoints = points.filter((point) => point.value !== null);
+  const latest = availablePoints.at(-1);
+  const previous = availablePoints.at(-2);
+  const change = latest && previous ? Math.round(latest.value - previous.value) : null;
+
+  return <article className={`attendance-chart daily-dashboard__mod-trend${compact ? ' is-compact' : ''}`}>
+    <header className="daily-dashboard__mod-header"><div><span>Production &middot; MOD</span><h3><DashboardIcon type="clock" />&Eacute;volution de la pr&eacute;sence</h3></div><select aria-label="Periode du graphique MOD Production" value={range} onChange={(event) => setRange(Number(event.target.value))}><option value={7}>7 jours</option><option value={14}>14 jours</option></select></header>
+    <div className="daily-dashboard__mod-summary">
+      <div><span>Taux du jour</span><strong>{latest ? `${Math.round(latest.value)}%` : '-'}</strong></div>
+      <div><span>Pr&eacute;sents</span><strong>{latest?.present ?? '-'}</strong></div>
+      <div><span>Attendus</span><strong>{latest?.expected ?? '-'}</strong></div>
+      <div className={change === null ? '' : change >= 0 ? 'is-positive' : 'is-negative'}><span>Variation</span><strong>{change === null ? '-' : `${change > 0 ? '+' : ''}${change} pts`}</strong></div>
+    </div>
+    {points.some((point) => point.value !== null) ? <svg viewBox="0 0 570 145" role="img" aria-label={points.map((point) => `${point.label}: ${point.value === null ? 'sans donnees' : `${point.value.toFixed(1)} %`}`).join(', ')}>
+      <defs><linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={accent} stopOpacity=".35" /><stop offset="100%" stopColor={accent} stopOpacity=".03" /></linearGradient></defs>
+      {[0, 25, 50, 75, 100].map((value) => <g key={value}><line x1="40" x2="550" y1={y(value)} y2={y(value)} stroke="#e9eff6" /><text x="32" y={y(value) + 4} textAnchor="end">{value}%</text></g>)}
+      {segments.map((segment, index) => <g key={index}><path d={`M${segment[0][0]},112 L${segment.map((pair) => pair.join(',')).join(' L')} L${segment.at(-1)[0]},112 Z`} fill={`url(#${gradientId})`} /><polyline points={segment.map((pair) => pair.join(',')).join(' ')} fill="none" stroke={accent} strokeWidth="2.5" /></g>)}
+      {points.map((point, index) => <g key={point.isoDate}>{point.value !== null && <><circle cx={x(index)} cy={y(point.value)} r="3.7" fill={accent} stroke="white" /><text className="attendance-chart__value" x={x(index)} y={y(point.value) - 10} textAnchor="middle">{Math.round(point.value)}%</text></>}<text x={x(index)} y="135" textAnchor="middle">{range === 7 || index % 2 === 0 ? point.label : ''}</text></g>)}
+    </svg> : <p className="attendance-chart__empty">Importez un pointage pour afficher la courbe MOD Production.</p>}
+    {points.some((point) => point.value === null) && <small>Les jours sans import restent volontairement vides.</small>}
+  </article>;
+}
+
 export default function AttendanceCharts({ history = [], analysisDate, absent, late, stc, locale, translate: t }) {
   const [range, setRange] = useState(7);
   const gradientId = useId().replace(/:/g, '');

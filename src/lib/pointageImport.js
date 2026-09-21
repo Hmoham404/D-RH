@@ -47,22 +47,25 @@ function buildEmployeeKey(employee) {
 
 function buildEmployeeIndex(employees) {
   const byCode = new Map();
+  const byCodeField = {
+    zk: new Map(),
+    id: new Map(),
+    finalCode: new Map(),
+    saber: new Map(),
+  };
   const byName = new Map();
 
+  const addCode = (index, code, employee) => {
+    if (!code) return;
+    if (!index.has(code)) index.set(code, []);
+    if (!index.get(code).includes(employee)) index.get(code).push(employee);
+  };
+
   employees.forEach((employee) => {
-    const codes = [
-      normalizeCode(employee.id),
-      normalizeCode(employee.zk),
-      normalizeCode(employee.finalCode),
-      normalizeCode(employee.saber),
-    ].filter(Boolean);
-
-    codes.forEach((code) => {
-      if (!byCode.has(code)) {
-        byCode.set(code, []);
-      }
-
-      if (!byCode.get(code).includes(employee)) byCode.get(code).push(employee);
+    Object.keys(byCodeField).forEach((field) => {
+      const employeeCode = normalizeCode(employee[field]);
+      addCode(byCodeField[field], employeeCode, employee);
+      addCode(byCode, employeeCode, employee);
     });
 
     const nameKey = normalizeName(employee.fullName);
@@ -75,7 +78,7 @@ function buildEmployeeIndex(employees) {
     }
   });
 
-  return { byCode, byName };
+  return { byCode, byCodeField, byName };
 }
 
 function excelSerialToDate(value) {
@@ -470,7 +473,14 @@ function getStatusLabel(matchState, matchMethod) {
 function matchEmployee(sourceId, sourceName, employeeIndex) {
   const normalizedCode = normalizeCode(sourceId);
   const normalizedName = normalizeName(sourceName);
-  const codeCandidates = normalizedCode ? employeeIndex.byCode.get(normalizedCode) || [] : [];
+  const prioritizedCodeCandidates = normalizedCode
+    ? ['zk', 'id', 'finalCode', 'saber']
+      .map((field) => employeeIndex.byCodeField[field].get(normalizedCode) || [])
+      .find((candidates) => candidates.length) || []
+    : [];
+  const codeCandidates = prioritizedCodeCandidates.length
+    ? prioritizedCodeCandidates
+    : normalizedCode ? employeeIndex.byCode.get(normalizedCode) || [] : [];
 
   if (codeCandidates.length === 1) {
     return {
@@ -497,6 +507,14 @@ function matchEmployee(sourceId, sourceName, employeeIndex) {
       employee: exactNameCandidates[0] || codeCandidates[0],
       matchState: 'review',
       matchMethod: 'Doublon code',
+    };
+  }
+
+  if (normalizedCode) {
+    return {
+      employee: null,
+      matchState: 'unmatched',
+      matchMethod: 'Matricule introuvable',
     };
   }
 

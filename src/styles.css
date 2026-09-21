@@ -9,7 +9,7 @@
 }
 
 @layer base {
-  body { @apply m-0 bg-canvas font-sans text-sm text-slate-700 antialiased; }
+  body { @apply m-0 bg-canvas font-sans text-base text-slate-700 antialiased; }
   h1, h2, h3, h4 { @apply font-bold tracking-tight text-ink; }
   h1 { @apply text-3xl leading-tight; }
   h2 { @apply text-lg; }
@@ -28,8 +28,8 @@
 
 @layer components {
   /* Application shell shared by every page. */
-  .rh-shell { @apply min-h-dvh lg:grid lg:grid-cols-[176px_minmax(0,1fr)]; }
-  .rh-sidebar { @apply fixed inset-y-0 left-0 z-40 flex w-[176px] -translate-x-full flex-col gap-5 overflow-y-auto bg-ink px-2 py-4 text-white transition-transform duration-200 lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0; }
+  .rh-shell { @apply min-h-dvh lg:grid lg:grid-cols-[208px_minmax(0,1fr)]; }
+  .rh-sidebar { @apply fixed inset-y-0 left-0 z-40 flex w-52 -translate-x-full flex-col gap-5 overflow-y-auto bg-ink px-2.5 py-4 text-white transition-transform duration-200 lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0; }
   .rh-sidebar.is-open { @apply translate-x-0; }
   .rh-sidebar__brand { @apply grid justify-items-center gap-1 border-b border-white/10 pb-4; }
   .rh-sidebar__brand img { @apply h-auto w-32 object-contain; }
@@ -37,18 +37,20 @@
   .rh-sidebar__brand span { @apply text-[9px] tracking-wide text-slate-300; }
   .rh-sidebar__label { @apply hidden; }
   .rh-sidebar__nav { @apply grid gap-1; }
-  .rh-sidebar__item { @apply flex w-full items-center gap-3 rounded-md px-2.5 py-2.5 text-start text-slate-300 transition-colors hover:bg-white/5 hover:text-white; }
+  .rh-sidebar__item { @apply flex min-h-12 w-full items-center gap-3 rounded-md px-3 py-3 text-start text-slate-200 transition-colors hover:bg-white/5 hover:text-white; }
   .rh-sidebar__item.is-active { @apply bg-blue-500/25 text-white ring-1 ring-blue-300/10; }
   .rh-sidebar__item.is-active svg { @apply text-blue-300; }
-  .rh-sidebar__item > svg { @apply size-4 shrink-0; }
+  .rh-sidebar__item > svg { @apply size-5 shrink-0; }
   .rh-sidebar__item-copy { @apply grid min-w-0 gap-1; }
-  .rh-sidebar__item-copy strong { @apply text-[11px] font-semibold; }
+  .rh-sidebar__item-copy strong { @apply text-[13px] font-bold; }
   .rh-sidebar__item-copy small { @apply hidden; }
+  .rh-sidebar__item.is-locked { @apply cursor-not-allowed text-slate-500 opacity-60 hover:bg-transparent hover:text-slate-500; }
+  .rh-sidebar__item.is-locked > svg:last-child { @apply ms-auto size-3.5 text-slate-500; }
   .rh-sidebar__footer { @apply mt-auto grid gap-4 border-t border-white/10 pt-5; }
-  .rh-sidebar__period { @apply grid gap-1.5 px-3 text-[11px]; }
+  .rh-sidebar__period { @apply grid gap-1.5 px-3 text-xs; }
   .rh-sidebar__period > span { @apply text-slate-500; }
   .rh-sidebar__period strong { @apply font-medium text-slate-300; }
-  .rh-sidebar__period p { @apply text-[10px] text-slate-500; }
+  .rh-sidebar__period p { @apply text-[11px] text-slate-500; }
   .rh-overlay { @apply pointer-events-none fixed inset-0 z-30 bg-ink/50 opacity-0 backdrop-blur-sm transition-opacity lg:hidden; }
   .rh-overlay.is-visible { @apply pointer-events-auto opacity-100; }
   .rh-main { @apply min-w-0; }
@@ -56,8 +58,8 @@
   .rh-menu-button { @apply grid size-10 shrink-0 content-center justify-items-center gap-1 rounded-lg border border-slate-200 bg-white lg:hidden; }
   .rh-menu-button span { @apply h-0.5 w-4 rounded bg-ink; }
   .pointage-topbar-title { @apply grid flex-1 gap-1; }
-  .pointage-topbar-title strong { @apply text-sm font-bold tracking-tight text-ink md:text-base; }
-  .pointage-topbar-title span { @apply hidden text-[11px] text-slate-500 sm:block; }
+  .pointage-topbar-title strong { @apply text-base font-extrabold tracking-tight text-ink md:text-lg; }
+  .pointage-topbar-title span { @apply hidden text-xs text-slate-500 sm:block; }
   .rh-topbar__actions { @apply ms-auto flex flex-wrap items-center gap-4; }
   .rh-language-switcher__label, .rh-language-switcher__copy small { @apply hidden; }
   .rh-language-switcher__list { @apply flex items-center gap-0.5 rounded-lg border border-slate-200 bg-slate-50 p-1; }
@@ -86,9 +88,9 @@
   .rh-card__header p, .rh-base-surface__hero p, .admin-workspace__hero p, .admin-table-card__header p { @apply mt-1 text-xs text-slate-500; }
   .rh-card--table { @apply p-0; }
   .rh-card--table .rh-card__header { @apply m-0 p-5; }
-  .rh-eyebrow { @apply text-[10px] font-bold uppercase tracking-[.16em] text-slate-500; }
+  .rh-eyebrow { @apply text-xs font-bold uppercase tracking-[.16em] text-slate-500; }
   .rh-subcopy { @apply mt-3 max-w-xl text-sm text-slate-500; }
-  .rh-import-button, .primary-button { @apply relative inline-flex min-h-10 items-center justify-center gap-2 overflow-hidden rounded-lg bg-brand px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-blue-700; }
+  .rh-import-button, .primary-button { @apply relative inline-flex min-h-10 items-center justify-center gap-2 overflow-hidden rounded-lg bg-brand px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-blue-700; }
   .rh-import-button:has(input:disabled) { @apply cursor-not-allowed opacity-50; }
   .rh-import-button input, .admin-file-button input { @apply absolute inset-0 h-full w-full cursor-pointer opacity-0; }
   .rh-import-button:focus-within, .admin-file-button:focus-within { @apply outline-2 outline-offset-4 outline-brand; }
@@ -101,6 +103,7 @@
   .rh-status-pill, .rh-panel-pill { @apply inline-flex items-center rounded-full bg-slate-100 px-3 py-1.5 text-[11px] font-medium text-slate-600; }
   .rh-cell-badge, .rh-panel-badge { @apply inline-flex min-w-16 items-center justify-center whitespace-nowrap rounded-md px-2.5 py-1.5 text-xs font-bold tabular-nums; }
   .rh-cell-badge--pointage, .rh-cell-badge--ok, .rh-panel-badge--green { @apply bg-emerald-50 text-emerald-700; }
+  .rh-cell-badge--prestation { @apply bg-cyan-50 text-cyan-700; }
   .rh-cell-badge--avr, .rh-panel-badge--orange { @apply bg-amber-50 text-amber-700; }
   .rh-cell-badge--abs, .rh-panel-badge--red { @apply bg-rose-50 text-rose-700; }
   .rh-cell-badge--stc, .rh-panel-badge--blue { @apply bg-blue-50 text-blue-700; }
@@ -111,12 +114,39 @@
   .rh-hero { @apply grid items-center gap-5 rounded-2xl border border-slate-200 bg-white p-6 xl:grid-cols-[1fr_1fr]; }
   .rh-hero > .rh-toolbar { @apply xl:col-span-2 xl:justify-end; }
   .daily-dashboard__header { @apply grid grid-cols-1 items-stretch gap-3 border-0 bg-transparent p-0 lg:grid-cols-[1.3fr_1fr]; }
-  .daily-dashboard__welcome { @apply relative flex min-h-40 flex-col items-start justify-center overflow-hidden rounded-xl border border-slate-200/70 bg-white px-6 py-4; background-image: linear-gradient(90deg,#fff 0%,#fffffff5 27%,#ffffff77 47%,#ffffff00 65%),var(--factory-photo); background-size: cover; background-position: center,center 46%; }
-  .daily-dashboard__welcome .rh-eyebrow { @apply text-[11px] normal-case tracking-normal text-ink; }
-  .daily-dashboard__welcome h1 { @apply my-1 text-3xl font-extrabold tracking-tight text-ink md:text-4xl; }
-  .daily-dashboard__subtitle { @apply max-w-72 text-[11px] leading-5 text-slate-600; }
-  .daily-dashboard__date { @apply mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white/90 px-2 text-[10px] font-semibold text-ink; }
-  .daily-dashboard__date select { @apply min-h-8 border-0 bg-transparent py-1 text-[10px] text-ink; }
+  .daily-dashboard__welcome { @apply relative flex min-h-56 flex-col items-start justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white px-5 py-6 shadow-panel sm:px-7 lg:pr-[52%]; background-image: linear-gradient(100deg,#ffffff 0%,#fffffffa 48%,#f5f8fc 100%); }
+  .daily-dashboard__welcome::before { content: ""; @apply pointer-events-none absolute inset-y-0 right-0 w-2/5 opacity-20; background-image: repeating-linear-gradient(135deg,rgba(35,97,220,.16) 0 1px,transparent 1px 15px); }
+  .daily-dashboard__welcome::after { content: ""; @apply pointer-events-none absolute bottom-0 right-0 h-16 w-64 rounded-tl-full bg-blue-50/80; }
+  .daily-dashboard__brand-mark { @apply absolute right-5 top-5 z-0 h-auto w-28 opacity-90; }
+  .daily-dashboard__welcome > :not(.daily-dashboard__brand-mark) { @apply relative z-10; }
+  .daily-dashboard__welcome .rh-eyebrow { @apply text-xs font-bold normal-case tracking-normal text-ink; }
+  .daily-dashboard__welcome h1 { @apply my-2 text-4xl font-extrabold leading-none tracking-tight text-ink md:text-5xl; }
+  .daily-dashboard__subtitle { @apply max-w-md text-sm leading-6 text-slate-600; }
+  .daily-dashboard__mod-trend { @apply min-h-56 overflow-hidden border-emerald-100 p-0; background: linear-gradient(180deg,#f7fffc 0%,#ffffff 48%); }
+  .daily-dashboard__mod-header { @apply border-b border-emerald-100/80 px-4 py-3; }
+  .daily-dashboard__mod-header > div { @apply grid gap-1; }
+  .daily-dashboard__mod-header > div > span { @apply text-[9px] font-bold uppercase tracking-widest text-emerald-700; }
+  .daily-dashboard__mod-header h3 { @apply text-sm font-extrabold text-ink; }
+  .daily-dashboard__mod-header h3 svg { @apply text-emerald-600; }
+  .daily-dashboard__mod-header select { @apply border-emerald-100 bg-white; }
+  .daily-dashboard__mod-summary { @apply grid grid-cols-4 divide-x divide-slate-100 px-3 py-2; }
+  .daily-dashboard__mod-summary > div { @apply grid min-w-0 gap-0.5 px-2; }
+  .daily-dashboard__mod-summary span { @apply truncate text-[9px] font-medium text-slate-400; }
+  .daily-dashboard__mod-summary strong { @apply truncate text-sm font-extrabold text-ink tabular-nums; }
+  .daily-dashboard__mod-summary .is-positive strong { @apply text-emerald-700; }
+  .daily-dashboard__mod-summary .is-negative strong { @apply text-rose-600; }
+  .daily-dashboard__mod-trend > svg { @apply max-h-32 px-2 pb-1; }
+  .daily-dashboard__mod-trend > small { @apply px-4 pb-2; }
+  .daily-dashboard__welcome .daily-dashboard__mod-trend.is-compact { @apply relative z-10 mt-5 min-h-48 w-full border-slate-200 bg-white p-0 lg:absolute lg:inset-y-3 lg:right-3 lg:mt-0 lg:w-[49%]; }
+  .daily-dashboard__mod-trend.is-compact .daily-dashboard__mod-header { @apply border-b-0 px-3 pb-0 pt-2; }
+  .daily-dashboard__mod-trend.is-compact .daily-dashboard__mod-header > div > span { @apply text-blue-600; }
+  .daily-dashboard__mod-trend.is-compact .daily-dashboard__mod-header h3 svg { @apply text-blue-500; }
+  .daily-dashboard__mod-trend.is-compact .daily-dashboard__mod-header select { @apply border-slate-200; }
+  .daily-dashboard__mod-trend.is-compact .daily-dashboard__mod-summary { @apply hidden; }
+  .daily-dashboard__mod-trend.is-compact > svg { @apply max-h-32 px-1; }
+  .daily-dashboard__mod-trend.is-compact > small { @apply hidden; }
+  .daily-dashboard__date { @apply mt-4 flex w-fit flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-ink shadow-sm; }
+  .daily-dashboard__date select { @apply min-h-10 border-0 bg-transparent py-1 text-xs font-semibold text-ink; }
   .daily-dashboard__date option { @apply bg-white text-ink; }
   .daily-dashboard__actions { @apply flex flex-wrap items-center justify-between gap-3; }
   .daily-dashboard__actions > div { @apply grid gap-1; }
@@ -134,9 +164,9 @@
   .rh-kpi-card__icon--orange { @apply bg-amber-50 text-amber-600; }
   .rh-kpi-card__icon--red { @apply bg-rose-50 text-rose-600; }
   .rh-kpi-card__body { @apply grid min-w-0 flex-1 content-start gap-1; }
-  .rh-kpi-card__label { @apply text-[10px] font-bold leading-4 text-slate-600; }
+  .rh-kpi-card__label { @apply text-xs font-bold leading-4 text-slate-600; }
   .rh-kpi-card__value { @apply text-2xl font-extrabold leading-none tracking-tight text-ink tabular-nums; }
-  .rh-kpi-card__note { @apply mt-auto pt-1 text-[10px] text-slate-400; }
+  .rh-kpi-card__note { @apply mt-auto pt-1 text-xs text-slate-400; }
   .rh-kpi-card__note--percent { @apply text-end text-sm font-bold text-slate-600; }
   .rh-kpi-card--green .rh-kpi-card__note--percent { @apply text-emerald-700; }
   .rh-kpi-card--orange .rh-kpi-card__note--percent { @apply text-amber-700; }
@@ -191,7 +221,7 @@
   .attendance-chart h3 svg { @apply size-4 shrink-0 text-slate-400; }
   .attendance-chart select { @apply min-h-8 py-1 text-[11px]; }
   .attendance-chart > svg { @apply max-h-36 w-full; }
-  .attendance-chart text { @apply fill-slate-400 text-[10px]; }
+  .attendance-chart text { @apply fill-slate-400 text-xs; }
   .attendance-chart .attendance-chart__value { @apply fill-ink font-bold; }
   .attendance-chart > small { @apply text-[9px] leading-4 text-slate-400; }
   .attendance-chart__empty { @apply py-14 text-center text-xs text-slate-400; }
@@ -204,8 +234,8 @@
   .daily-import__filter { @apply grid gap-1.5 text-[10px] font-semibold text-slate-500; }
   .rh-table-wrap, .admin-table-wrap { @apply max-w-full overflow-auto rounded-xl border border-slate-200/80; }
   .rh-card--table > .rh-table-wrap { @apply rounded-none border-x-0 border-b-0; }
-  .rh-table, .admin-table { @apply w-full border-collapse whitespace-nowrap text-start text-xs; }
-  .rh-table th, .admin-table th { @apply sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-start text-[10px] font-bold uppercase tracking-wide text-slate-500; }
+  .rh-table, .admin-table { @apply w-full border-collapse whitespace-nowrap text-start text-sm; }
+  .rh-table th, .admin-table th { @apply sticky top-0 z-10 border-b border-slate-200 bg-slate-50 px-4 py-3.5 text-start text-xs font-bold uppercase tracking-wide text-slate-500; }
   .rh-table td, .admin-table td { @apply border-b border-slate-100 px-4 py-3 text-start; }
   .rh-table tbody tr:last-child td, .admin-table tbody tr:last-child td { @apply border-b-0; }
   .rh-table tbody tr:hover, .admin-table tbody tr:hover { @apply bg-slate-50/80; }

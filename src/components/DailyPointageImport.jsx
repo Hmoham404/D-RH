@@ -11,6 +11,10 @@ function getCurrentMonthDate() {
   return new Date(now.getFullYear(), now.getMonth(), 1);
 }
 
+function isExcelFile(file) {
+  return /\.(xlsx|xls)$/i.test(file?.name || '');
+}
+
 export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange }) {
   const rules = { dateOrder: 'mdy', breakMinutes: 0, roundingMinutes: 1, closeDays: true };
   const [busy, setBusy] = useState(false);
@@ -66,6 +70,14 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    if (!isExcelFile(file)) {
+      setMessage('Import annule : selectionnez un fichier Excel au format .xlsx ou .xls.');
+      return;
+    }
+    if (!importEmployees.length) {
+      setMessage('Import annule : la base RH doit etre chargee avant le pointage.');
+      return;
+    }
     setBusy(true); setMessage('Lecture de la base et calcul des passages…');
     try {
       const next = await prepareDailyPointage(file, importEmployees, snapshot, rules);

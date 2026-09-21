@@ -83,10 +83,45 @@ test('French dates, full names, duration, active absence and STC', async () => {
   assert.equal(result.weeklySheets[0].rows[0].fullName, 'ZAIDI SEIFEDDINE');
 });
 
+test('prestation employees without a punch are not imported as absent', async () => {
+  const prestationEmployees = [
+    ...employees,
+    { id: '296', fullName: 'MAHFOUDH BALKIS', status: 'Actif', department: 'PRODUCTION', kind: 'MOD', contract: 'PRESTATION' },
+  ];
+  const result = await prepareDailyPointage(
+    file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05']]),
+    prestationEmployees,
+    null,
+    rules,
+  );
+  const prestationDay = cell(result, '296', '2026-09-10');
+  assert.equal(prestationDay.status, 'PRESTATION');
+  assert.equal(prestationDay.display, 'PREST.');
+
+  const attendance = buildAttendanceByDay(buildDailyTable(result, prestationEmployees, ['2026-09-10']))[0];
+  assert.equal(attendance.absences.some((person) => person.id === '296'), false);
+  assert.equal(attendance.departments.some((department) => department.people.some((person) => person.id === '296')), false);
+});
+
 test('direct pointage import defaults to source month/day dates', async () => {
   const result = await analyzePointageFile(file([[4, 'Z', '09/10/2026 07:42']]), employees);
   assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-09-10']);
   assert.equal(result.rawRows[0].pointageAtDisplay, '10/09/2026 07:42:00');
+});
+
+test('pointage matching follows the ZK matricule before names and alternate employee codes', async () => {
+  const matriculeEmployees = [
+    { id: '10', zk: '296', fullName: 'MAHFOUDH BALKIS', status: 'Actif' },
+    { id: '296', zk: '999', fullName: 'OTHER PERSON', status: 'Actif' },
+  ];
+  const matched = await analyzePointageFile(file([[296, 'OTHER PERSON', '09/10/2026 07:42']]), matriculeEmployees);
+  assert.equal(matched.rawRows[0].matchedName, 'MAHFOUDH BALKIS');
+  assert.equal(matched.rawRows[0].employeeKey, '296');
+  assert.equal(matched.rawRows[0].matchMethod, 'Code exact');
+
+  const unknown = await analyzePointageFile(file([[297, 'MAHFOUDH BALKIS', '09/10/2026 07:42']]), matriculeEmployees);
+  assert.equal(unknown.rawRows[0].matchState, 'unmatched');
+  assert.equal(unknown.rawRows[0].matchMethod, 'Matricule introuvable');
 });
 
 test('direct pointage import keeps source month/day order with hyphen dates', async () => {

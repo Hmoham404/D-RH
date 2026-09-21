@@ -908,6 +908,8 @@ const SIDEBAR_ITEMS = [
   },
 ];
 
+const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'employees']);
+
 const EMPLOYEE_FORM_FIELDS = [
   { key: 'finalCode', label: 'Code final' },
   { key: 'id', label: 'Matricule' },
@@ -2972,8 +2974,11 @@ function Sidebar({
         {items.map((item) => (
           <button
             key={item.key}
-            className={`rh-sidebar__item${activeSection === item.key ? ' is-active' : ''}`}
+            className={`rh-sidebar__item${activeSection === item.key ? ' is-active' : ''}${EMPLOYEE_ALLOWED_SECTIONS.has(item.key) ? '' : ' is-locked'}`}
             aria-current={activeSection === item.key ? 'page' : undefined}
+            aria-disabled={!EMPLOYEE_ALLOWED_SECTIONS.has(item.key)}
+            disabled={!EMPLOYEE_ALLOWED_SECTIONS.has(item.key)}
+            title={EMPLOYEE_ALLOWED_SECTIONS.has(item.key) ? item.label : `${item.label} - Acces bloque`}
             type="button"
             onClick={() => onSelect(item.key)}
           >
@@ -2982,6 +2987,7 @@ function Sidebar({
               <strong>{item.label}</strong>
               <small>{item.note}</small>
             </span>
+            {!EMPLOYEE_ALLOWED_SECTIONS.has(item.key) && <DashboardIcon type="lock" />}
           </button>
         ))}
       </nav>
@@ -3314,6 +3320,7 @@ export default function App() {
   }
 
   function handleSelectSection(sectionKey) {
+    if (!EMPLOYEE_ALLOWED_SECTIONS.has(sectionKey)) return;
     setActiveSection(sectionKey);
     setSidebarOpen(false);
   }

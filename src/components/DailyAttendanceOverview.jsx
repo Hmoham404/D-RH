@@ -1,8 +1,7 @@
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './AttendanceDashboard';
 import { formatPointageDate } from '../lib/dailyPointage.js';
 import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
-import factoryPhoto from '../../DSC01462.jpg';
-import AttendanceCharts from './AttendanceCharts';
+import AttendanceCharts, { ModProductionTrend } from './AttendanceCharts';
 import DashboardIcon from './DashboardIcon';
 
 const percent = (count, total) => total ? count / total * 100 : 0;
@@ -70,7 +69,7 @@ export default function DailyAttendanceOverview({ day, history, dates, analysisD
 
   return <>
     <div className="rh-hero daily-dashboard__header">
-      <div className="daily-dashboard__welcome" style={{ '--factory-photo': `url("${factoryPhoto}")` }}>
+      <div className="daily-dashboard__welcome">
         <p className="rh-eyebrow">{t('daily.greeting', 'Bonjour,')}</p>
         <h1>ZK Dashboard</h1>
         <p className="daily-dashboard__subtitle">{t('daily.subtitle', 'Suivi en temps réel de la présence du personnel')}</p>
@@ -81,6 +80,7 @@ export default function DailyAttendanceOverview({ day, history, dates, analysisD
             {dates.map((date) => <option key={date} value={date}>{formatPointageDate(date, locale)}</option>)}
           </select>
         </div>
+        <ModProductionTrend history={history} analysisDate={analysisDate} locale={locale} compact />
       </div>
       <div className="rh-hero__center"><ProductionModTargetGauge presentCount={productionKinds.find((item) => item.key === 'MOD')?.presentCount || 0} target={target} onTargetChange={onTargetChange} locale={locale} targetHint={t('daily.targetHint')} targetLabel={t('daily.targetLabel')} /></div>
     </div>

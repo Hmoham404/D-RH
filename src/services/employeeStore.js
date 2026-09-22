@@ -67,6 +67,9 @@ export function createEmptyEmployee() {
     service: '',
     job: '',
     hiredAt: '',
+    address: '',
+    bus: '',
+    departureReason: '',
     payType: '',
     signed: '',
     status: 'Actif',
@@ -98,6 +101,9 @@ export function normalizeEmployee(employee, index = 0) {
     service: cleanText(employee.service),
     job: cleanText(employee.job),
     hiredAt: cleanText(employee.hiredAt || employee.hired_at),
+    address: cleanText(employee.address),
+    bus: cleanText(employee.bus),
+    departureReason: cleanText(employee.departureReason || employee.departure_reason),
     payType: cleanText(employee.payType || employee.pay_type),
     signed: cleanText(employee.signed),
     status: cleanText(employee.status),
@@ -129,6 +135,9 @@ function mapEmployeeToRow(employee) {
     service: normalized.service,
     job: normalized.job,
     hired_at: normalized.hiredAt,
+    address: normalized.address,
+    bus: normalized.bus,
+    departure_reason: normalized.departureReason,
     pay_type: normalized.payType,
     signed: normalized.signed,
     status: normalized.status,
@@ -603,11 +612,12 @@ export async function saveEmployeeRecord(employee) {
       .single();
 
     if (error) {
+      const supabaseMessage = formatSupabaseError(error, 'Sauvegarde employe');
       return {
         employee: normalized,
         employees: localSave.employees,
         mode: 'local-disabled',
-        message: `Connexion Supabase indisponible. La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
+        message: `${supabaseMessage} La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
       };
     }
 
@@ -616,6 +626,7 @@ export async function saveEmployeeRecord(employee) {
       userLevel: normalized.userLevel,
     };
     const syncedSave = upsertEmployeeLocally(savedEmployee);
+    await saveActiveDirectoryRecordIds(syncedSave.employees);
 
     return {
       employee: savedEmployee,
@@ -623,12 +634,13 @@ export async function saveEmployeeRecord(employee) {
       mode: 'supabase',
       message: `Fiche de ${savedEmployee.fullName} sauvegardee dans Supabase.`,
     };
-  } catch {
+  } catch (error) {
+    const supabaseMessage = formatSupabaseError(error, 'Sauvegarde employe');
     return {
       employee: normalized,
       employees: localSave.employees,
       mode: 'local-disabled',
-      message: `Connexion Supabase indisponible. La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
+      message: `${supabaseMessage} La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
     };
   }
 }
@@ -686,10 +698,11 @@ export async function replaceEmployeeDirectory(employeeList = []) {
       const { error } = await supabase.from(TABLE_NAME).upsert(rows, { onConflict: 'record_id' });
 
       if (error) {
+        const supabaseMessage = formatSupabaseError(error, 'Import base RH');
         return {
           employees: normalizedEmployees,
           mode: 'local-disabled',
-          message: `Connexion Supabase indisponible. La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
+          message: `${supabaseMessage} La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
         };
       }
     }
@@ -705,11 +718,12 @@ export async function replaceEmployeeDirectory(employeeList = []) {
           : `Base RH remplacee par ${normalizedEmployees.length} fiche(s) dans Supabase.`
         : 'Base RH videe dans Supabase.',
     };
-  } catch {
+  } catch (error) {
+    const supabaseMessage = formatSupabaseError(error, 'Import base RH');
     return {
       employees: normalizedEmployees,
       mode: 'local-disabled',
-      message: `Connexion Supabase indisponible. La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
+      message: `${supabaseMessage} La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
     };
   }
 }
@@ -778,6 +792,8 @@ export async function deleteEmployeeRecord(employee, fallbackRecordId = '') {
         message: `Connexion Supabase indisponible. La fiche de ${removedName} reste supprimee de la base locale du navigateur.`,
       };
     }
+
+    await saveActiveDirectoryRecordIds(employees);
 
     return {
       removed,

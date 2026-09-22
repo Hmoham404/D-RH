@@ -43,5 +43,12 @@ export function formatSupabaseError(error, contextLabel = 'Supabase') {
     return `${contextLabel} indisponible: connexion impossible vers ${supabaseHost || 'votre projet Supabase'}. Verifie 1) VITE_SUPABASE_URL, 2) VITE_SUPABASE_ANON_KEY, 3) que tu as relance \`npm run dev\` apres modification du .env, 4) que le SQL a ete execute dans le meme projet Supabase.`;
   }
 
+  if (
+    message.includes('Could not find') &&
+    (message.includes('address') || message.includes('bus') || message.includes('departure_reason'))
+  ) {
+    return `${contextLabel} indisponible: les colonnes Adresse/Bus/Raison de depart manquent dans Supabase. Execute les lignes ALTER TABLE de supabase-schema.sql dans ton projet Supabase.`;
+  }
+
   return `${contextLabel} indisponible: ${message}`;
 }

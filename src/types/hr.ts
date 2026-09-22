@@ -14,6 +14,9 @@ export interface EmployeeRecord {
   service: string
   job: string
   hiredAt: string
+  address: string
+  bus: string
+  departureReason: string
   payType: string
   signed: string
   status: string

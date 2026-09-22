@@ -20,6 +20,9 @@ create table if not exists public.hr_staff_directory (
   service text default '',
   job text default '',
   hired_at text default '',
+  address text default '',
+  bus text default '',
+  departure_reason text default '',
   pay_type text default '',
   signed text default '',
   status text default '',
@@ -29,6 +32,10 @@ create table if not exists public.hr_staff_directory (
 
 alter table public.hr_dashboard_store enable row level security;
 alter table public.hr_staff_directory enable row level security;
+
+alter table public.hr_staff_directory add column if not exists address text default '';
+alter table public.hr_staff_directory add column if not exists bus text default '';
+alter table public.hr_staff_directory add column if not exists departure_reason text default '';
 
 do $$
 begin

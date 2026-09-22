@@ -57,7 +57,7 @@ const UI_TRANSLATIONS = {
         dashboard: { label: 'Tableau de bord', note: 'Vue globale RH' },
         pointage: { label: 'Pointage quotidien', note: 'Liste des presents' },
         employees: { label: 'Employes', note: 'Etat du personnel' },
-        departments: { label: 'Departements', note: 'Repartition active' },
+        departments: { label: 'Bus', note: 'Suivi transport' },
         reports: { label: 'Rapports', note: 'Synthese du fichier' },
         absences: { label: 'Absences & Conges', note: 'ABS, CM, conges' },
         settings: { label: 'ZK Dashboard', note: 'Import et pointage' },
@@ -247,7 +247,7 @@ const UI_TRANSLATIONS = {
         dashboard: { label: 'Dashboard', note: 'Global HR view' },
         pointage: { label: 'Daily attendance', note: 'Present employees list' },
         employees: { label: 'Employees', note: 'Staff status' },
-        departments: { label: 'Departments', note: 'Active distribution' },
+        departments: { label: 'Bus', note: 'Transport tracking' },
         reports: { label: 'Reports', note: 'File summary' },
         absences: { label: 'Absences & leave', note: 'ABS, sick leave, leave' },
         settings: { label: 'ZK Dashboard', note: 'Import and attendance' },
@@ -604,6 +604,9 @@ const UI_EXT_TRANSLATIONS = {
       payType: 'Type de paie',
       signed: 'Contrat signe',
       hiredAt: 'Date embauche',
+      address: 'Adresse',
+      bus: 'Bus',
+      departureReason: 'Raison de depart',
       job: 'Poste',
       inactiveFrom: 'Inactif depuis',
     },
@@ -670,7 +673,7 @@ const UI_EXT_TRANSLATIONS = {
     section: { noWeek: 'No week', noPeriod: 'No period available' },
     status: { noData: 'No data', present: 'Present', verify: 'To verify', absent: 'Absent', late: 'Late', sickLeave: 'Sick leave', leave: 'Leave', rest: 'Rest', stc: 'STC', notStarted: 'Not started', active: 'Active', suspended: 'Suspended', newHire: 'New hire' },
     employeeFields: {
-      finalCode: 'Final code', id: 'Employee ID', fullName: 'Full name', department: 'Department', service: 'Service', kind: 'Category', contract: 'Contract', status: 'Status', payType: 'Pay type', signed: 'Signed contract', hiredAt: 'Hire date', job: 'Job title', inactiveFrom: 'Inactive since',
+      finalCode: 'Final code', id: 'Employee ID', fullName: 'Full name', department: 'Department', service: 'Service', kind: 'Category', contract: 'Contract', status: 'Status', payType: 'Pay type', signed: 'Signed contract', hiredAt: 'Hire date', address: 'Address', bus: 'Bus', departureReason: 'Departure reason', job: 'Job title', inactiveFrom: 'Inactive since',
     },
   },
   ar: {
@@ -893,8 +896,8 @@ const SIDEBAR_ITEMS = [
   },
   {
     key: 'departments',
-    label: 'Departements',
-    note: 'Repartition active',
+    label: 'Bus',
+    note: 'Suivi transport',
   },
   {
     key: 'reports',
@@ -908,7 +911,7 @@ const SIDEBAR_ITEMS = [
   },
 ];
 
-const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'employees']);
+const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'employees', 'departments']);
 
 const EMPLOYEE_FORM_FIELDS = [
   { key: 'finalCode', label: 'Code final' },
@@ -922,6 +925,9 @@ const EMPLOYEE_FORM_FIELDS = [
   { key: 'payType', label: 'Type de paie' },
   { key: 'signed', label: 'Contrat signe' },
   { key: 'hiredAt', label: 'Date embauche' },
+  { key: 'address', label: 'Adresse' },
+  { key: 'bus', label: 'Bus' },
+  { key: 'departureReason', label: 'Raison de depart' },
   { key: 'job', label: 'Poste' },
   { key: 'inactiveFrom', label: 'Inactif depuis' },
 ];
@@ -1879,6 +1885,8 @@ function buildDayRoster(selectedWeek, selectedDate, employees = []) {
         fullName: row.fullName || matchedEmployee?.fullName || '-',
         department: row.department || matchedEmployee?.department || '-',
         service: row.service || matchedEmployee?.service || '',
+        address: matchedEmployee?.address || '',
+        bus: matchedEmployee?.bus || '',
         kind: row.kind || matchedEmployee?.kind || '-',
         display: day?.display || '-',
         rawDisplay: day?.raw || day?.display || '-',
@@ -1891,6 +1899,86 @@ function buildDayRoster(selectedWeek, selectedDate, employees = []) {
       };
     })
     .sort((left, right) => left.fullName.localeCompare(right.fullName));
+}
+
+function getBusLabel(value) {
+  const text = String(value || '').trim();
+  return text && text !== '0' ? text : 'Sans bus';
+}
+
+function getBusPersonKeys(person = {}) {
+  return [
+    person.employeeKey,
+    person.finalCode,
+    person.id,
+    person.zk,
+    person.saber,
+    person.fullName,
+  ]
+    .map((value) => normalizeLookupText(value))
+    .filter(Boolean);
+}
+
+function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
+  const groups = new Map();
+  const rosterByKey = new Map();
+
+  dayRoster
+    .filter((row) => row.statusCode !== 'EMPTY')
+    .forEach((row) => {
+      getBusPersonKeys(row).forEach((key) => rosterByKey.set(key, row));
+    });
+
+  baseEmployees
+    .filter((employee) => getBusPersonKeys(employee).length)
+    .forEach((employee) => {
+      const label = getBusLabel(employee.bus);
+      const rosterRow = getBusPersonKeys(employee)
+        .map((key) => rosterByKey.get(key))
+        .find(Boolean);
+
+      if (!groups.has(label)) {
+        groups.set(label, {
+          bus: label,
+          total: 0,
+          present: 0,
+          absent: 0,
+          verify: 0,
+          people: [],
+        });
+      }
+
+      const group = groups.get(label);
+      const isPointageKnown = Boolean(rosterRow);
+      const isVerify = String(rosterRow?.statusCode || '').toUpperCase() === 'AVR';
+      group.total += 1;
+      group.present += rosterRow?.isPresent ? 1 : 0;
+      group.absent += isPointageKnown && !rosterRow?.isPresent ? 1 : 0;
+      group.verify += isVerify ? 1 : 0;
+      group.people.push({
+        employeeKey: rosterRow?.employeeKey || employee.recordId,
+        id: employee.finalCode || employee.id || employee.zk || rosterRow?.id || '-',
+        fullName: employee.fullName || rosterRow?.fullName || '-',
+        department: employee.department || rosterRow?.department || '-',
+        service: employee.service || rosterRow?.service || '',
+        address: employee.address || rosterRow?.address || '',
+        departureReason: employee.departureReason || '',
+        kind: employee.kind || rosterRow?.kind || '-',
+        display: rosterRow?.display || '-',
+        statusCode: rosterRow?.statusCode || 'BASE',
+        statusLabel: rosterRow?.statusLabel || 'Base RH',
+        isPresent: Boolean(rosterRow?.isPresent),
+        bus: label,
+      });
+    });
+
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      presentRate: group.total ? Math.round((group.present / group.total) * 100) : 0,
+      people: group.people.sort((left, right) => left.fullName.localeCompare(right.fullName)),
+    }))
+    .sort((left, right) => right.total - left.total || left.bus.localeCompare(right.bus));
 }
 
 function getDepartmentSegments(rows) {
@@ -2092,6 +2180,9 @@ function exportEmployeeBaseWorkbook(employees, departmentRows) {
     Type_Paie: employee.payType || '',
     Contrat_Signe: employee.signed || '',
     Date_Embauche: employee.hiredAt || '',
+    Adresse: employee.address || '',
+    BUS: employee.bus || '',
+    Raison_Depart: employee.departureReason || '',
     Poste: employee.job || '',
     Inactif_Depuis: employee.inactiveFrom || '',
   }));
@@ -2464,6 +2555,149 @@ function KpiDetailModal({ config, searchValue, onSearchChange, onClose, labels, 
   );
 }
 
+function BusPointageSheet({ rows, selectedDate, searchValue, onSearchChange, onClose, labels, locale, translate }) {
+  const maxTotal = Math.max(1, ...rows.map((row) => row.total));
+  const filteredPeople = useMemo(() => {
+    const normalizedSearch = searchValue.trim().toLowerCase();
+    const people = rows.flatMap((row) => row.people);
+
+    if (!normalizedSearch) {
+      return people;
+    }
+
+    return people.filter((person) =>
+      [person.id, person.fullName, person.department, person.service, person.bus, person.statusLabel, person.address]
+        .map((value) => String(value || '').toLowerCase())
+        .some((value) => value.includes(normalizedSearch)),
+    );
+  }, [rows, searchValue]);
+
+  return (
+    <div className="rh-modal" role="dialog" aria-modal="true" aria-labelledby="bus-sheet-title">
+      <button className="rh-modal__backdrop" type="button" aria-label={labels.close} onClick={onClose} />
+
+      <article className="rh-modal__panel bus-sheet">
+        <div className="rh-modal__header">
+          <div>
+            <p className="rh-eyebrow">{labels.eyebrow}</p>
+            <h2 id="bus-sheet-title">{labels.title}</h2>
+            <p>{labels.subtitle(formatDateLabel(selectedDate, locale))}</p>
+          </div>
+
+          <div className="rh-modal__actions">
+            <div className="rh-panel-pill">{labels.busCount(rows.length)}</div>
+            <button className="rh-modal__close" type="button" onClick={onClose}>
+              {labels.close}
+            </button>
+          </div>
+        </div>
+
+        <div className="bus-curve" aria-label={labels.chartLabel}>
+          {rows.length ? (
+            rows.map((row) => (
+              <div className="bus-curve__item" key={row.bus}>
+                <div>
+                  <strong>{row.bus}</strong>
+                  <span>{row.present}/{row.total}</span>
+                </div>
+                <div className="bus-curve__track">
+                  <span
+                    className="bus-curve__bar"
+                    style={{ width: `${Math.max(8, (row.total / maxTotal) * 100)}%` }}
+                  />
+                  <span className="bus-curve__present" style={{ width: `${row.presentRate}%` }} />
+                </div>
+                <small>{row.presentRate}% pointage</small>
+              </div>
+            ))
+          ) : (
+            <div className="rh-empty-inline">{labels.empty}</div>
+          )}
+        </div>
+
+        <div className="rh-table-wrap">
+          <table className="rh-table">
+            <thead>
+              <tr>
+                <th>{labels.columns.bus}</th>
+                <th>{labels.columns.total}</th>
+                <th>{labels.columns.present}</th>
+                <th>{labels.columns.absent}</th>
+                <th>{labels.columns.verify}</th>
+                <th>{labels.columns.rate}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length ? (
+                rows.map((row) => (
+                  <tr key={row.bus}>
+                    <td>{row.bus}</td>
+                    <td>{row.total}</td>
+                    <td>{row.present}</td>
+                    <td>{row.absent}</td>
+                    <td>{row.verify}</td>
+                    <td>{row.presentRate}%</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="rh-table__empty" colSpan={6}>
+                    {labels.empty}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rh-modal__toolbar">
+          <input
+            type="search"
+            value={searchValue}
+            placeholder={labels.search}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </div>
+
+        <div className="rh-table-wrap rh-modal__table-wrap">
+          <table className="rh-table">
+            <thead>
+              <tr>
+                <th>{labels.columns.id}</th>
+                <th>{labels.columns.name}</th>
+                <th>{labels.columns.bus}</th>
+                <th>{labels.columns.department}</th>
+                <th>{labels.columns.status}</th>
+                <th>{labels.columns.detail}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPeople.length ? (
+                filteredPeople.map((person, index) => (
+                  <tr key={`${person.employeeKey || person.id}-${person.bus}-${index}`}>
+                    <td>{person.id || '-'}</td>
+                    <td>{person.fullName || '-'}</td>
+                    <td>{person.bus || '-'}</td>
+                    <td>{person.department || '-'}</td>
+                    <td>{translateStatusValue(person.statusLabel, translate) || '-'}</td>
+                    <td>{person.display || '-'}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="rh-table__empty" colSpan={6}>
+                    {labels.noResults}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+  );
+}
+
 function EmployeeEditorModal({
   mode,
   draft,
@@ -2474,6 +2708,7 @@ function EmployeeEditorModal({
   departmentOptions,
   serviceOptions,
   payTypeOptions,
+  busOptions = [],
   onChange,
   onSave,
   onDelete,
@@ -2526,13 +2761,15 @@ function EmployeeEditorModal({
                     ? serviceOptions
                     : field.key === 'payType'
                       ? payTypeOptions
-                      : field.key === 'status'
-                        ? ['Actif', 'STC', 'Suspendu']
-                        : field.key === 'kind'
-                          ? ['MOI', 'MOD']
-                          : field.key === 'signed'
-                            ? ['Oui', 'Oui/E', 'Non']
-                            : [];
+                      : field.key === 'bus'
+                        ? busOptions
+                        : field.key === 'status'
+                          ? ['Actif', 'STC', 'Suspendu']
+                          : field.key === 'kind'
+                            ? ['MOI', 'MOD']
+                            : field.key === 'signed'
+                              ? ['Oui', 'Oui/E', 'Non']
+                              : [];
 
             return (
               <label className="field-block" key={field.key}>
@@ -2603,8 +2840,10 @@ function EmployeeBaseSurface({
   onOpenAll,
   onOpenActive,
   onOpenStc,
+  onOpenBusPointage,
   activeEmployeesCount,
   stcEmployeesCount,
+  busPointageRowsCount,
   departmentCount,
   isImporting,
   isClearing,
@@ -2668,6 +2907,10 @@ function EmployeeBaseSurface({
           <span>{labels.cards.stc}</span>
           <strong>{stcEmployeesCount}</strong>
         </button>
+        <button className="admin-stat-card admin-stat-card--button" type="button" onClick={onOpenBusPointage}>
+          <span>{labels.cards.bus || 'Bus pointage'}</span>
+          <strong>{busPointageRowsCount}</strong>
+        </button>
       </div>
 
       <div className="admin-table-card__header">
@@ -2700,6 +2943,9 @@ function EmployeeBaseSurface({
               <th>{labels.columns.name}</th>
               <th>{labels.columns.department}</th>
               <th>{labels.columns.service}</th>
+              <th>{labels.columns.address}</th>
+              <th>{labels.columns.bus}</th>
+              <th>{labels.columns.departureReason}</th>
               <th>{labels.columns.category}</th>
               <th>{labels.columns.contract}</th>
               <th>{labels.columns.status}</th>
@@ -2714,6 +2960,9 @@ function EmployeeBaseSurface({
                   <td>{employee.fullName || '-'}</td>
                   <td>{employee.department || '-'}</td>
                   <td>{employee.service || '-'}</td>
+                  <td>{employee.address || '-'}</td>
+                  <td>{employee.bus || '-'}</td>
+                  <td>{employee.departureReason || '-'}</td>
                   <td>{employee.kind || '-'}</td>
                   <td>{employee.contract || '-'}</td>
                   <td>{translateStatusValue(employee.status, translate) || '-'}</td>
@@ -2726,7 +2975,7 @@ function EmployeeBaseSurface({
               ))
             ) : (
               <tr>
-                <td className="admin-table__empty" colSpan={8}>
+                <td className="admin-table__empty" colSpan={11}>
                   {labels.empty}
                 </td>
               </tr>
@@ -2843,6 +3092,193 @@ function DepartmentBaseSurface({
           onOpenModal={onOpenProductionModal}
           labels={productionLabels}
         />
+      </div>
+    </article>
+  );
+}
+
+function BusBaseSurface({
+  rows,
+  selectedDate,
+  searchValue,
+  onSearchChange,
+  labels,
+  locale,
+}) {
+  const maxTotal = Math.max(1, ...rows.map((row) => row.total));
+  const filteredRows = useMemo(
+    () =>
+      rows.filter((row) =>
+        matchesSearch([row.bus, row.total, row.present, row.absent, row.presentRate], searchValue),
+      ),
+    [rows, searchValue],
+  );
+  const filteredPeople = useMemo(
+    () =>
+      filteredRows
+        .flatMap((row) => row.people)
+        .filter((person) =>
+          matchesSearch(
+            [
+              person.id,
+              person.fullName,
+              person.bus,
+              person.department,
+              person.service,
+              person.statusLabel,
+              person.departureReason,
+            ],
+            searchValue,
+          ),
+        ),
+    [filteredRows, searchValue],
+  );
+  const totals = rows.reduce(
+    (summary, row) => ({
+      people: summary.people + row.total,
+      present: summary.present + row.present,
+      absent: summary.absent + row.absent,
+      verify: summary.verify + row.verify,
+    }),
+    { people: 0, present: 0, absent: 0, verify: 0 },
+  );
+  const rate = totals.people ? Math.round((totals.present / totals.people) * 100) : 0;
+
+  return (
+    <article className="rh-card rh-card--base">
+      <div className="rh-base-surface">
+        <div className="rh-base-surface__hero">
+          <div>
+            <p className="rh-eyebrow">{labels.eyebrow}</p>
+            <h2>{labels.title}</h2>
+            <p>{labels.subtitle(formatDateLabel(selectedDate, locale))}</p>
+          </div>
+
+          <div className="rh-table-tools">
+            <input
+              type="search"
+              value={searchValue}
+              placeholder={labels.search}
+              onChange={(event) => onSearchChange(event.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="rh-base-metrics">
+          <article className="rh-base-metric">
+            <span>{labels.cards.bus}</span>
+            <strong>{rows.length}</strong>
+          </article>
+          <article className="rh-base-metric">
+            <span>{labels.cards.people}</span>
+            <strong>{totals.people}</strong>
+          </article>
+          <article className="rh-base-metric">
+            <span>{labels.cards.present}</span>
+            <strong>{totals.present}</strong>
+          </article>
+          <article className="rh-base-metric">
+            <span>{labels.cards.rate}</span>
+            <strong>{rate}%</strong>
+          </article>
+        </div>
+
+        <section className="bus-overview" aria-label={labels.chartLabel}>
+          <div className="bus-curve bus-curve--page">
+            {filteredRows.length ? (
+              filteredRows.map((row) => (
+                <div className="bus-curve__item" key={row.bus}>
+                  <div>
+                    <strong>{row.bus}</strong>
+                    <span>{row.present}/{row.total}</span>
+                  </div>
+                  <div className="bus-curve__track">
+                    <span
+                      className="bus-curve__bar"
+                      style={{ width: `${Math.max(8, (row.total / maxTotal) * 100)}%` }}
+                    />
+                    <span className="bus-curve__present" style={{ width: `${row.presentRate}%` }} />
+                  </div>
+                  <small>{row.presentRate}% pointage</small>
+                </div>
+              ))
+            ) : (
+              <div className="rh-empty-inline">{labels.empty}</div>
+            )}
+          </div>
+        </section>
+
+        <div className="rh-table-wrap">
+          <table className="rh-table">
+            <thead>
+              <tr>
+                <th>{labels.columns.bus}</th>
+                <th>{labels.columns.total}</th>
+                <th>{labels.columns.present}</th>
+                <th>{labels.columns.absent}</th>
+                <th>{labels.columns.verify}</th>
+                <th>{labels.columns.rate}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.length ? (
+                filteredRows.map((row) => (
+                  <tr key={row.bus}>
+                    <td>{row.bus}</td>
+                    <td>{row.total}</td>
+                    <td>{row.present}</td>
+                    <td>{row.absent}</td>
+                    <td>{row.verify}</td>
+                    <td>{row.presentRate}%</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="rh-table__empty" colSpan={6}>
+                    {labels.empty}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="rh-table-wrap">
+          <table className="rh-table">
+            <thead>
+              <tr>
+                <th>{labels.columns.id}</th>
+                <th>{labels.columns.name}</th>
+                <th>{labels.columns.bus}</th>
+                <th>{labels.columns.department}</th>
+                <th>{labels.columns.status}</th>
+                <th>{labels.columns.detail}</th>
+                <th>{labels.columns.departureReason}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPeople.length ? (
+                filteredPeople.map((person, index) => (
+                  <tr key={`${person.employeeKey || person.id}-${person.bus}-${index}`}>
+                    <td>{person.id || '-'}</td>
+                    <td>{person.fullName || '-'}</td>
+                    <td>{person.bus || '-'}</td>
+                    <td>{person.department || '-'}</td>
+                    <td>{person.statusLabel || '-'}</td>
+                    <td>{person.display || '-'}</td>
+                    <td>{person.departureReason || '-'}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="rh-table__empty" colSpan={7}>
+                    {labels.noResults}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </article>
   );
@@ -3032,6 +3468,8 @@ export default function App() {
   const [employeeEditorMode, setEmployeeEditorMode] = useState('closed');
   const [employeeDraft, setEmployeeDraft] = useState(null);
   const [deleteCode, setDeleteCode] = useState('');
+  const [isBusPointageOpen, setIsBusPointageOpen] = useState(false);
+  const [busPointageSearchValue, setBusPointageSearchValue] = useState('');
   const [isEmployeeSaving, setIsEmployeeSaving] = useState(false);
   const [isEmployeeDeleting, setIsEmployeeDeleting] = useState(false);
   const locale = LANGUAGE_LOCALES[language] || LANGUAGE_LOCALES.fr;
@@ -3165,6 +3603,9 @@ export default function App() {
         name: translate('employeeBase.columns.name', 'Nom'),
         department: translate('employeeBase.columns.department', 'Departement'),
         service: translate('employeeBase.columns.service', 'Service'),
+        address: translate('employeeBase.columns.address', 'Adresse'),
+        bus: translate('employeeBase.columns.bus', 'Bus'),
+        departureReason: translate('employeeBase.columns.departureReason', 'Raison de depart'),
         category: translate('employeeBase.columns.category', 'Categorie'),
         contract: translate('employeeBase.columns.contract', 'Contrat'),
         status: translate('employeeBase.columns.status', 'Statut'),
@@ -3174,6 +3615,49 @@ export default function App() {
       empty: translate('employeeBase.empty', 'Aucun employe trouve pour cette recherche.'),
     }),
     [language, currentMonthLabel],
+  );
+  const busPointageLabels = useMemo(
+    () => ({
+      eyebrow: translate('busPointage.eyebrow', 'Feuille bus'),
+      title: translate('busPointage.title', 'Pointage par bus'),
+      subtitle: translateFn('busPointage.subtitle', (date) => `${date} | Courbe bus selon le pointage du jour.`),
+      chartLabel: translate('busPointage.chartLabel', 'Courbe de presence par bus'),
+      busCount: translateFn('busPointage.busCount', (count) => `${count} bus`),
+      search: translate('busPointage.search', 'Rechercher nom, bus, service...'),
+      close: translate('modal.close', 'Fermer'),
+      empty: translate('busPointage.empty', 'Aucune donnee bus disponible pour cette date.'),
+      noResults: translate('modal.noResults', 'Aucun resultat pour cette recherche.'),
+      columns: {
+        id: translate('modal.columns.id', 'ID'),
+        name: translate('modal.columns.name', 'Nom'),
+        department: translate('modal.columns.department', 'Departement'),
+        status: translate('modal.columns.status', 'Statut'),
+        detail: translate('modal.columns.detail', 'Detail'),
+        bus: translate('employeeBase.columns.bus', 'Bus'),
+        total: translate('busPointage.columns.total', 'Total'),
+        present: translate('busPointage.columns.present', 'Presents'),
+        absent: translate('busPointage.columns.absent', 'Absents'),
+        verify: translate('busPointage.columns.verify', 'A verifier'),
+        rate: translate('busPointage.columns.rate', 'Taux'),
+        departureReason: translate('busPointage.columns.departureReason', 'Cause de quitte'),
+      },
+    }),
+    [language],
+  );
+  const busBaseLabels = useMemo(
+    () => ({
+      ...busPointageLabels,
+      eyebrow: translate('busBase.eyebrow', 'Suivi bus'),
+      title: translate('busBase.title', 'BUS'),
+      subtitle: translateFn('busBase.subtitle', (date) => `${date} | Suivi bus selon la colonne Bus de la base RH.`),
+      cards: {
+        bus: translate('busBase.cards.bus', 'Bus'),
+        people: translate('busBase.cards.people', 'Employes affectes'),
+        present: translate('busBase.cards.present', 'Presents'),
+        rate: translate('busBase.cards.rate', 'Taux pointage'),
+      },
+    }),
+    [busPointageLabels, language],
   );
   const departmentBaseLabels = useMemo(
     () => ({
@@ -3355,6 +3839,16 @@ export default function App() {
     setKpiSearchValue('');
   }
 
+  function handleOpenBusPointage() {
+    setIsBusPointageOpen(true);
+    setBusPointageSearchValue('');
+  }
+
+  function handleCloseBusPointage() {
+    setIsBusPointageOpen(false);
+    setBusPointageSearchValue('');
+  }
+
   function handleOpenCreateEmployee() {
     const nextZk = getNextZkValue(employees);
     const nextCode = getNextEmployeeCodeValue(employees);
@@ -3426,6 +3920,10 @@ export default function App() {
   const monthlyBaseEmployees = useMemo(
     () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate) || isEmployeeStcInMonth(employee, currentMonthDate)),
     [employees, currentMonthDate],
+  );
+  const busPointageRows = useMemo(
+    () => buildBusPointageRows(monthlyBaseEmployees, dayRoster),
+    [dayRoster, monthlyBaseEmployees],
   );
   const monthlyDepartmentRows = useMemo(
     () => buildDepartmentBaseRows(monthlyBaseEmployees, currentMonthDate),
@@ -3529,6 +4027,9 @@ export default function App() {
             employee.fullName,
             employee.department,
             employee.service,
+            employee.address,
+            employee.bus,
+            employee.departureReason,
             employee.contract,
             employee.status,
             employee.kind,
@@ -3589,6 +4090,18 @@ export default function App() {
   }, [employeeDraft?.department, employees, serviceOptions]);
   const payTypeOptions = useMemo(
     () => [...new Set(employees.map((employee) => String(employee.payType || '').trim()).filter(Boolean))].sort(),
+    [employees],
+  );
+  const busOptions = useMemo(
+    () => [
+      ...new Set([
+        '0',
+        'VP',
+        'AUTRE',
+        'BUS OUARDANIN',
+        ...employees.map((employee) => String(employee.bus || '').trim()).filter(Boolean),
+      ]),
+    ].sort((left, right) => left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })),
     [employees],
   );
 
@@ -3928,7 +4441,7 @@ export default function App() {
 
         <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
           {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
-          {isEmployeeSection || isSettingsSection ? null : (
+          {isEmployeeSection || isDepartmentSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">
             <div>
@@ -4133,13 +4646,24 @@ export default function App() {
                 onOpenAll={() => handleOpenEmployeeBaseModal('all')}
                 onOpenActive={() => handleOpenEmployeeBaseModal('active')}
                 onOpenStc={() => handleOpenEmployeeBaseModal('stc')}
+                onOpenBusPointage={handleOpenBusPointage}
                 activeEmployeesCount={monthlyActiveEmployees.length}
                 stcEmployeesCount={stcEmployees.length}
+                busPointageRowsCount={busPointageRows.length}
                 departmentCount={monthlyDepartmentRows.length}
                 isImporting={isEmployeeImporting}
                 isClearing={isEmployeeClearing}
                 labels={employeeBaseLabels}
                 translate={translate}
+              />
+            ) : isDepartmentSection ? (
+              <BusBaseSurface
+                rows={busPointageRows}
+                selectedDate={selectedDate}
+                searchValue={searchValue}
+                onSearchChange={setSearchValue}
+                labels={busBaseLabels}
+                locale={locale}
               />
             ) : isAbsenceSection ? (
               <AbsenceSurface
@@ -4152,26 +4676,7 @@ export default function App() {
                 locale={locale}
                 translate={translate}
               />
-            ) : (
-              <DepartmentBaseSurface
-                tableTitle={tableTitle}
-                tableSubtitle={tableSubtitle}
-                searchValue={searchValue}
-                onSearchChange={setSearchValue}
-                departmentBaseRows={departmentBaseRows}
-                filteredDepartmentBaseRows={filteredDepartmentBaseRows}
-                baseServiceCount={baseServiceCount}
-                activeEmployeesCount={activeEmployees.length}
-                stcEmployeesCount={stcEmployees.length}
-                productionMetrics={productionMetrics}
-                productionServiceBreakdown={productionServiceBreakdown}
-                productionKindBreakdown={productionKindBreakdown}
-                activeProductionModal={activeProductionModal}
-                onOpenProductionModal={handleOpenProductionModal}
-                productionLabels={productionLabels}
-                labels={departmentBaseLabels}
-              />
-            )
+            ) : null
           ) : (
             <article className="rh-card rh-card--table">
               <div className="rh-card__header rh-card__header--table">
@@ -4280,6 +4785,19 @@ export default function App() {
         />
       ) : null}
 
+      {isBusPointageOpen ? (
+        <BusPointageSheet
+          rows={busPointageRows}
+          selectedDate={selectedDate}
+          searchValue={busPointageSearchValue}
+          onSearchChange={setBusPointageSearchValue}
+          onClose={handleCloseBusPointage}
+          labels={busPointageLabels}
+          locale={locale}
+          translate={translate}
+        />
+      ) : null}
+
       {employeeEditorMode !== 'closed' ? (
         <EmployeeEditorModal
           mode={employeeEditorMode}
@@ -4291,6 +4809,7 @@ export default function App() {
           departmentOptions={departmentOptions}
           serviceOptions={filteredServiceOptions}
           payTypeOptions={payTypeOptions}
+          busOptions={busOptions}
           onChange={handleEmployeeDraftChange}
           onSave={handleSaveEmployee}
           onDelete={handleDeleteEmployee}

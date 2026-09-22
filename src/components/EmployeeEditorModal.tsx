@@ -19,6 +19,7 @@ interface EmployeeEditorModalProps {
   departmentOptions: string[]
   serviceOptions: string[]
   payTypeOptions: string[]
+  busOptions?: string[]
   deleteCode: string
   isDeleteCodeValid: boolean
   onChange: (field: keyof EmployeeDraft, value: string) => void
@@ -34,6 +35,7 @@ function buildFieldOptions(
   departmentOptions: string[],
   serviceOptions: string[],
   payTypeOptions: string[],
+  busOptions: string[] = [],
 ) {
   const dynamicOptions = [
     ...(field.options ?? []),
@@ -41,6 +43,7 @@ function buildFieldOptions(
     ...(field.name === 'department' ? departmentOptions : []),
     ...(field.name === 'service' ? serviceOptions : []),
     ...(field.name === 'payType' ? payTypeOptions : []),
+    ...(field.name === 'bus' ? busOptions : []),
     ...(field.name === 'signed' ? ['Oui', 'Oui/E', 'Non'] : []),
   ]
 
@@ -59,6 +62,7 @@ export default function EmployeeEditorModal({
   departmentOptions,
   serviceOptions,
   payTypeOptions,
+  busOptions = [],
   deleteCode,
   isDeleteCodeValid,
   onChange,
@@ -168,6 +172,7 @@ export default function EmployeeEditorModal({
                       departmentOptions,
                       serviceOptions,
                       payTypeOptions,
+                      busOptions,
                     )
 
                     return (

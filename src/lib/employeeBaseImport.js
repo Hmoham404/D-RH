@@ -288,5 +288,7 @@ export async function analyzeEmployeeBaseFile(file) {
     fileName: file.name || '',
     sheetName: selectedSheet.sheetName,
     headerRowNumber: selectedSheet.rowIndex + 1,
+    totalDataRows: selectedSheet.dataRows.length,
+    ignoredRows: Math.max(0, selectedSheet.dataRows.length - employees.length),
   };
 }

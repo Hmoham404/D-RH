@@ -17,6 +17,7 @@ import {
   saveEmployeeRecord,
 } from './services/employeeStore';
 import { loadPointageSnapshot, replacePointageSnapshot } from './services/pointageSnapshotStore';
+import { loadBusCapacities, readLocalBusCapacities, saveBusCapacities } from './services/busCapacityStore';
 
 const mycLogoUrl = new URL('../MYC beauty innovation TUNISIA @300x-100.png', import.meta.url).href;
 const rhManagerAvatarUrl = new URL('./assets/rh-manager-avatar.svg', import.meta.url).href;
@@ -58,7 +59,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'Pointage quotidien', note: 'Liste des presents' },
         employees: { label: 'Employes', note: 'Etat du personnel' },
         departments: { label: 'Bus', note: 'Suivi transport' },
-        reports: { label: 'Rapports', note: 'Synthese du fichier' },
+        reports: { label: 'STC', note: 'Sorties du mois' },
         absences: { label: 'Absences & Conges', note: 'ABS, CM, conges' },
         settings: { label: 'ZK Dashboard', note: 'Import et pointage' },
       },
@@ -154,7 +155,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'الحضور اليومي', note: 'قائمة الحاضرين' },
         employees: { label: 'الموظفون', note: 'حالة الموظفين' },
         departments: { label: 'الأقسام', note: 'التوزيع النشط' },
-        reports: { label: 'التقارير', note: 'ملخص الملف' },
+        reports: { label: 'STC', note: 'خروج الشهر' },
         absences: { label: 'الغيابات والإجازات', note: 'غياب ومرض وإجازات' },
         settings: { label: 'ZK Dashboard', note: 'الاستيراد والقاعدة' },
       },
@@ -248,7 +249,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'Daily attendance', note: 'Present employees list' },
         employees: { label: 'Employees', note: 'Staff status' },
         departments: { label: 'Bus', note: 'Transport tracking' },
-        reports: { label: 'Reports', note: 'File summary' },
+        reports: { label: 'STC', note: 'Monthly exits' },
         absences: { label: 'Absences & leave', note: 'ABS, sick leave, leave' },
         settings: { label: 'ZK Dashboard', note: 'Import and attendance' },
       },
@@ -342,7 +343,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'Presenze giornaliere', note: 'Elenco presenti' },
         employees: { label: 'Dipendenti', note: 'Stato del personale' },
         departments: { label: 'Reparti', note: 'Ripartizione attiva' },
-        reports: { label: 'Report', note: 'Sintesi del file' },
+        reports: { label: 'STC', note: 'Uscite del mese' },
         absences: { label: 'Assenze e congedi', note: 'ABS, malattia, congedi' },
         settings: { label: 'ZK Dashboard', note: 'Import e base' },
       },
@@ -436,7 +437,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: '每日考勤', note: '出勤人员列表' },
         employees: { label: '员工', note: '员工状态' },
         departments: { label: '部门', note: '在岗分布' },
-        reports: { label: '报表', note: '文件摘要' },
+        reports: { label: 'STC', note: '本月离职' },
         absences: { label: '缺勤与休假', note: '缺勤、病假、休假' },
         settings: { label: 'ZK Dashboard', note: '导入与基础库' },
       },
@@ -901,8 +902,8 @@ const SIDEBAR_ITEMS = [
   },
   {
     key: 'reports',
-    label: 'Rapports',
-    note: 'Synthese du fichier',
+    label: 'STC',
+    note: 'Sorties du mois',
   },
   {
     key: 'absences',
@@ -911,7 +912,7 @@ const SIDEBAR_ITEMS = [
   },
 ];
 
-const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'employees', 'departments']);
+const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'employees', 'departments', 'reports']);
 
 const EMPLOYEE_FORM_FIELDS = [
   { key: 'finalCode', label: 'Code final' },
@@ -1901,6 +1902,7 @@ function buildDayRoster(selectedWeek, selectedDate, employees = []) {
     .sort((left, right) => left.fullName.localeCompare(right.fullName));
 }
 
+
 function getBusLabel(value) {
   const text = String(value || '').trim();
   return text && text !== '0' ? text : 'Sans bus';
@@ -1953,7 +1955,7 @@ function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
       const isVerify = String(rosterRow?.statusCode || '').toUpperCase() === 'AVR';
       group.total += 1;
       group.present += rosterRow?.isPresent ? 1 : 0;
-      group.absent += isPointageKnown && !rosterRow?.isPresent ? 1 : 0;
+      group.absent += !rosterRow?.isPresent ? 1 : 0;
       group.verify += isVerify ? 1 : 0;
       group.people.push({
         employeeKey: rosterRow?.employeeKey || employee.recordId,
@@ -2855,12 +2857,6 @@ function EmployeeBaseSurface({
   return (
     <article className="admin-table-card">
       <div className="admin-workspace__hero">
-        <div>
-          <p className="rh-eyebrow">{labels.eyebrow}</p>
-          <h2>{labels.title}</h2>
-          <p>{labels.description}</p>
-        </div>
-
         <div className="admin-workspace__actions">
           <button className="ghost-button" type="button" onClick={onExport}>
             {labels.export}
@@ -3105,33 +3101,17 @@ function BusBaseSurface({
   labels,
   locale,
 }) {
-  const maxTotal = Math.max(1, ...rows.map((row) => row.total));
+  const [selectedBus, setSelectedBus] = useState(null);
+  const [capacityEditorBus, setCapacityEditorBus] = useState(null);
+  const [capacityDraft, setCapacityDraft] = useState('');
+  const [capacityMessage, setCapacityMessage] = useState('');
+  const [busCapacities, setBusCapacities] = useState(readLocalBusCapacities);
   const filteredRows = useMemo(
     () =>
       rows.filter((row) =>
         matchesSearch([row.bus, row.total, row.present, row.absent, row.presentRate], searchValue),
       ),
     [rows, searchValue],
-  );
-  const filteredPeople = useMemo(
-    () =>
-      filteredRows
-        .flatMap((row) => row.people)
-        .filter((person) =>
-          matchesSearch(
-            [
-              person.id,
-              person.fullName,
-              person.bus,
-              person.department,
-              person.service,
-              person.statusLabel,
-              person.departureReason,
-            ],
-            searchValue,
-          ),
-        ),
-    [filteredRows, searchValue],
   );
   const totals = rows.reduce(
     (summary, row) => ({
@@ -3143,73 +3123,194 @@ function BusBaseSurface({
     { people: 0, present: 0, absent: 0, verify: 0 },
   );
   const rate = totals.people ? Math.round((totals.present / totals.people) * 100) : 0;
+  const selectedRow = selectedBus ? rows.find((row) => row.bus === selectedBus) : null;
+  const maxTotal = Math.max(1, ...rows.map((row) => row.total));
+  const palette = ['blue', 'green', 'violet', 'amber', 'red', 'purple'];
+
+  useEffect(() => {
+    let alive = true;
+    loadBusCapacities().then((result) => {
+      if (!alive) return;
+      setBusCapacities(result.data || {});
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function getCapacity(row) {
+    const value = Number(busCapacities[row.bus] || 0);
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
+  function getCapacityRate(row) {
+    const capacity = getCapacity(row);
+    return capacity ? Math.round((row.total / capacity) * 100) : null;
+  }
+
+  function getOccupationTone(row) {
+    const rateValue = getCapacityRate(row);
+    if (rateValue === null) return 'neutral';
+    if (rateValue > 95) return 'red';
+    if (rateValue >= 85) return 'yellow';
+    return 'green';
+  }
+
+  function getDisplayedRouteRate(row) {
+    return getCapacityRate(row) ?? row.presentRate;
+  }
+
+  async function persistBusCapacity(bus, capacity) {
+    const next = { ...busCapacities };
+    if (capacity > 0) {
+      next[bus] = capacity;
+    } else {
+      delete next[bus];
+    }
+    setBusCapacities(next);
+    return saveBusCapacities(next);
+  }
+
+  function handleEditCapacity(event, row) {
+    event.stopPropagation();
+    const current = getCapacity(row);
+    setCapacityEditorBus(row.bus);
+    setCapacityDraft(current ? String(current) : '');
+  }
+
+  function closeCapacityEditor() {
+    setCapacityEditorBus(null);
+    setCapacityDraft('');
+  }
+
+  async function submitCapacity(event) {
+    event.preventDefault();
+    if (!capacityEditorBus) return;
+    const next = Math.round(Number(capacityDraft));
+    if (!capacityDraft.trim()) {
+      const result = await persistBusCapacity(capacityEditorBus, 0);
+      setCapacityMessage(`Capacite supprimee pour ${capacityEditorBus}. ${result.message}`);
+      closeCapacityEditor();
+      return;
+    }
+    if (!Number.isFinite(next) || next <= 0) {
+      return;
+    }
+    const result = await persistBusCapacity(capacityEditorBus, next);
+    setCapacityMessage(`Capacite ${next} sauvegardee pour ${capacityEditorBus}. ${result.message}`);
+    closeCapacityEditor();
+  }
+
+  function openBus(row) {
+    setSelectedBus(row.bus);
+  }
 
   return (
-    <article className="rh-card rh-card--base">
-      <div className="rh-base-surface">
-        <div className="rh-base-surface__hero">
-          <div>
-            <p className="rh-eyebrow">{labels.eyebrow}</p>
-            <h2>{labels.title}</h2>
-            <p>{labels.subtitle(formatDateLabel(selectedDate, locale))}</p>
-          </div>
+    <>
+      <section className="bus-dashboard">
+        {capacityMessage ? <p className="bus-save-message" role="status">{capacityMessage}</p> : null}
 
-          <div className="rh-table-tools">
-            <input
-              type="search"
-              value={searchValue}
-              placeholder={labels.search}
-              onChange={(event) => onSearchChange(event.target.value)}
-            />
-          </div>
+        <div className="bus-dashboard__cards">
+          {[
+            { label: 'Nombre de bus', value: rows.length, note: 'Bus actifs aujourd’hui', icon: 'building', tone: 'blue' },
+            { label: 'Employes affectes', value: totals.people, note: 'Actifs avec affectation bus', icon: 'people', tone: 'green' },
+            { label: 'Employes presents', value: totals.present, note: 'Aujourd’hui', icon: 'people', tone: 'violet' },
+            { label: 'Taux de pointage', value: `${rate}%`, note: 'Presence globale', icon: 'chart', tone: 'mint', ring: rate },
+          ].map((card) => (
+            <article className={`bus-stat-card bus-stat-card--${card.tone}`} key={card.label}>
+              <span className="bus-stat-card__icon"><DashboardIcon type={card.icon} /></span>
+              <div>
+                <p>{card.label}</p>
+                <strong>{card.value}</strong>
+                <small>{card.note}</small>
+              </div>
+              {card.ring !== undefined ? <span className="bus-stat-card__ring" style={{ '--bus-rate': `${card.ring * 3.6}deg` }}>{card.ring}%</span> : null}
+            </article>
+          ))}
         </div>
 
-        <div className="rh-base-metrics">
-          <article className="rh-base-metric">
-            <span>{labels.cards.bus}</span>
-            <strong>{rows.length}</strong>
+        <div className="bus-dashboard__main">
+          <article className="bus-panel bus-panel--split">
+            <header>
+              <div>
+                <h2>Repartition des presences par bus</h2>
+                <p>Vue d’ensemble des employes presents et absents</p>
+              </div>
+            </header>
+            <div className="bus-donut-layout">
+              <div className="bus-donut" style={{ '--present-angle': `${rate * 3.6}deg` }}>
+                <div><strong>{totals.people}</strong><span>Employes</span></div>
+              </div>
+              <div className="bus-donut-legend">
+                <span><b className="is-present" />{totals.present} Presents ({rate}%)</span>
+                <span><b />{totals.absent} Absents ({100 - rate}%)</span>
+              </div>
+            </div>
+            <footer>
+              <span><DashboardIcon type="calendar" /> {formatDateLabel(selectedDate, locale)}</span>
+              <b>A jour</b>
+            </footer>
           </article>
-          <article className="rh-base-metric">
-            <span>{labels.cards.people}</span>
-            <strong>{totals.people}</strong>
-          </article>
-          <article className="rh-base-metric">
-            <span>{labels.cards.present}</span>
-            <strong>{totals.present}</strong>
-          </article>
-          <article className="rh-base-metric">
-            <span>{labels.cards.rate}</span>
-            <strong>{rate}%</strong>
-          </article>
-        </div>
 
-        <section className="bus-overview" aria-label={labels.chartLabel}>
-          <div className="bus-curve bus-curve--page">
-            {filteredRows.length ? (
-              filteredRows.map((row) => (
-                <div className="bus-curve__item" key={row.bus}>
-                  <div>
+          <article className="bus-panel bus-panel--details">
+            <header>
+              <div>
+                <h2>Detail des bus</h2>
+                <p>Taux de presence par bus. Double-clique sur un bus pour voir la liste.</p>
+              </div>
+              <input
+                type="search"
+                value={searchValue}
+                placeholder={labels.search}
+                onChange={(event) => onSearchChange(event.target.value)}
+              />
+            </header>
+            <div className="bus-card-grid">
+              {filteredRows.length ? filteredRows.map((row, index) => (
+                <button
+                  className={`bus-route-card bus-route-card--${palette[index % palette.length]} bus-route-card--occupancy-${getOccupationTone(row)}`}
+                  key={row.bus}
+                  type="button"
+                  onDoubleClick={() => openBus(row)}
+                  onClick={() => setSelectedBus(row.bus)}
+                  title="Double-clique pour ouvrir la liste des personnes"
+                >
+                  <span
+                    className="bus-route-card__icon"
+                    role="button"
+                    tabIndex={0}
+                    title="Cliquer pour saisir la capacite du bus"
+                    onClick={(event) => handleEditCapacity(event, row)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') handleEditCapacity(event, row);
+                    }}
+                  >
+                    <DashboardIcon type={row.bus === 'Sans bus' ? 'lock' : 'building'} />
+                  </span>
+                  <div className="bus-route-card__copy">
                     <strong>{row.bus}</strong>
-                    <span>{row.present}/{row.total}</span>
+                    <small>{row.present} / {row.total} presents</small>
+                    <small>{getCapacity(row) ? `Capacite ${getCapacity(row)} | Occupation ${getCapacityRate(row)}%` : 'Clique sur l’icone pour saisir la capacite'}</small>
+                    <span className="bus-route-card__track">
+                      <i style={{ width: `${Math.max(4, Math.min(100, getDisplayedRouteRate(row)))}%` }} />
+                    </span>
                   </div>
-                  <div className="bus-curve__track">
-                    <span
-                      className="bus-curve__bar"
-                      style={{ width: `${Math.max(8, (row.total / maxTotal) * 100)}%` }}
-                    />
-                    <span className="bus-curve__present" style={{ width: `${row.presentRate}%` }} />
-                  </div>
-                  <small>{row.presentRate}% pointage</small>
-                </div>
-              ))
-            ) : (
-              <div className="rh-empty-inline">{labels.empty}</div>
-            )}
-          </div>
-        </section>
+                  <b>{getDisplayedRouteRate(row)}%</b>
+                </button>
+              )) : <div className="rh-empty-inline">{labels.empty}</div>}
+            </div>
+          </article>
+        </div>
 
-        <div className="rh-table-wrap">
-          <table className="rh-table">
+        <article className="bus-panel">
+          <header>
+            <div>
+              <h2>Donnees detaillees par bus</h2>
+              <p>Synthese des presences, absences et elements a verifier</p>
+            </div>
+          </header>
+          <div className="rh-table-wrap">
+            <table className="rh-table bus-detail-table">
             <thead>
               <tr>
                 <th>{labels.columns.bus}</th>
@@ -3217,70 +3318,263 @@ function BusBaseSurface({
                 <th>{labels.columns.present}</th>
                 <th>{labels.columns.absent}</th>
                 <th>{labels.columns.verify}</th>
+                <th>Capacite</th>
+                <th>Occupation</th>
                 <th>{labels.columns.rate}</th>
               </tr>
             </thead>
             <tbody>
               {filteredRows.length ? (
                 filteredRows.map((row) => (
-                  <tr key={row.bus}>
+                  <tr key={row.bus} onDoubleClick={() => openBus(row)}>
                     <td>{row.bus}</td>
                     <td>{row.total}</td>
                     <td>{row.present}</td>
                     <td>{row.absent}</td>
                     <td>{row.verify}</td>
-                    <td>{row.presentRate}%</td>
+                    <td>
+                      <button className="bus-capacity-button" type="button" onClick={(event) => handleEditCapacity(event, row)}>
+                        {getCapacity(row) || 'Ajouter'}
+                      </button>
+                    </td>
+                    <td>{getCapacityRate(row) === null ? '-' : <span className={`bus-rate-pill bus-rate-pill--${getOccupationTone(row)}`}>{getCapacityRate(row)}%</span>}</td>
+                    <td><span className="bus-rate-pill">{row.presentRate}%</span></td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="rh-table__empty" colSpan={6}>
+                  <td className="rh-table__empty" colSpan={8}>
                     {labels.empty}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
+          </div>
+        </article>
+      </section>
 
+      {selectedRow ? (
+        <div className="rh-modal" role="dialog" aria-modal="true" aria-labelledby="bus-detail-title">
+          <button className="rh-modal__backdrop" type="button" aria-label={labels.close} onClick={() => setSelectedBus(null)} />
+          <article className="rh-modal__panel">
+            <div className="rh-modal__header">
+              <div>
+                <p className="rh-eyebrow">Bus</p>
+                <h2 id="bus-detail-title">{selectedRow.bus}</h2>
+                <p>{selectedRow.present} / {selectedRow.total} presents | {selectedRow.absent} absents</p>
+              </div>
+              <button className="rh-modal__close" type="button" onClick={() => setSelectedBus(null)}>{labels.close}</button>
+            </div>
+            <div className="rh-table-wrap rh-modal__table-wrap">
+              <table className="rh-table">
+                <thead><tr><th>{labels.columns.id}</th><th>{labels.columns.name}</th><th>{labels.columns.department}</th><th>{labels.columns.status}</th><th>{labels.columns.detail}</th><th>{labels.columns.departureReason}</th></tr></thead>
+                <tbody>
+                  {selectedRow.people.map((person, index) => (
+                    <tr key={`${person.employeeKey || person.id}-${index}`}>
+                      <td>{person.id || '-'}</td>
+                      <td>{person.fullName || '-'}</td>
+                      <td>{[person.department, person.service].filter(Boolean).join(' / ') || '-'}</td>
+                      <td>{person.isPresent ? 'Present' : person.statusLabel || 'Absent'}</td>
+                      <td>{person.display || '-'}</td>
+                      <td>{person.departureReason || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {capacityEditorBus ? (
+        <div className="rh-modal" role="dialog" aria-modal="true" aria-labelledby="bus-capacity-title">
+          <button className="rh-modal__backdrop" type="button" aria-label={labels.close} onClick={closeCapacityEditor} />
+          <form className="bus-capacity-modal" onSubmit={submitCapacity}>
+            <div className="bus-capacity-modal__header">
+              <span><DashboardIcon type="building" /></span>
+              <div>
+                <p className="rh-eyebrow">Capacite bus</p>
+                <h2 id="bus-capacity-title">{capacityEditorBus}</h2>
+              </div>
+            </div>
+            <label>
+              <span>Nombre de places</span>
+              <input
+                autoFocus
+                type="number"
+                min="1"
+                step="1"
+                inputMode="numeric"
+                value={capacityDraft}
+                placeholder="Ex: 43"
+                onChange={(event) => setCapacityDraft(event.target.value)}
+              />
+            </label>
+            <div className="bus-capacity-modal__actions">
+              <button type="button" className="ghost-button" onClick={closeCapacityEditor}>Annuler</button>
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={Boolean(capacityDraft.trim()) && (!Number.isFinite(Number(capacityDraft)) || Number(capacityDraft) <= 0)}
+              >
+                Enregistrer
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function StcDepartureSurface({
+  employees,
+  searchValue,
+  onSearchChange,
+  onEdit,
+  locale,
+  currentMonthLabel,
+}) {
+  const filteredEmployees = useMemo(
+    () =>
+      employees.filter((employee) =>
+        matchesSearch(
+          [
+            employee.finalCode,
+            employee.id,
+            employee.fullName,
+            employee.department,
+            employee.service,
+            employee.contract,
+            employee.inactiveFrom,
+            employee.departureReason,
+          ],
+          searchValue,
+        ),
+      ),
+    [employees, searchValue],
+  );
+  const reasonRows = useMemo(() => {
+    const counts = new Map();
+    employees.forEach((employee) => {
+      const reason = String(employee.departureReason || '').trim() || 'Non renseigne';
+      counts.set(reason, (counts.get(reason) || 0) + 1);
+    });
+    return [...counts.entries()]
+      .map(([reason, count]) => ({ reason, count, percent: employees.length ? Math.round((count / employees.length) * 100) : 0 }))
+      .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason));
+  }, [employees]);
+  const maxCount = Math.max(1, ...reasonRows.map((row) => row.count));
+  const mainReason = reasonRows[0]?.reason || 'Aucune donnee';
+  const missingReasonCount = employees.filter((employee) => !String(employee.departureReason || '').trim()).length;
+  const palette = ['blue', 'red', 'amber', 'violet', 'green', 'slate'];
+  const chartPoints = reasonRows.map((row, index) => {
+    const x = 44 + index * (reasonRows.length > 1 ? 472 / (reasonRows.length - 1) : 0);
+    const y = 126 - (row.count / maxCount) * 88;
+    return { ...row, x, y };
+  });
+  const polyline = chartPoints.map((point) => `${point.x},${point.y}`).join(' ');
+  const area = chartPoints.length
+    ? `M${chartPoints[0].x},126 L${polyline} L${chartPoints.at(-1).x},126 Z`
+    : '';
+
+  return (
+    <section className="stc-dashboard">
+      <div className="stc-dashboard__cards">
+        <article className="stc-stat-card stc-stat-card--blue">
+          <span><DashboardIcon type="file" /></span>
+          <div><p>STC du mois</p><strong>{employees.length}</strong><small>{currentMonthLabel}</small></div>
+        </article>
+        <article className="stc-stat-card stc-stat-card--red">
+          <span><DashboardIcon type="clock" /></span>
+          <div><p>Raisons renseignees</p><strong>{employees.length - missingReasonCount}</strong><small>{missingReasonCount} sans raison</small></div>
+        </article>
+        <article className="stc-stat-card stc-stat-card--green">
+          <span><DashboardIcon type="chart" /></span>
+          <div><p>Raison principale</p><strong>{mainReason}</strong><small>{reasonRows[0]?.count || 0} personne(s)</small></div>
+        </article>
+      </div>
+
+      <div className="stc-dashboard__main">
+        <article className="stc-panel stc-panel--chart">
+          <header>
+            <div>
+              <h2>Courbe des raisons de depart</h2>
+              <p>Repartition des STC selon la cause de depart</p>
+            </div>
+          </header>
+          {chartPoints.length ? (
+            <svg viewBox="0 0 570 170" role="img" aria-label={reasonRows.map((row) => `${row.reason}: ${row.count}`).join(', ')}>
+              <defs><linearGradient id="stcReasonFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity=".28" /><stop offset="100%" stopColor="#ef4444" stopOpacity=".03" /></linearGradient></defs>
+              {[0, 25, 50, 75, 100].map((value) => <g key={value}><line x1="34" x2="548" y1={126 - value * .88} y2={126 - value * .88} /><text x="26" y={130 - value * .88} textAnchor="end">{value}%</text></g>)}
+              <path d={area} />
+              <polyline points={polyline} />
+              {chartPoints.map((point) => (
+                <g key={point.reason}>
+                  <circle cx={point.x} cy={point.y} r="4" />
+                  <text className="stc-chart__value" x={point.x} y={point.y - 10} textAnchor="middle">{point.count}</text>
+                  <text x={point.x} y="150" textAnchor="middle">{point.reason.length > 14 ? `${point.reason.slice(0, 13)}...` : point.reason}</text>
+                </g>
+              ))}
+            </svg>
+          ) : <div className="rh-empty-inline">Aucun STC pour ce mois.</div>}
+        </article>
+
+        <article className="stc-panel">
+          <header>
+            <div>
+              <h2>Raisons de depart</h2>
+              <p>Classement par volume</p>
+            </div>
+            <input
+              type="search"
+              value={searchValue}
+              placeholder="Rechercher STC, raison, service..."
+              onChange={(event) => onSearchChange(event.target.value)}
+            />
+          </header>
+          <div className="stc-reason-list">
+            {reasonRows.length ? reasonRows.map((row, index) => (
+              <div className={`stc-reason-card stc-reason-card--${palette[index % palette.length]}`} key={row.reason}>
+                <div>
+                  <strong>{row.reason}</strong>
+                  <span>{row.count} personne(s) | {row.percent}%</span>
+                </div>
+                <i><b style={{ width: `${Math.max(4, row.percent)}%` }} /></i>
+              </div>
+            )) : <div className="rh-empty-inline">Aucune raison de depart.</div>}
+          </div>
+        </article>
+      </div>
+
+      <article className="stc-panel">
+        <header>
+          <div>
+            <h2>Liste STC</h2>
+            <p>{filteredEmployees.length} fiche(s) visible(s)</p>
+          </div>
+        </header>
         <div className="rh-table-wrap">
           <table className="rh-table">
-            <thead>
-              <tr>
-                <th>{labels.columns.id}</th>
-                <th>{labels.columns.name}</th>
-                <th>{labels.columns.bus}</th>
-                <th>{labels.columns.department}</th>
-                <th>{labels.columns.status}</th>
-                <th>{labels.columns.detail}</th>
-                <th>{labels.columns.departureReason}</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Code</th><th>Nom</th><th>Departement</th><th>Service</th><th>Raison de depart</th><th>Mois sortie</th><th>Action</th></tr></thead>
             <tbody>
-              {filteredPeople.length ? (
-                filteredPeople.map((person, index) => (
-                  <tr key={`${person.employeeKey || person.id}-${person.bus}-${index}`}>
-                    <td>{person.id || '-'}</td>
-                    <td>{person.fullName || '-'}</td>
-                    <td>{person.bus || '-'}</td>
-                    <td>{person.department || '-'}</td>
-                    <td>{person.statusLabel || '-'}</td>
-                    <td>{person.display || '-'}</td>
-                    <td>{person.departureReason || '-'}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className="rh-table__empty" colSpan={7}>
-                    {labels.noResults}
-                  </td>
+              {filteredEmployees.length ? filteredEmployees.map((employee) => (
+                <tr key={employee.recordId || employee.finalCode || employee.fullName}>
+                  <td>{employee.finalCode || employee.id || '-'}</td>
+                  <td>{employee.fullName || '-'}</td>
+                  <td>{employee.department || '-'}</td>
+                  <td>{employee.service || '-'}</td>
+                  <td>{employee.departureReason || '-'}</td>
+                  <td>{employee.inactiveFrom || '-'}</td>
+                  <td><button className="ghost-button ghost-button--small" type="button" onClick={() => onEdit(employee)}>Modifier</button></td>
                 </tr>
-              )}
+              )) : <tr><td className="rh-table__empty" colSpan={7}>Aucun STC trouve.</td></tr>}
             </tbody>
           </table>
         </div>
-      </div>
-    </article>
+      </article>
+    </section>
   );
 }
 
@@ -3922,8 +4216,8 @@ export default function App() {
     [employees, currentMonthDate],
   );
   const busPointageRows = useMemo(
-    () => buildBusPointageRows(monthlyBaseEmployees, dayRoster),
-    [dayRoster, monthlyBaseEmployees],
+    () => buildBusPointageRows(monthlyActiveEmployees, dayRoster),
+    [dayRoster, monthlyActiveEmployees],
   );
   const monthlyDepartmentRows = useMemo(
     () => buildDepartmentBaseRows(monthlyBaseEmployees, currentMonthDate),
@@ -4239,6 +4533,7 @@ export default function App() {
   const latestImportLabel = formatDateTimeLabel(snapshot?.generatedAt, locale);
   const isEmployeeSection = activeSection === 'employees';
   const isDepartmentSection = activeSection === 'departments';
+  const isStcSection = activeSection === 'reports';
   const isAbsenceSection = activeSection === 'absences';
   const isSettingsSection = activeSection === 'settings';
   const baseServiceCount = useMemo(
@@ -4277,9 +4572,21 @@ export default function App() {
     setStatusMessage(`Export Excel de la base RH genere le ${new Date().toLocaleDateString(locale)}.`);
   }
 
+  function buildEmployeeImportSummary(importResult, importedEmployees) {
+    const activeCount = importedEmployees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate)).length;
+    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInMonth(employee, currentMonthDate)).length;
+    const modCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOD').length;
+    const moiCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOI').length;
+    const busCount = new Set(importedEmployees.map((employee) => String(employee.bus || '').trim()).filter(Boolean)).size;
+    const ignored = Number(importResult.ignoredRows || 0);
+    const ignoredText = ignored ? ` | ${ignored} ligne(s) ignoree(s)` : '';
+
+    return `Import RH controle: ${importedEmployees.length} fiche(s), ${activeCount} actif(s), ${stcCount} STC, ${modCount} MOD, ${moiCount} MOI, ${busCount} bus | feuille "${importResult.sheetName}" ligne entete ${importResult.headerRowNumber}${ignoredText}.`;
+  }
+
   async function handleImportEmployeeBaseFile(event) {
     const file = event.target.files?.[0];
-    if (!file) {
+    if (!file || isEmployeeImporting) {
       return;
     }
 
@@ -4289,9 +4596,10 @@ export default function App() {
       const importResult = await analyzeEmployeeBaseFile(file);
       setStatusMessage(translate('employeeBase.replacingImport', 'Remplacement de la base RH en cours...'));
       const replaceResult = await replaceEmployeeDirectory(importResult.employees);
-      setEmployees(Array.isArray(replaceResult.employees) ? sortEmployeeRecords(replaceResult.employees) : []);
+      const importedEmployees = Array.isArray(replaceResult.employees) ? sortEmployeeRecords(replaceResult.employees) : [];
+      setEmployees(importedEmployees);
       setSearchValue('');
-      setStatusMessage(replaceResult.message || translate('employeeBase.importDone', 'Base RH importee.'));
+      setStatusMessage(`${buildEmployeeImportSummary(importResult, importedEmployees)} ${replaceResult.message || translate('employeeBase.importDone', 'Base RH importee.')}`);
     } catch (error) {
       setStatusMessage(error.message || translate('employeeBase.importError', 'Import de la base RH impossible.'));
     } finally {
@@ -4342,7 +4650,11 @@ export default function App() {
       setEmployees(() =>
         Array.isArray(result.employees) ? sortEmployeeRecords(result.employees) : [],
       );
-      setStatusMessage(result.message || 'Fiche employe sauvegardee.');
+      setStatusMessage(
+        result.mode === 'supabase'
+          ? result.message || 'Fiche employe sauvegardee dans Supabase.'
+          : `Attention: la fiche est sauvegardee localement mais pas confirmee dans Supabase. ${result.message || ''}`.trim(),
+      );
       handleCloseEmployeeEditor();
     } catch (error) {
       setStatusMessage(error.message || 'Sauvegarde employe impossible.');
@@ -4405,8 +4717,10 @@ export default function App() {
             <span />
           </button>
 
-          <div className="pointage-topbar-title"><strong>{isSettingsSection ? 'Pointage & Gestion du Personnel' : sidebarItems.find((item) => item.key === activeSection)?.label}</strong><span>{isSettingsSection ? 'Pilotez la présence, la performance et la productivité' : sidebarItems.find((item) => item.key === activeSection)?.note}</span></div>
+          <div className="pointage-topbar-title"><strong>{isSettingsSection ? 'Bonjour ZK Dashboard' : sidebarItems.find((item) => item.key === activeSection)?.label}</strong>{!isSettingsSection && <span>{sidebarItems.find((item) => item.key === activeSection)?.note}</span>}</div>
           <div className="rh-topbar__actions">
+            {isSettingsSection && <div id="daily-pointage-topbar-tools" className="daily-pointage-topbar-tools" />}
+
             <LanguageSwitcher
               language={language}
               onChange={setLanguage}
@@ -4441,7 +4755,7 @@ export default function App() {
 
         <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
           {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
-          {isEmployeeSection || isDepartmentSection || isSettingsSection ? null : (
+          {isEmployeeSection || isDepartmentSection || isStcSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">
             <div>
@@ -4630,7 +4944,7 @@ export default function App() {
             </>
           )}
 
-          {isSettingsSection ? null : isEmployeeSection || isDepartmentSection || isAbsenceSection ? (
+          {isSettingsSection ? null : isEmployeeSection || isDepartmentSection || isStcSection || isAbsenceSection ? (
             isEmployeeSection ? (
               <EmployeeBaseSurface
                 employees={monthlyBaseEmployees}
@@ -4664,6 +4978,15 @@ export default function App() {
                 onSearchChange={setSearchValue}
                 labels={busBaseLabels}
                 locale={locale}
+              />
+            ) : isStcSection ? (
+              <StcDepartureSurface
+                employees={stcEmployees}
+                searchValue={searchValue}
+                onSearchChange={setSearchValue}
+                onEdit={handleOpenEditEmployee}
+                locale={locale}
+                currentMonthLabel={currentMonthLabel}
               />
             ) : isAbsenceSection ? (
               <AbsenceSurface

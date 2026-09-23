@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, prepareDailyPointage } from '../lib/dailyPointage.js';
 import DailyAttendanceOverview from './DailyAttendanceOverview';
 import { clearPointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
 import { correctDailyPointage, verifyPointageCorrectionCode } from '../lib/pointageCorrection.js';
 import PointageCorrectionForm from './PointageCorrectionForm';
 import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDates.js';
+import DashboardIcon from './DashboardIcon';
 
 function getCurrentMonthDate() {
   const now = new Date();
@@ -13,6 +15,44 @@ function getCurrentMonthDate() {
 
 function isExcelFile(file) {
   return /\.(xlsx|xls)$/i.test(file?.name || '');
+}
+
+function monthRangeLabel(baseMonthDate, locale) {
+  const start = new Date(baseMonthDate);
+  start.setMonth(start.getMonth() - 3);
+  const startLabel = start.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const endLabel = baseMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  return `${startLabel} - ${endLabel}`;
+}
+
+function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, baseMonthDate, onImport, busy, importDisabled, translate, locale }) {
+  const [target, setTarget] = useState(null);
+
+  useEffect(() => {
+    setTarget(document.getElementById('daily-pointage-topbar-tools'));
+  }, []);
+
+  if (!target) return null;
+
+  return createPortal(
+    <>
+      <label className="mod-period-picker mod-period-picker--topbar" htmlFor="daily-analysis-date">
+        <DashboardIcon type="calendar" />
+        <span>Periode d'analyse</span>
+        <select id="daily-analysis-date" value={analysisDate || ''} onChange={(event) => onDateChange(event.target.value)} disabled={!dates.length}>
+          {!dates.length && <option value="">{translate('daily.noDays')}</option>}
+          {dates.map((date) => <option key={date} value={date}>{formatPointageDate(date, locale)}</option>)}
+        </select>
+        <small>{monthRangeLabel(baseMonthDate, locale)}</small>
+      </label>
+      <label className="mod-export-button mod-export-button--topbar">
+        <DashboardIcon type="upload" />
+        <input type="file" accept=".xlsx,.xls" disabled={busy || importDisabled} onChange={onImport} />
+        {busy ? translate('hero.importing') : 'Exporter'}
+      </label>
+    </>,
+    target,
+  );
 }
 
 export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange }) {
@@ -120,6 +160,17 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     }
   }
   return <div className="daily-import">
+    <DailyPointageTopbarTools
+      dates={dates}
+      analysisDate={analysisDate}
+      onDateChange={setSelectedDay}
+      baseMonthDate={baseMonthDate}
+      onImport={importFile}
+      busy={busy || correcting}
+      importDisabled={loading || !importEmployees.length}
+      translate={translate}
+      locale={locale}
+    />
     <DailyAttendanceOverview day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={setSelectedDay}
       baseEmployees={baseEmployees} baseMonthDate={baseMonthDate} onOpen={setListDetail}
       target={productionModTarget} onTargetChange={onProductionModTargetChange} onImport={importFile}

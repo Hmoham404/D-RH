@@ -414,7 +414,132 @@
   .bus-panel--split footer { @apply mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-50 bg-slate-50 px-4 py-3 text-xs font-semibold text-blue-900/60; }
   .bus-panel--split footer span { @apply flex items-center gap-2; }
   .bus-panel--split footer b { @apply text-emerald-600; }
-  .bus-card-grid { @apply grid gap-3 md:grid-cols-2; }
+  .bus-lollipop-chart { @apply grid gap-3; }
+  .bus-lollipop-chart header { @apply mb-0 flex flex-wrap items-center justify-between gap-3; }
+  .bus-lollipop-chart h3 { @apply text-sm font-black text-[#071a55]; }
+  .bus-lollipop-chart header div { @apply flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-500; }
+  .bus-lollipop-chart header span { @apply inline-block; }
+  .bus-lollipop-chart header .is-active { @apply size-2 rounded-full bg-blue-600; }
+  .bus-lollipop-chart header .is-reserved { @apply size-2 rounded-full bg-sky-300; }
+  .bus-lollipop-chart header .is-capacity { @apply ml-2 h-px w-5 border-t border-dashed border-red-400; }
+  .bus-lollipop-chart__surface { @apply overflow-x-auto rounded-lg border border-blue-100 p-3; background: linear-gradient(180deg, #f9fcff 0%, #fff 75%); }
+  .bus-lollipop-chart svg { @apply block min-w-[560px] w-full; }
+  .bus-lollipop-chart svg line { @apply stroke-blue-100; }
+  .bus-lollipop-chart svg text { @apply fill-slate-500 text-[11px] font-semibold; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__axis { @apply stroke-slate-400; stroke-width: 1.5; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__axis-label { @apply fill-[#071a55] text-xs font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__capacity-line { @apply stroke-red-400; stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__capacity-value { @apply fill-red-500 text-[10px] font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__active-line { @apply stroke-blue-600; stroke-width: 3; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__active-line--overcapacity { @apply stroke-red-500; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-line { @apply stroke-sky-300; stroke-width: 3; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__point { @apply fill-blue-600 stroke-white; stroke-width: 2.5; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__point--overcapacity { @apply fill-red-500; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-point { @apply fill-sky-300 stroke-white; stroke-width: 2.5; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__active-value { @apply fill-blue-700 text-xs font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__active-value--overcapacity { @apply fill-red-600; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-value { @apply fill-sky-500 text-[10px] font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__hit-area { fill: transparent; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__value-button { @apply cursor-pointer outline-none transition-opacity; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__value-button:hover,
+  .bus-lollipop-chart svg .bus-lollipop-chart__value-button:focus { opacity: .72; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__value-button:hover text,
+  .bus-lollipop-chart svg .bus-lollipop-chart__value-button:focus text { text-decoration: underline; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__bus-label { @apply fill-[#071a55] text-[10px] font-black; }
+  .bus-comparison-chart { @apply hidden; }
+  .bus-comparison-chart__legend { @apply grid gap-2 sm:grid-cols-2 xl:grid-cols-4; }
+  .bus-comparison-chart__legend button { @apply flex min-w-0 items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-left transition hover:border-blue-200 hover:bg-blue-50; }
+  .bus-comparison-chart__legend i { @apply size-3 shrink-0 rounded-full; }
+  .bus-comparison-chart__legend span { @apply grid min-w-0 gap-0.5; }
+  .bus-comparison-chart__legend strong { @apply truncate text-[10px] font-black uppercase text-[#071a55]; }
+  .bus-comparison-chart__legend small { @apply truncate text-[10px] font-semibold text-slate-500; }
+  .bus-comparison-chart__surface { @apply overflow-x-auto rounded-lg border border-blue-100 p-3; background: linear-gradient(180deg, #f6faff 0%, #fff 45%); }
+  .bus-comparison-chart svg { @apply block min-w-[560px] w-full; }
+  .bus-comparison-chart svg line { @apply stroke-blue-100; }
+  .bus-comparison-chart svg text { @apply fill-slate-500 text-[11px] font-semibold; }
+  .bus-comparison-chart svg .bus-comparison-chart__axis { @apply stroke-slate-500; stroke-width: 1.5; }
+  .bus-comparison-chart svg .bus-comparison-chart__axis-label { @apply fill-[#071a55] text-xs font-black; }
+  .bus-comparison-chart svg .bus-comparison-chart__capacity-line { stroke-width: 1.6; stroke-dasharray: 5 4; }
+  .bus-comparison-chart svg .bus-comparison-chart__active-line { stroke-width: 2.6; }
+  .bus-comparison-chart svg .bus-comparison-chart__people-line { stroke-width: 2.6; }
+  .bus-comparison-chart svg .bus-comparison-chart__point { @apply stroke-white; stroke-width: 3; }
+  .bus-comparison-chart svg .bus-comparison-chart__capacity-label, .bus-comparison-chart svg .bus-comparison-chart__people-label { @apply text-[10px] font-black; }
+  .bus-comparison-chart svg .bus-comparison-chart__active-value { @apply text-xs font-black; }
+  .bus-reference-chart { @apply hidden; }
+  .bus-reference-chart__routes { @apply flex gap-2 overflow-x-auto pb-1; }
+  .bus-reference-chart__routes button { @apply shrink-0 rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase text-slate-500 transition hover:border-blue-200 hover:text-blue-700; }
+  .bus-reference-chart__routes button.is-active { @apply border-blue-600 bg-blue-600 text-white shadow-sm; }
+  .bus-reference-chart__surface { @apply overflow-x-auto rounded-lg border border-blue-100 p-3; background: linear-gradient(180deg, #f6faff 0%, #fff 45%); }
+  .bus-reference-chart__summary { @apply mb-2 grid min-w-[560px] grid-cols-[repeat(3,minmax(0,1fr))_auto] items-center gap-3 rounded-md border border-blue-100 bg-white/80 px-3 py-2 shadow-sm; }
+  .bus-reference-chart__summary div { @apply grid gap-0.5; }
+  .bus-reference-chart__summary span { @apply text-[10px] font-bold uppercase text-slate-500; }
+  .bus-reference-chart__summary strong { @apply text-sm font-black tabular-nums text-[#071a55]; }
+  .bus-reference-chart__summary button { @apply grid size-9 place-items-center rounded-md border border-blue-100 bg-blue-50 text-blue-600 transition hover:bg-blue-100; }
+  .bus-reference-chart svg { @apply block min-w-[560px] w-full; }
+  .bus-reference-chart svg line { @apply stroke-blue-100; }
+  .bus-reference-chart svg text { @apply fill-slate-500 text-[11px] font-semibold; }
+  .bus-reference-chart svg .bus-reference-chart__axis { @apply stroke-slate-500; stroke-width: 1.5; }
+  .bus-reference-chart svg .bus-reference-chart__axis-label { @apply fill-[#071a55] text-xs font-black; }
+  .bus-reference-chart svg .bus-reference-chart__capacity-line { @apply stroke-blue-500; stroke-width: 1.6; stroke-dasharray: 5 4; }
+  .bus-reference-chart svg .bus-reference-chart__capacity-label { @apply fill-blue-700 text-[10px] font-black; }
+  .bus-reference-chart svg .bus-reference-chart__active-line { @apply stroke-blue-600; stroke-width: 2.5; }
+  .bus-reference-chart svg .bus-reference-chart__point { @apply fill-blue-600 stroke-white; stroke-width: 3; }
+  .bus-reference-chart svg .bus-reference-chart__value { @apply fill-blue-700 text-xs font-black; }
+  .bus-transport-charts { @apply hidden; }
+  .bus-transport-chart { @apply min-w-0 rounded-lg border border-slate-200 bg-slate-50/50 p-3; }
+  .bus-transport-chart header { @apply mb-3 flex items-center justify-between gap-3 border-b border-slate-200 pb-2; }
+  .bus-transport-chart h3 { @apply text-xs font-black uppercase text-[#071a55]; }
+  .bus-transport-chart header span { @apply grid size-7 place-items-center rounded-full bg-white text-xs font-black text-slate-500 shadow-sm; }
+  .bus-transport-chart__plot { @apply grid gap-2; }
+  .bus-transport-chart__item { display: grid; grid-template-columns: minmax(5.75rem, .9fr) minmax(0, 2fr) 2.5rem; align-items: center; gap: .5rem; @apply text-left; }
+  .bus-transport-chart__item > span { @apply truncate text-[10px] font-bold uppercase text-slate-600; }
+  .bus-transport-chart__item > i { @apply h-3 overflow-hidden rounded-sm bg-slate-200/70; }
+  .bus-transport-chart__item > i > b { @apply block h-full rounded-sm transition-[width] duration-300; }
+  .bus-transport-chart__item > strong { @apply text-right text-xs font-black tabular-nums text-[#071a55]; }
+  .bus-transport-chart--blue .bus-transport-chart__item > i > b { @apply bg-blue-500; }
+  .bus-transport-chart--indigo .bus-transport-chart__item > i > b { @apply bg-indigo-500; }
+  .bus-transport-chart--green .bus-transport-chart__item > i > b { @apply bg-emerald-500; }
+  .bus-transport-chart--red .bus-transport-chart__item > i > b { @apply bg-rose-500; }
+  .bus-transport-chart__item:hover > span, .bus-transport-chart__item:hover > strong { @apply text-blue-600; }
+  .bus-capacity-chart { @apply hidden; }
+  .bus-capacity-chart__legend { @apply flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-100 pb-3 text-[11px] font-bold text-slate-500; }
+  .bus-capacity-chart__legend span { @apply inline-flex items-center gap-1.5; }
+  .bus-capacity-chart__legend i { @apply block h-2 w-5 rounded-full; }
+  .bus-capacity-chart__legend .is-capacity { @apply h-0.5 bg-slate-500; }
+  .bus-capacity-chart__legend .is-assigned { @apply bg-blue-500; }
+  .bus-capacity-chart__legend .is-present { @apply bg-emerald-500; }
+  .bus-capacity-chart__legend .is-absent { @apply bg-rose-500; }
+  .bus-capacity-chart__row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.45rem 1rem; @apply rounded-lg border border-slate-200 bg-slate-50/50 p-3 shadow-sm; }
+  .bus-capacity-chart__row--yellow { @apply border-amber-200 bg-amber-50/30; }
+  .bus-capacity-chart__row--red { @apply border-red-200 bg-red-50/30; }
+  .bus-capacity-chart__route { @apply flex min-w-0 items-center justify-between gap-2; }
+  .bus-capacity-chart__route-name { @apply flex min-w-0 items-center gap-2 text-left; }
+  .bus-capacity-chart__route-name > span:last-child { @apply grid min-w-0 gap-0.5; }
+  .bus-capacity-chart__route-name strong { @apply truncate text-xs font-black uppercase text-[#071a55]; }
+  .bus-capacity-chart__route-name small { @apply text-[11px] font-semibold text-slate-500; }
+  .bus-capacity-chart__route-icon { @apply grid size-9 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600; }
+  .bus-capacity-chart__capacity-action { @apply grid size-8 shrink-0 place-items-center rounded-md border border-blue-100 bg-white text-blue-600 transition hover:border-blue-300 hover:bg-blue-50; }
+  .bus-capacity-chart__series { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr) 2.25rem; align-items: center; gap: 0.5rem; }
+  .bus-capacity-chart__series > span { @apply text-[10px] font-bold uppercase tracking-wide text-slate-500; }
+  .bus-capacity-chart__series > b { @apply text-right text-xs font-black tabular-nums text-[#071a55]; }
+  .bus-capacity-chart__track { @apply h-2 overflow-hidden rounded-full bg-slate-200/80; }
+  .bus-capacity-chart__track i { @apply block h-full rounded-full; }
+  .bus-capacity-chart__track--capacity { @apply h-1 overflow-visible bg-slate-200; }
+  .bus-capacity-chart__track--capacity i { @apply h-1 bg-slate-500; }
+  .bus-capacity-chart__track--assigned i { @apply bg-blue-500; }
+  .bus-capacity-chart__track--present i { @apply bg-emerald-500; }
+  .bus-capacity-chart__track--absent i { @apply bg-rose-500; }
+  .bus-capacity-chart__rate { @apply flex items-center justify-between rounded-md bg-white px-3 py-2 text-xs shadow-sm; }
+  .bus-capacity-chart__rate span { @apply font-semibold text-slate-500; }
+  .bus-capacity-chart__rate strong { @apply font-black tabular-nums text-emerald-700; }
+  .bus-capacity-chart__row--yellow .bus-capacity-chart__rate strong { @apply text-amber-700; }
+  .bus-capacity-chart__row--red .bus-capacity-chart__rate strong { @apply text-red-700; }
+  @media (min-width: 768px) {
+    .bus-capacity-chart__row { grid-template-columns: 11.5rem minmax(0, 1fr) 5rem; }
+    .bus-capacity-chart__route { grid-row: span 4; }
+    .bus-capacity-chart__rate { grid-column: 3; grid-row: 1 / span 4; display: grid; place-content: center; gap: 0.25rem; text-align: center; }
+  }
+  .bus-card-grid { @apply hidden; }
   .bus-route-card { @apply grid min-h-20 grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 text-start shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md; }
   .bus-route-card__icon { @apply grid size-10 place-items-center rounded-lg bg-slate-100; }
   .bus-route-card--blue .bus-route-card__icon { @apply bg-sky-50 text-sky-600; }

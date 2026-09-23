@@ -1695,7 +1695,10 @@ function getOperationalWeeklySheets(snapshot) {
 function getAvailableDates(snapshot) {
   return [
     ...new Set(
-      getOperationalWeeklySheets(snapshot).flatMap((sheet) => sheet.dayColumns?.map((day) => day.isoDate) || []),
+      [
+        ...(snapshot?.rawRows || []).map((row) => row.isoDate),
+        ...(snapshot?.dailySummaries || []).map((day) => day.isoDate),
+      ],
     ),
   ]
     .filter((date) => isValidIsoDate(date))
@@ -1703,15 +1706,20 @@ function getAvailableDates(snapshot) {
 }
 
 function getDefaultSelectedDate(snapshot) {
+  const today = getTodayIsoDate();
+
   if (snapshot?.calculationRules && snapshot?.rawRows?.length) {
-    return snapshot.rawRows.map((row) => row.isoDate).filter(Boolean).sort().at(-1) || '';
+    const dates = [...new Set(snapshot.rawRows.map((row) => row.isoDate).filter(isValidIsoDate))].sort();
+    if (dates.includes(today)) {
+      return today;
+    }
+    return dates.at(-1) || '';
   }
   const dates = getAvailableDates(snapshot);
   if (!dates.length) {
     return '';
   }
 
-  const today = getTodayIsoDate();
   if (dates.includes(today)) {
     return today;
   }
@@ -1908,6 +1916,11 @@ function getBusLabel(value) {
   return text && text !== '0' ? text : 'Sans bus';
 }
 
+function isExcludedBusLabel(value) {
+  const normalized = normalizeLookupText(value).replace(/\s+/g, ' ');
+  return ['VOITURE PRIVE', 'VOITURE PRIVEE', 'VOTURE PRIVE', 'VOTURE PRIVEE'].includes(normalized);
+}
+
 function getBusPersonKeys(person = {}) {
   return [
     person.employeeKey,
@@ -1926,23 +1939,29 @@ function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
   const rosterByKey = new Map();
 
   dayRoster
-    .filter((row) => row.statusCode !== 'EMPTY')
+    .filter((row) => !['EMPTY', 'X'].includes(String(row.statusCode || '').toUpperCase()))
     .forEach((row) => {
       getBusPersonKeys(row).forEach((key) => rosterByKey.set(key, row));
     });
 
   baseEmployees
-    .filter((employee) => getBusPersonKeys(employee).length)
+    .filter((employee) => getBusPersonKeys(employee).length && !isExcludedBusLabel(employee.bus))
     .forEach((employee) => {
       const label = getBusLabel(employee.bus);
       const rosterRow = getBusPersonKeys(employee)
         .map((key) => rosterByKey.get(key))
         .find(Boolean);
+      const rosterStatusCode = String(rosterRow?.statusCode || '').toUpperCase();
+
+      if (rosterStatusCode === 'STC') {
+        return;
+      }
 
       if (!groups.has(label)) {
         groups.set(label, {
           bus: label,
           total: 0,
+          today: 0,
           present: 0,
           absent: 0,
           verify: 0,
@@ -1952,10 +1971,12 @@ function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
 
       const group = groups.get(label);
       const isPointageKnown = Boolean(rosterRow);
-      const isVerify = String(rosterRow?.statusCode || '').toUpperCase() === 'AVR';
+      const isPresentToday = Boolean(rosterRow?.isPresent);
+      const isVerify = rosterStatusCode === 'AVR';
       group.total += 1;
-      group.present += rosterRow?.isPresent ? 1 : 0;
-      group.absent += !rosterRow?.isPresent ? 1 : 0;
+      group.today += isPresentToday ? 1 : 0;
+      group.present += isPresentToday ? 1 : 0;
+      group.absent += !isPresentToday ? 1 : 0;
       group.verify += isVerify ? 1 : 0;
       group.people.push({
         employeeKey: rosterRow?.employeeKey || employee.recordId,
@@ -1966,10 +1987,12 @@ function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
         address: employee.address || rosterRow?.address || '',
         departureReason: employee.departureReason || '',
         kind: employee.kind || rosterRow?.kind || '-',
+        baseStatus: employee.status || 'Actif',
         display: rosterRow?.display || '-',
         statusCode: rosterRow?.statusCode || 'BASE',
         statusLabel: rosterRow?.statusLabel || 'Base RH',
-        isPresent: Boolean(rosterRow?.isPresent),
+        isPresent: isPresentToday,
+        isToday: isPresentToday,
         bus: label,
       });
     });
@@ -2635,7 +2658,7 @@ function BusPointageSheet({ rows, selectedDate, searchValue, onSearchChange, onC
                   <tr key={row.bus}>
                     <td>{row.bus}</td>
                     <td>{row.total}</td>
-                    <td>{row.present}</td>
+                    <td>{row.total}</td>
                     <td>{row.absent}</td>
                     <td>{row.verify}</td>
                     <td>{row.presentRate}%</td>
@@ -3102,18 +3125,22 @@ function BusBaseSurface({
   locale,
 }) {
   const [selectedBus, setSelectedBus] = useState(null);
+  const [selectedBusFilter, setSelectedBusFilter] = useState('all');
   const [capacityEditorBus, setCapacityEditorBus] = useState(null);
   const [capacityDraft, setCapacityDraft] = useState('');
   const [capacityMessage, setCapacityMessage] = useState('');
   const [busCapacities, setBusCapacities] = useState(readLocalBusCapacities);
+  const [chartBus, setChartBus] = useState('');
   const filteredRows = useMemo(
     () =>
       rows.filter((row) =>
-        matchesSearch([row.bus, row.total, row.present, row.absent, row.presentRate], searchValue),
+        !isExcludedBusLabel(row.bus)
+        && matchesSearch([row.bus, row.total, row.present, row.absent, row.presentRate], searchValue),
       ),
     [rows, searchValue],
   );
-  const totals = rows.reduce(
+  const busRows = useMemo(() => rows.filter((row) => !isExcludedBusLabel(row.bus)), [rows]);
+  const totals = busRows.reduce(
     (summary, row) => ({
       people: summary.people + row.total,
       present: summary.present + row.present,
@@ -3123,9 +3150,18 @@ function BusBaseSurface({
     { people: 0, present: 0, absent: 0, verify: 0 },
   );
   const rate = totals.people ? Math.round((totals.present / totals.people) * 100) : 0;
-  const selectedRow = selectedBus ? rows.find((row) => row.bus === selectedBus) : null;
-  const maxTotal = Math.max(1, ...rows.map((row) => row.total));
+  const selectedRow = selectedBus ? busRows.find((row) => row.bus === selectedBus) : null;
+  const selectedPeople = selectedRow
+    ? selectedRow.people.filter((person) => {
+        if (selectedBusFilter === 'today') return person.isToday;
+        return String(person.baseStatus || '').trim().toLowerCase() === 'actif'
+          && String(person.statusCode || '').trim().toUpperCase() !== 'STC';
+      })
+    : [];
+  const selectedDetailLabel = selectedBusFilter === 'today' ? 'Personnes présentes aujourd’hui' : 'Nombre actif';
+  const maxTotal = Math.max(1, ...busRows.map((row) => row.total));
   const palette = ['blue', 'green', 'violet', 'amber', 'red', 'purple'];
+  const selectedDateLabel = formatDateLabel(selectedDate, locale);
 
   useEffect(() => {
     let alive = true;
@@ -3143,9 +3179,37 @@ function BusBaseSurface({
     return Number.isFinite(value) && value > 0 ? value : 0;
   }
 
+  const chartRow = filteredRows.find((row) => row.bus === chartBus) || filteredRows[0] || null;
+  const chartCapacity = chartRow ? getCapacity(chartRow) : 0;
+  const chartXMaximum = Math.max(10, chartCapacity, chartRow?.total || 0);
+  const chartYMaximum = Math.max(10, chartRow?.present || 0);
+  const chartPointX = chartRow ? 78 + ((chartRow.total / chartXMaximum) * 482) : 78;
+  const chartPointY = chartRow ? 204 - ((chartRow.present / chartYMaximum) * 148) : 204;
+  const chartCapacityX = chartCapacity ? 78 + ((chartCapacity / chartXMaximum) * 482) : null;
+  const comparisonBusRows = filteredRows.filter((row) => /^bus\b/i.test(row.bus)).slice(0, 4);
+  const comparisonXMaximum = Math.max(10, ...comparisonBusRows.flatMap((row) => [row.total, getCapacity(row)]));
+  const comparisonYMaximum = Math.max(10, ...comparisonBusRows.map((row) => row.present));
+  const comparisonMaximum = Math.max(10, ...comparisonBusRows.flatMap((row) => [row.total, row.today, getCapacity(row)]));
+  const comparisonColors = ['#2563eb', '#0f9f6e', '#8b5cf6', '#f59e0b'];
+
   function getCapacityRate(row) {
     const capacity = getCapacity(row);
     return capacity ? Math.round((row.total / capacity) * 100) : null;
+  }
+
+  function getTodayCapacityRate(row) {
+    const capacity = getCapacity(row);
+    return capacity ? Math.round((row.today / capacity) * 100) : null;
+  }
+
+  function getTodayMissingPlaces(row) {
+    const capacity = getCapacity(row);
+    return capacity ? Math.max(0, row.today - capacity) : null;
+  }
+
+  function getTodayAvailablePlaces(row) {
+    const capacity = getCapacity(row);
+    return capacity ? Math.max(0, capacity - row.today) : null;
   }
 
   function getOccupationTone(row) {
@@ -3156,8 +3220,21 @@ function BusBaseSurface({
     return 'green';
   }
 
+  function getCapacityStatus(row) {
+    const rateValue = getCapacityRate(row);
+    if (rateValue === null) return { label: 'Non renseignee', tone: 'neutral' };
+    if (rateValue > 95) return { label: 'Surcharge', tone: 'red' };
+    if (rateValue >= 70) return { label: 'Normal', tone: 'green' };
+    return { label: 'Disponible', tone: 'green' };
+  }
+
   function getDisplayedRouteRate(row) {
     return getCapacityRate(row) ?? row.presentRate;
+  }
+
+  function getChartWidth(value) {
+    const maximum = Math.max(1, ...filteredRows.flatMap((row) => [row.total, getCapacity(row)]));
+    return value > 0 ? Math.max(4, Math.min(100, (value / maximum) * 100)) : 0;
   }
 
   async function persistBusCapacity(bus, capacity) {
@@ -3201,8 +3278,14 @@ function BusBaseSurface({
     closeCapacityEditor();
   }
 
-  function openBus(row) {
+  function openBus(row, filter = 'all') {
     setSelectedBus(row.bus);
+    setSelectedBusFilter(filter);
+  }
+
+  function closeBusDetail() {
+    setSelectedBus(null);
+    setSelectedBusFilter('all');
   }
 
   return (
@@ -3212,7 +3295,7 @@ function BusBaseSurface({
 
         <div className="bus-dashboard__cards">
           {[
-            { label: 'Nombre de bus', value: rows.length, note: 'Bus actifs aujourd’hui', icon: 'building', tone: 'blue' },
+            { label: 'Nombre de bus', value: busRows.length, note: 'Bus actifs aujourd’hui', icon: 'building', tone: 'blue' },
             { label: 'Employes affectes', value: totals.people, note: 'Actifs avec affectation bus', icon: 'people', tone: 'green' },
             { label: 'Employes presents', value: totals.present, note: 'Aujourd’hui', icon: 'people', tone: 'violet' },
             { label: 'Taux de pointage', value: `${rate}%`, note: 'Presence globale', icon: 'chart', tone: 'mint', ring: rate },
@@ -3222,7 +3305,13 @@ function BusBaseSurface({
               <div>
                 <p>{card.label}</p>
                 <strong>{card.value}</strong>
-                <small>{card.note}</small>
+                <small>
+                  {card.label === 'Nombre de bus'
+                    ? `Bus actifs le ${selectedDateLabel}`
+                    : card.label === 'Employes presents'
+                      ? selectedDateLabel
+                      : card.note}
+                </small>
               </div>
               {card.ring !== undefined ? <span className="bus-stat-card__ring" style={{ '--bus-rate': `${card.ring * 3.6}deg` }}>{card.ring}%</span> : null}
             </article>
@@ -3247,7 +3336,7 @@ function BusBaseSurface({
               </div>
             </div>
             <footer>
-              <span><DashboardIcon type="calendar" /> {formatDateLabel(selectedDate, locale)}</span>
+              <span><DashboardIcon type="calendar" /> {selectedDateLabel}</span>
               <b>A jour</b>
             </footer>
           </article>
@@ -3265,7 +3354,270 @@ function BusBaseSurface({
                 onChange={(event) => onSearchChange(event.target.value)}
               />
             </header>
-            <div className="bus-card-grid">
+            <div className="bus-lollipop-chart">
+              <header>
+                <h3>Actifs et personnes par bus vs Capacite</h3>
+                <div><span className="is-active" />Nombre actif <span className="is-reserved" />Personnes présentes aujourd’hui <span className="is-capacity" />Capacite du bus</div>
+              </header>
+              {comparisonBusRows.length ? (
+                <div className="bus-lollipop-chart__surface">
+                  <svg viewBox="0 0 620 264" role="img" aria-label="Nombre actif, personnes présentes aujourd’hui et capacite des quatre bus">
+                    {[0, 1, 2, 3, 4].map((step) => {
+                      const y = 202 - step * 37;
+                      const value = Math.round((comparisonMaximum * step) / 4);
+                      return <g key={`tick-${step}`}><line x1="62" x2="576" y1={y} y2={y} /><text x="51" y={y + 4} textAnchor="end">{value}</text></g>;
+                    })}
+                    <line className="bus-lollipop-chart__axis" x1="62" x2="582" y1="202" y2="202" />
+                    <line className="bus-lollipop-chart__axis" x1="62" x2="62" y1="212" y2="44" />
+                    <text className="bus-lollipop-chart__axis-label" x="18" y="125" textAnchor="middle" transform="rotate(-90 18 125)">Nombre</text>
+                    {comparisonBusRows.map((row, index) => {
+                      const x = 124 + index * 142;
+                      const activeY = 202 - ((row.total / comparisonMaximum) * 148);
+                      const reservedY = 202 - ((row.today / comparisonMaximum) * 148);
+                      const capacity = getCapacity(row);
+                      const isOverCapacity = capacity > 0 && row.total > capacity;
+                      const capacityY = capacity ? 202 - ((capacity / comparisonMaximum) * 148) : null;
+                      const shortName = row.bus.replace(/^BUS\s*/i, '');
+                      return <g key={row.bus}>
+                        {capacityY !== null ? <><line className="bus-lollipop-chart__capacity-line" x1={x - 52} x2={x + 52} y1={capacityY} y2={capacityY} /><text className="bus-lollipop-chart__capacity-value" x={x + 58} y={capacityY + 4}>{capacity}</text></> : null}
+                        <g
+                          className="bus-lollipop-chart__value-button"
+                          role="button"
+                          tabIndex="0"
+                          aria-label={`${row.bus}, nombre actif: ${row.total}`}
+                          onClick={() => openBus(row, 'all')}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openBus(row, 'all');
+                            }
+                          }}
+                        >
+                          <rect className="bus-lollipop-chart__hit-area" x={x - 25} y="40" width="34" height="180" />
+                          <line className={`bus-lollipop-chart__active-line${isOverCapacity ? ' bus-lollipop-chart__active-line--overcapacity' : ''}`} x1={x - 8} x2={x - 8} y1="202" y2={activeY} />
+                          <circle className={`bus-lollipop-chart__point${isOverCapacity ? ' bus-lollipop-chart__point--overcapacity' : ''}`} cx={x - 8} cy={activeY} r="6" />
+                          <text className={`bus-lollipop-chart__active-value${isOverCapacity ? ' bus-lollipop-chart__active-value--overcapacity' : ''}`} x={x - 8} y={activeY - 12} textAnchor="middle">{row.total}</text>
+                        </g>
+                        <g
+                          className="bus-lollipop-chart__value-button"
+                          role="button"
+                          tabIndex="0"
+                          aria-label={`${row.bus}, personnes présentes aujourd’hui: ${row.today}`}
+                          onClick={() => openBus(row, 'today')}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              openBus(row, 'today');
+                            }
+                          }}
+                        >
+                          <rect className="bus-lollipop-chart__hit-area" x={x - 1} y="40" width="34" height="180" />
+                          <line className="bus-lollipop-chart__reserved-line" x1={x + 8} x2={x + 8} y1="202" y2={reservedY} />
+                          <circle className="bus-lollipop-chart__reserved-point" cx={x + 8} cy={reservedY} r="5.5" />
+                          <text className="bus-lollipop-chart__reserved-value" x={x + 8} y={reservedY - 12} textAnchor="middle">{row.today}</text>
+                        </g>
+                        <text className="bus-lollipop-chart__bus-label" x={x} y="224" textAnchor="middle">{shortName}</text>
+                      </g>;
+                    })}
+                  </svg>
+                </div>
+              ) : <div className="rh-empty-inline">{labels.empty}</div>}
+            </div>
+            <div className="bus-comparison-chart">
+              <div className="bus-comparison-chart__legend" aria-label="Legende des quatre bus">
+                {comparisonBusRows.map((row, index) => {
+                  const capacity = getCapacity(row);
+                  return (
+                    <button type="button" key={row.bus} onClick={() => openBus(row)} title="Ouvrir la liste des personnes">
+                      <i style={{ backgroundColor: comparisonColors[index] }} />
+                      <span><strong>{row.bus}</strong><small>{row.today} personnes présentes aujourd’hui | {row.present} actifs | capacite {capacity || '-'}</small></span>
+                    </button>
+                  );
+                })}
+              </div>
+              {comparisonBusRows.length ? (
+                <div className="bus-comparison-chart__surface">
+                  <svg viewBox="0 0 620 272" role="img" aria-label="Comparaison des personnes, actifs et capacites des quatre bus">
+                    {[0, 1, 2, 3, 4].map((step) => {
+                      const y = 204 - step * 37;
+                      const value = Math.round((comparisonYMaximum * step) / 4);
+                      return <g key={`y-${step}`}><line x1="78" x2="560" y1={y} y2={y} /><text x="64" y={y + 4} textAnchor="end">{value}</text></g>;
+                    })}
+                    {[0, 1, 2, 3, 4].map((step) => {
+                      const x = 78 + step * 120.5;
+                      const value = Math.round((comparisonXMaximum * step) / 4);
+                      return <g key={`x-${step}`}><line x1={x} x2={x} y1="56" y2="204" /><text x={x} y="224" textAnchor="middle">{value}</text></g>;
+                    })}
+                    <line className="bus-comparison-chart__axis" x1="78" x2="570" y1="204" y2="204" />
+                    <line className="bus-comparison-chart__axis" x1="78" x2="78" y1="214" y2="46" />
+                    <text className="bus-comparison-chart__axis-label" x="319" y="258" textAnchor="middle">Nombre de personnes et capacite</text>
+                    <text className="bus-comparison-chart__axis-label" x="21" y="132" textAnchor="middle" transform="rotate(-90 21 132)">Nombre actif</text>
+                    {comparisonBusRows.map((row, index) => {
+                      const color = comparisonColors[index];
+                      const pointX = 78 + ((row.total / comparisonXMaximum) * 482);
+                      const pointY = 204 - ((row.present / comparisonYMaximum) * 148);
+                      const capacity = getCapacity(row);
+                      const capacityX = capacity ? 78 + ((capacity / comparisonXMaximum) * 482) : null;
+                      return (
+                        <g key={row.bus}>
+                          {capacityX !== null ? <line className="bus-comparison-chart__capacity-line" x1={capacityX} x2={capacityX} y1="204" y2="56" style={{ stroke: color }} /> : null}
+                          {capacityX !== null ? <text className="bus-comparison-chart__capacity-label" x={capacityX} y={240 + index * 10} textAnchor="middle" style={{ fill: color }}>C {capacity}</text> : null}
+                          <line className="bus-comparison-chart__active-line" x1="78" x2={pointX} y1={pointY} y2={pointY} style={{ stroke: color }} />
+                          <line className="bus-comparison-chart__people-line" x1={pointX} x2={pointX} y1="204" y2={pointY} style={{ stroke: color }} />
+                          <circle className="bus-comparison-chart__point" cx={pointX} cy={pointY} r="5.5" style={{ fill: color }} />
+                          <text className="bus-comparison-chart__active-value" x={pointX} y={pointY - 11} textAnchor="middle" style={{ fill: color }}>{row.present}</text>
+                          <text className="bus-comparison-chart__people-label" x={pointX} y="238" textAnchor="middle" style={{ fill: color }}>P {row.total}</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              ) : <div className="rh-empty-inline">{labels.empty}</div>}
+            </div>
+            <div className="bus-reference-chart">
+              <div className="bus-reference-chart__routes" role="tablist" aria-label="Choisir un transport">
+                {filteredRows.map((row) => (
+                  <button
+                    className={chartRow?.bus === row.bus ? 'is-active' : ''}
+                    key={row.bus}
+                    type="button"
+                    role="tab"
+                    aria-selected={chartRow?.bus === row.bus}
+                    onClick={() => setChartBus(row.bus)}
+                  >
+                    {row.bus}
+                  </button>
+                ))}
+              </div>
+              {chartRow ? (
+                <div className="bus-reference-chart__surface">
+                  <div className="bus-reference-chart__summary">
+                    <div><span>Nombre de personnes</span><strong>{chartRow.total}</strong></div>
+                    <div><span>Nombre actif</span><strong>{chartRow.present}</strong></div>
+                    <div><span>Capacite</span><strong>{chartCapacity || 'Non renseignee'}</strong></div>
+                    <button type="button" title="Modifier la capacite" aria-label={`Modifier la capacite de ${chartRow.bus}`} onClick={(event) => handleEditCapacity(event, chartRow)}><DashboardIcon type="building" /></button>
+                  </div>
+                  <svg viewBox="0 0 620 264" role="img" aria-label={`${chartRow.bus}: ${chartRow.total} personnes, ${chartRow.present} actifs, capacite ${chartCapacity || 'non renseignee'}`}>
+                    {[0, 1, 2, 3, 4].map((step) => {
+                      const y = 204 - step * 37;
+                      const value = Math.round((chartYMaximum * step) / 4);
+                      return <g key={`y-${step}`}><line x1="78" x2="560" y1={y} y2={y} /><text x="64" y={y + 4} textAnchor="end">{value}</text></g>;
+                    })}
+                    {[0, 1, 2, 3, 4].map((step) => {
+                      const x = 78 + step * 120.5;
+                      const value = Math.round((chartXMaximum * step) / 4);
+                      return <g key={`x-${step}`}><line x1={x} x2={x} y1="56" y2="204" /><text x={x} y="224" textAnchor="middle">{value}</text></g>;
+                    })}
+                    <line className="bus-reference-chart__axis" x1="78" x2="570" y1="204" y2="204" />
+                    <line className="bus-reference-chart__axis" x1="78" x2="78" y1="214" y2="46" />
+                    <text className="bus-reference-chart__axis-label" x="319" y="252" textAnchor="middle">Nombre de personnes</text>
+                    <text className="bus-reference-chart__axis-label" x="21" y="132" textAnchor="middle" transform="rotate(-90 21 132)">Nombre actif</text>
+                    {chartCapacityX !== null ? <><line className="bus-reference-chart__capacity-line" x1={chartCapacityX} x2={chartCapacityX} y1="204" y2="56" /><text className="bus-reference-chart__capacity-label" x={chartCapacityX} y="238" textAnchor="middle">Capacite {chartCapacity}</text></> : null}
+                    <line className="bus-reference-chart__active-line" x1="78" x2={chartPointX} y1={chartPointY} y2={chartPointY} />
+                    <line className="bus-reference-chart__active-line" x1={chartPointX} x2={chartPointX} y1="204" y2={chartPointY} />
+                    <circle className="bus-reference-chart__point" cx={chartPointX} cy={chartPointY} r="6" />
+                    <text className="bus-reference-chart__value" x={chartPointX} y={chartPointY - 12} textAnchor="middle">{chartRow.present}</text>
+                  </svg>
+                </div>
+              ) : <div className="rh-empty-inline">{labels.empty}</div>}
+            </div>
+            <div className="bus-transport-charts" aria-label="Graphiques de transport">
+              {[
+                { key: 'capacity', label: 'Capacite par transport', color: 'blue', value: (row) => getCapacity(row), empty: 'Non renseignee' },
+                { key: 'assigned', label: 'Employes affectes', color: 'indigo', value: (row) => row.total },
+                { key: 'present', label: 'Employes presents', color: 'green', value: (row) => row.present },
+                { key: 'absent', label: 'Employes absents', color: 'red', value: (row) => row.absent },
+              ].map((chart) => {
+                const maximum = Math.max(1, ...filteredRows.map((row) => chart.value(row)));
+                return (
+                  <article className={`bus-transport-chart bus-transport-chart--${chart.color}`} key={chart.key}>
+                    <header><h3>{chart.label}</h3><span>{maximum}</span></header>
+                    <div className="bus-transport-chart__plot">
+                      {filteredRows.length ? filteredRows.map((row) => {
+                        const value = chart.value(row);
+                        const width = value ? Math.max(4, (value / maximum) * 100) : 0;
+                        return (
+                          <button
+                            className="bus-transport-chart__item"
+                            key={row.bus}
+                            type="button"
+                            onClick={() => setSelectedBus(row.bus)}
+                            onDoubleClick={() => openBus(row)}
+                            title="Double-clique pour ouvrir la liste des personnes"
+                          >
+                            <span>{row.bus}</span>
+                            <i><b style={{ width: `${width}%` }} /></i>
+                            <strong>{value || (chart.empty || 0)}</strong>
+                          </button>
+                        );
+                      }) : <p className="rh-empty-inline">{labels.empty}</p>}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+            <div className="bus-capacity-chart" role="list" aria-label="Capacite, effectif, presences et absences par transport">
+              <div className="bus-capacity-chart__legend" aria-hidden="true">
+                <span><i className="is-capacity" />Capacite</span>
+                <span><i className="is-assigned" />Affectes</span>
+                <span><i className="is-present" />Presents</span>
+                <span><i className="is-absent" />Absents</span>
+              </div>
+              {filteredRows.length ? filteredRows.map((row) => {
+                const capacity = getCapacity(row);
+                const capacityRate = getCapacityRate(row);
+                return (
+                  <div className={`bus-capacity-chart__row bus-capacity-chart__row--${getOccupationTone(row)}`} key={row.bus} role="listitem">
+                    <div className="bus-capacity-chart__route">
+                      <button
+                        className="bus-capacity-chart__route-name"
+                        type="button"
+                        onClick={() => setSelectedBus(row.bus)}
+                        onDoubleClick={() => openBus(row)}
+                        title="Double-clique pour ouvrir la liste des personnes"
+                      >
+                        <span className="bus-capacity-chart__route-icon"><DashboardIcon type={row.bus === 'Sans bus' ? 'lock' : 'building'} /></span>
+                        <span><strong>{row.bus}</strong><small>{row.total} affectes</small></span>
+                      </button>
+                      <button
+                        className="bus-capacity-chart__capacity-action"
+                        type="button"
+                        title="Modifier la capacite"
+                        aria-label={`Modifier la capacite de ${row.bus}`}
+                        onClick={(event) => handleEditCapacity(event, row)}
+                      >
+                        <DashboardIcon type="building" />
+                      </button>
+                    </div>
+                    <div className="bus-capacity-chart__series">
+                      <span>Capacite</span>
+                      <div className="bus-capacity-chart__track bus-capacity-chart__track--capacity"><i style={{ width: `${getChartWidth(capacity)}%` }} /></div>
+                      <b>{capacity || '-'}</b>
+                    </div>
+                    <div className="bus-capacity-chart__series">
+                      <span>Affectes</span>
+                      <div className="bus-capacity-chart__track bus-capacity-chart__track--assigned"><i style={{ width: `${getChartWidth(row.total)}%` }} /></div>
+                      <b>{row.total}</b>
+                    </div>
+                    <div className="bus-capacity-chart__series">
+                      <span>Presents</span>
+                      <div className="bus-capacity-chart__track bus-capacity-chart__track--present"><i style={{ width: `${getChartWidth(row.present)}%` }} /></div>
+                      <b>{row.present}</b>
+                    </div>
+                    <div className="bus-capacity-chart__series">
+                      <span>Absents</span>
+                      <div className="bus-capacity-chart__track bus-capacity-chart__track--absent"><i style={{ width: `${getChartWidth(row.absent)}%` }} /></div>
+                      <b>{row.absent}</b>
+                    </div>
+                    <div className="bus-capacity-chart__rate">
+                      <span>Occupation</span>
+                      <strong>{capacityRate === null ? '-' : `${capacityRate}%`}</strong>
+                    </div>
+                  </div>
+                );
+              }) : <div className="rh-empty-inline">{labels.empty}</div>}
+            </div>
+            <div className="bus-card-grid" aria-hidden="true">
               {filteredRows.length ? filteredRows.map((row, index) => (
                 <button
                   className={`bus-route-card bus-route-card--${palette[index % palette.length]} bus-route-card--occupancy-${getOccupationTone(row)}`}
@@ -3305,8 +3657,8 @@ function BusBaseSurface({
         <article className="bus-panel">
           <header>
             <div>
-              <h2>Donnees detaillees par bus</h2>
-              <p>Synthese des presences, absences et elements a verifier</p>
+              <h2>Detail par bus</h2>
+              <p>Capacite, occupation et places disponibles pour chaque transport</p>
             </div>
           </header>
           <div className="rh-table-wrap">
@@ -3314,13 +3666,14 @@ function BusBaseSurface({
             <thead>
               <tr>
                 <th>{labels.columns.bus}</th>
-                <th>{labels.columns.total}</th>
-                <th>{labels.columns.present}</th>
-                <th>{labels.columns.absent}</th>
-                <th>{labels.columns.verify}</th>
+                <th>Nombre d’actifs</th>
+                <th>Personnes présentes aujourd’hui</th>
                 <th>Capacite</th>
-                <th>Occupation</th>
-                <th>{labels.columns.rate}</th>
+                <th>Taux occupation actifs</th>
+                <th>Taux capacite aujourd'hui</th>
+                <th>Places manquantes aujourd'hui</th>
+                <th>Places libres aujourd'hui</th>
+                <th>Statut</th>
               </tr>
             </thead>
             <tbody>
@@ -3329,21 +3682,22 @@ function BusBaseSurface({
                   <tr key={row.bus} onDoubleClick={() => openBus(row)}>
                     <td>{row.bus}</td>
                     <td>{row.total}</td>
-                    <td>{row.present}</td>
-                    <td>{row.absent}</td>
-                    <td>{row.verify}</td>
+                    <td>{row.today}</td>
                     <td>
                       <button className="bus-capacity-button" type="button" onClick={(event) => handleEditCapacity(event, row)}>
                         {getCapacity(row) || 'Ajouter'}
                       </button>
                     </td>
                     <td>{getCapacityRate(row) === null ? '-' : <span className={`bus-rate-pill bus-rate-pill--${getOccupationTone(row)}`}>{getCapacityRate(row)}%</span>}</td>
-                    <td><span className="bus-rate-pill">{row.presentRate}%</span></td>
+                    <td>{getTodayCapacityRate(row) === null ? '-' : <span className={`bus-rate-pill bus-rate-pill--${getTodayCapacityRate(row) > 100 ? 'red' : 'green'}`}>{getTodayCapacityRate(row)}%</span>}</td>
+                    <td>{getTodayMissingPlaces(row) === null ? '-' : getTodayMissingPlaces(row)}</td>
+                    <td>{getTodayAvailablePlaces(row) === null ? '-' : getTodayAvailablePlaces(row)}</td>
+                    <td><span className={`bus-rate-pill bus-rate-pill--${getCapacityStatus(row).tone}`}>{getCapacityStatus(row).label}</span></td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="rh-table__empty" colSpan={8}>
+                  <td className="rh-table__empty" colSpan={9}>
                     {labels.empty}
                   </td>
                 </tr>
@@ -3356,26 +3710,26 @@ function BusBaseSurface({
 
       {selectedRow ? (
         <div className="rh-modal" role="dialog" aria-modal="true" aria-labelledby="bus-detail-title">
-          <button className="rh-modal__backdrop" type="button" aria-label={labels.close} onClick={() => setSelectedBus(null)} />
+          <button className="rh-modal__backdrop" type="button" aria-label={labels.close} onClick={closeBusDetail} />
           <article className="rh-modal__panel">
             <div className="rh-modal__header">
               <div>
                 <p className="rh-eyebrow">Bus</p>
                 <h2 id="bus-detail-title">{selectedRow.bus}</h2>
-                <p>{selectedRow.present} / {selectedRow.total} presents | {selectedRow.absent} absents</p>
+                <p>{selectedDetailLabel} : {selectedPeople.length} personne(s)</p>
               </div>
-              <button className="rh-modal__close" type="button" onClick={() => setSelectedBus(null)}>{labels.close}</button>
+              <button className="rh-modal__close" type="button" onClick={closeBusDetail}>{labels.close}</button>
             </div>
             <div className="rh-table-wrap rh-modal__table-wrap">
               <table className="rh-table">
                 <thead><tr><th>{labels.columns.id}</th><th>{labels.columns.name}</th><th>{labels.columns.department}</th><th>{labels.columns.status}</th><th>{labels.columns.detail}</th><th>{labels.columns.departureReason}</th></tr></thead>
                 <tbody>
-                  {selectedRow.people.map((person, index) => (
+                  {selectedPeople.map((person, index) => (
                     <tr key={`${person.employeeKey || person.id}-${index}`}>
                       <td>{person.id || '-'}</td>
                       <td>{person.fullName || '-'}</td>
                       <td>{[person.department, person.service].filter(Boolean).join(' / ') || '-'}</td>
-                      <td>{person.isPresent ? 'Present' : person.statusLabel || 'Absent'}</td>
+                      <td>{selectedBusFilter === 'today' ? 'Present' : 'Actif'}</td>
                       <td>{person.display || '-'}</td>
                       <td>{person.departureReason || '-'}</td>
                     </tr>
@@ -4174,6 +4528,20 @@ export default function App() {
   }
 
   const availableDates = useMemo(() => getAvailableDates(snapshot), [snapshot]);
+
+  useEffect(() => {
+    if (!availableDates.length) {
+      if (selectedDate) {
+        setSelectedDate('');
+      }
+      return;
+    }
+
+    if (!availableDates.includes(selectedDate)) {
+      setSelectedDate(getDefaultSelectedDate(snapshot));
+    }
+  }, [availableDates, selectedDate, snapshot]);
+
   const selectedWeek = useMemo(() => getSelectedWeek(snapshot, selectedDate), [snapshot, selectedDate]);
   const sourceRowsForDate = useMemo(() => getSelectedRows(snapshot, selectedDate), [snapshot, selectedDate]);
   const sourceSummaryForDate = useMemo(

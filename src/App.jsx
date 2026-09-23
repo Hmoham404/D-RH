@@ -38,6 +38,58 @@ const LANGUAGE_LOCALES = {
   it: 'it-IT',
   zh: 'zh-CN',
 };
+const BUS_DASHBOARD_TRANSLATIONS = {
+  fr: {
+    cards: { bus: 'Nombre de bus', busNote: (date) => `Bus actifs le ${date}`, people: 'Employes affectes', peopleNote: 'Actifs avec affectation bus', present: 'Employes presents', today: "Aujourd'hui", rate: 'Taux de pointage', global: 'Presence globale' },
+    donut: { title: 'Repartition des presences par bus', subtitle: 'Personnes presentes aujourd\'hui, reparties par bus' },
+    detail: { title: 'Detail des bus', subtitle: 'Taux de presence par bus. Double-cliquez sur un bus pour voir la liste.', chart: 'Actifs et personnes par bus vs capacite', active: 'Nombre actif', present: "Personnes presentes aujourd'hui", capacity: 'Capacite du bus', number: 'Nombre', empty: 'Aucune donnee bus disponible pour cette date.' },
+    table: { title: 'Detail par bus', subtitle: 'Capacite, occupation et places disponibles pour chaque transport', active: "Nombre d'actifs", present: "Personnes presentes aujourd'hui", capacity: 'Capacite', activeRate: 'Taux occupation actifs', todayRate: "Taux capacite aujourd'hui", missing: "Places manquantes aujourd'hui", available: "Places libres aujourd'hui", status: 'Statut', add: 'Ajouter' },
+    status: { unknown: 'Non renseignee', overloaded: 'Surcharge', normal: 'Normal', available: 'Disponible', active: 'Actif', present: 'Present' },
+    actions: { openPeople: 'Ouvrir la liste des personnes', editCapacity: 'Modifier la capacite', enterCapacity: "Cliquez sur l'icone pour saisir la capacite", doubleClick: 'Double-cliquez pour ouvrir la liste des personnes', chooseTransport: 'Choisir un transport' },
+    capacity: { title: 'Capacite bus', places: 'Nombre de places', cancel: 'Annuler', save: 'Enregistrer', saving: 'Enregistrement...', remove: 'Supprimer la capacite', saved: (count, bus) => `Capacite ${count} enregistree pour ${bus}.`, removed: (bus) => `Capacite supprimee pour ${bus}.` },
+    footer: 'A jour',
+  },
+  en: {
+    cards: { bus: 'Number of buses', busNote: (date) => `Buses active on ${date}`, people: 'Assigned employees', peopleNote: 'Active employees assigned to a bus', present: 'Employees present', today: 'Today', rate: 'Attendance rate', global: 'Overall attendance' },
+    donut: { title: 'Attendance by bus', subtitle: "People present today, grouped by bus" },
+    detail: { title: 'Bus details', subtitle: 'Attendance rate by bus. Double-click a bus to view its list.', chart: 'Active employees and people by bus vs capacity', active: 'Active employees', present: 'People present today', capacity: 'Bus capacity', number: 'Number', empty: 'No bus data available for this date.' },
+    table: { title: 'Details by bus', subtitle: 'Capacity, occupancy and available seats for each transport', active: 'Active employees', present: 'People present today', capacity: 'Capacity', activeRate: 'Active occupancy rate', todayRate: "Today's capacity rate", missing: 'Over capacity today', available: 'Available seats today', status: 'Status', add: 'Add' },
+    status: { unknown: 'Not set', overloaded: 'Over capacity', normal: 'Normal', available: 'Available', active: 'Active', present: 'Present' },
+    actions: { openPeople: 'Open people list', editCapacity: 'Edit capacity', enterCapacity: 'Click the icon to enter bus capacity', doubleClick: 'Double-click to open the people list', chooseTransport: 'Choose a transport' },
+    capacity: { title: 'Bus capacity', places: 'Number of seats', cancel: 'Cancel', save: 'Save', saving: 'Saving...', remove: 'Remove capacity', saved: (count, bus) => `Capacity ${count} saved for ${bus}.`, removed: (bus) => `Capacity removed for ${bus}.` },
+    footer: 'Up to date',
+  },
+  it: {
+    cards: { bus: 'Numero di autobus', busNote: (date) => `Autobus attivi il ${date}`, people: 'Dipendenti assegnati', peopleNote: 'Attivi assegnati a un autobus', present: 'Dipendenti presenti', today: 'Oggi', rate: 'Tasso di presenza', global: 'Presenza complessiva' },
+    donut: { title: 'Presenze per autobus', subtitle: 'Persone presenti oggi, suddivise per autobus' },
+    detail: { title: 'Dettaglio autobus', subtitle: "Presenze per autobus. Doppio clic su un autobus per vedere l'elenco.", chart: 'Dipendenti attivi e persone per autobus vs capienza', active: 'Dipendenti attivi', present: 'Persone presenti oggi', capacity: 'Capienza autobus', number: 'Numero', empty: 'Nessun dato autobus per questa data.' },
+    table: { title: 'Dettaglio per autobus', subtitle: 'Capienza, occupazione e posti disponibili per ogni trasporto', active: 'Dipendenti attivi', present: 'Persone presenti oggi', capacity: 'Capienza', activeRate: 'Tasso di occupazione attivi', todayRate: 'Capienza occupata oggi', missing: 'Posti oltre capienza oggi', available: 'Posti liberi oggi', status: 'Stato', add: 'Aggiungi' },
+    status: { unknown: 'Non indicata', overloaded: 'Sovraccarico', normal: 'Normale', available: 'Disponibile', active: 'Attivo', present: 'Presente' },
+    actions: { openPeople: 'Apri elenco persone', editCapacity: 'Modifica capienza', enterCapacity: "Clicca l'icona per inserire la capienza", doubleClick: "Doppio clic per aprire l'elenco persone", chooseTransport: 'Scegli un trasporto' },
+    capacity: { title: 'Capienza autobus', places: 'Numero di posti', cancel: 'Annulla', save: 'Salva', saving: 'Salvataggio...', remove: 'Rimuovi capienza', saved: (count, bus) => `Capienza ${count} salvata per ${bus}.`, removed: (bus) => `Capienza rimossa per ${bus}.` },
+    footer: 'Aggiornato',
+  },
+  ar: {
+    cards: { bus: 'عدد الحافلات', busNote: (date) => `الحافلات النشطة في ${date}`, people: 'الموظفون المعيّنون', peopleNote: 'موظفون نشطون مخصصون لحافلة', present: 'الموظفون الحاضرون', today: 'اليوم', rate: 'معدل الحضور', global: 'الحضور الإجمالي' },
+    donut: { title: 'الحضور حسب الحافلة', subtitle: 'الأشخاص الحاضرون اليوم حسب الحافلة' },
+    detail: { title: 'تفاصيل الحافلات', subtitle: 'معدل الحضور حسب الحافلة. انقر مرتين لعرض القائمة.', chart: 'الموظفون النشطون والأشخاص حسب سعة الحافلة', active: 'الموظفون النشطون', present: 'الحاضرون اليوم', capacity: 'سعة الحافلة', number: 'العدد', empty: 'لا توجد بيانات للحافلات في هذا التاريخ.' },
+    table: { title: 'التفاصيل حسب الحافلة', subtitle: 'السعة والإشغال والمقاعد المتاحة لكل وسيلة نقل', active: 'الموظفون النشطون', present: 'الحاضرون اليوم', capacity: 'السعة', activeRate: 'معدل إشغال النشطين', todayRate: 'معدل السعة اليوم', missing: 'المقاعد المطلوبة اليوم', available: 'المقاعد المتاحة اليوم', status: 'الحالة', add: 'إضافة' },
+    status: { unknown: 'غير محددة', overloaded: 'تجاوز السعة', normal: 'عادي', available: 'متاح', active: 'نشط', present: 'حاضر' },
+    actions: { openPeople: 'عرض قائمة الأشخاص', editCapacity: 'تعديل السعة', enterCapacity: 'اضغط على الأيقونة لإدخال السعة', doubleClick: 'انقر مرتين لعرض قائمة الأشخاص', chooseTransport: 'اختر وسيلة النقل' },
+    capacity: { title: 'سعة الحافلة', places: 'عدد المقاعد', cancel: 'إلغاء', save: 'حفظ', saving: 'جارٍ الحفظ...', remove: 'حذف السعة', saved: (count, bus) => `تم حفظ السعة ${count} للحافلة ${bus}.`, removed: (bus) => `تم حذف سعة الحافلة ${bus}.` },
+    footer: 'محدّث',
+  },
+  zh: {
+    cards: { bus: '巴士数量', busNote: (date) => `${date}运营的巴士`, people: '已分配员工', peopleNote: '已分配巴士的在职员工', present: '出勤员工', today: '今天', rate: '出勤率', global: '总体出勤' },
+    donut: { title: '各巴士出勤情况', subtitle: '按巴士显示今日出勤人数' },
+    detail: { title: '巴士详情', subtitle: '各巴士出勤率。双击巴士可查看名单。', chart: '各巴士在职员工和乘车人数与容量', active: '在职员工', present: '今日出勤人数', capacity: '巴士容量', number: '人数', empty: '此日期没有巴士数据。' },
+    table: { title: '各巴士详情', subtitle: '各交通工具的容量、占用和空余座位', active: '在职员工', present: '今日出勤人数', capacity: '容量', activeRate: '在职员工占用率', todayRate: '今日容量使用率', missing: '今日超出座位数', available: '今日空余座位', status: '状态', add: '添加' },
+    status: { unknown: '未设置', overloaded: '超载', normal: '正常', available: '有空位', active: '在职', present: '出勤' },
+    actions: { openPeople: '打开人员名单', editCapacity: '修改容量', enterCapacity: '点击图标输入巴士容量', doubleClick: '双击打开人员名单', chooseTransport: '选择交通工具' },
+    capacity: { title: '巴士容量', places: '座位数', cancel: '取消', save: '保存', saving: '正在保存...', remove: '删除容量', saved: (count, bus) => `已为${bus}保存容量${count}。`, removed: (bus) => `已删除${bus}的容量。` },
+    footer: '已更新',
+  },
+};
 const UI_TRANSLATIONS = {
   fr: {
     topbar: {
@@ -3150,6 +3202,18 @@ function BusBaseSurface({
     { people: 0, present: 0, absent: 0, verify: 0 },
   );
   const rate = totals.people ? Math.round((totals.present / totals.people) * 100) : 0;
+  const busPresenceColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
+  const busPresenceRows = busRows
+    .filter((row) => normalizeLookupText(row.bus) !== 'SANS BUS')
+    .map((row, index) => ({ ...row, color: busPresenceColors[index % busPresenceColors.length] }));
+  const busPresentTotal = busPresenceRows.reduce((sum, row) => sum + row.today, 0);
+  const busPresenceSegments = busPresenceRows.map((row) => ({
+    label: row.bus,
+    count: row.today,
+    percent: busPresentTotal ? (row.today / busPresentTotal) * 100 : 0,
+    color: row.color,
+  }));
+  const busPresenceBackground = getDonutBackground(busPresenceSegments);
   const selectedRow = selectedBus ? busRows.find((row) => row.bus === selectedBus) : null;
   const selectedPeople = selectedRow
     ? selectedRow.people.filter((person) => {
@@ -3327,12 +3391,13 @@ function BusBaseSurface({
               </div>
             </header>
             <div className="bus-donut-layout">
-              <div className="bus-donut" style={{ '--present-angle': `${rate * 3.6}deg` }}>
-                <div><strong>{totals.people}</strong><span>Employes</span></div>
+              <div className="bus-donut" style={{ background: busPresenceBackground }}>
+                <div><strong>{busPresentTotal}</strong></div>
               </div>
               <div className="bus-donut-legend">
-                <span><b className="is-present" />{totals.present} Presents ({rate}%)</span>
-                <span><b />{totals.absent} Absents ({100 - rate}%)</span>
+                {busPresenceRows.map((row) => (
+                  <span key={row.bus}><b style={{ backgroundColor: row.color }} />{row.bus}: {row.today} ({busPresentTotal ? Math.round((row.today / busPresentTotal) * 100) : 0}%)</span>
+                ))}
               </div>
             </div>
             <footer>
@@ -4295,6 +4360,7 @@ export default function App() {
   const busBaseLabels = useMemo(
     () => ({
       ...busPointageLabels,
+      dashboard: BUS_DASHBOARD_TRANSLATIONS[language] || BUS_DASHBOARD_TRANSLATIONS.fr,
       eyebrow: translate('busBase.eyebrow', 'Suivi bus'),
       title: translate('busBase.title', 'BUS'),
       subtitle: translateFn('busBase.subtitle', (date) => `${date} | Suivi bus selon la colonne Bus de la base RH.`),

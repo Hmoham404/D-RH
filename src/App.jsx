@@ -4365,32 +4365,30 @@ export default function App() {
     [language, currentMonthLabel],
   );
   const busPointageLabels = useMemo(
-    () => ({
-      eyebrow: translate('busPointage.eyebrow', 'Feuille bus'),
-      title: translate('busPointage.title', 'Pointage par bus'),
-      subtitle: translateFn('busPointage.subtitle', (date) => `${date} | Courbe bus selon le pointage du jour.`),
-      chartLabel: translate('busPointage.chartLabel', 'Courbe de presence par bus'),
-      busCount: translateFn('busPointage.busCount', (count) => `${count} bus`),
-      search: translate('busPointage.search', 'Rechercher nom, bus, service...'),
-      close: translate('modal.close', 'Fermer'),
-      empty: translate('busPointage.empty', 'Aucune donnee bus disponible pour cette date.'),
-      noResults: translate('modal.noResults', 'Aucun resultat pour cette recherche.'),
-      columns: {
-        id: translate('modal.columns.id', 'ID'),
-        name: translate('modal.columns.name', 'Nom'),
-        department: translate('modal.columns.department', 'Departement'),
-        status: translate('modal.columns.status', 'Statut'),
-        detail: translate('modal.columns.detail', 'Detail'),
-        bus: translate('employeeBase.columns.bus', 'Bus'),
-        total: translate('busPointage.columns.total', 'Total'),
-        present: translate('busPointage.columns.present', 'Presents'),
-        absent: translate('busPointage.columns.absent', 'Absents'),
-        verify: translate('busPointage.columns.verify', 'A verifier'),
-        rate: translate('busPointage.columns.rate', 'Taux'),
-        departureReason: translate('busPointage.columns.departureReason', 'Cause de quitte'),
-      },
-    }),
-    [language],
+    () => {
+      const dashboard = BUS_DASHBOARD_TRANSLATIONS[language] || BUS_DASHBOARD_TRANSLATIONS.fr;
+      return {
+        eyebrow: dashboard.eyebrow,
+        title: dashboard.detail.title,
+        subtitle: (date) => `${formatDateLabel(date, locale)} | ${dashboard.detail.subtitle}`,
+        chartLabel: dashboard.detail.chart,
+        busCount: (count) => `${count} ${dashboard.cards.bus.toLowerCase()}`,
+        search: dashboard.search,
+        close: dashboard.actions.close,
+        empty: dashboard.detail.empty,
+        noResults: dashboard.noResults,
+        columns: {
+          ...dashboard.columns,
+          total: dashboard.cards.people,
+          present: dashboard.detail.present,
+          absent: translate('status.absent', 'Absent'),
+          verify: translate('status.verify', 'Needs review'),
+          rate: dashboard.cards.rate,
+          departureReason: dashboard.columns.departureReason,
+        },
+      };
+    },
+    [language, locale],
   );
   const busBaseLabels = useMemo(
     () => {

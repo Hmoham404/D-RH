@@ -100,29 +100,29 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   async function saveCorrection(correction) {
     const next = await correctDailyPointage(snapshot, importEmployees, correction);
     const result = await savePointageSnapshot(next);
-    if (result.mode !== 'supabase') throw new Error(result.message);
+    if (result.mode !== 'supabase') throw new Error(translate('daily.saveFailed'));
     onSaved(result.data);
     setDetail(null);
     setListDetail(null);
-    setMessage(`Correction RH enregistrée pour ${detail.fullName}, le ${dayLabel(correction.isoDate)}. Les heures et les indicateurs ont été recalculés.`);
+    setMessage(translate('daily.importScreen.corrected', 'Correction saved for {name} on {date}.', { name: detail.fullName, date: dayLabel(correction.isoDate) }));
   }
   async function importFile(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
     if (!isExcelFile(file)) {
-      setMessage('Import annule : selectionnez un fichier Excel au format .xlsx ou .xls.');
+      setMessage(translate('daily.importScreen.invalidFile'));
       return;
     }
     if (!importEmployees.length) {
-      setMessage('Import annule : la base RH doit etre chargee avant le pointage.');
+      setMessage(translate('daily.importScreen.baseRequired'));
       return;
     }
-    setBusy(true); setMessage('Lecture de la base et calcul des passages…');
+    setBusy(true); setMessage(translate('daily.reading'));
     try {
       const next = await prepareDailyPointage(file, importEmployees, snapshot, rules);
       const info = next.importDiagnostics;
-      setMessage('Sauvegarde automatique du pointage…');
+      setMessage(translate('daily.saving'));
       const result = await savePointageSnapshot(next);
       if (result.mode !== 'supabase') throw new Error(result.message);
       onSaved(result.data);
@@ -132,8 +132,17 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       setSearch('');
       setStatusFilter('ALL');
       const firstDay = info.incomingDates[0];
-      setMessage(`Import sauvegardé : ${info.incomingUsable} passages sur ${info.incomingDates.length} journées, du ${dayLabel(firstDay)} au ${dayLabel(info.incomingDates.at(-1))} · ${info.duplicateRows} doublons ignorés · ${info.rejectedRows} lignes rejetées. ${result.message}`);
-    } catch (error) { setMessage(`Import non enregistré : ${error.message} Réimportez le fichier après correction.`); }
+      setMessage(translate('daily.importSaved', 'Import saved: {punches} punches over {days} days, from {start} to {end} · {duplicates} duplicates skipped · {rejected} rows rejected.', {
+        punches: info.incomingUsable,
+        days: info.incomingDates.length,
+        start: dayLabel(firstDay, locale),
+        end: dayLabel(info.incomingDates.at(-1), locale),
+        duplicates: info.duplicateRows,
+        rejected: info.rejectedRows,
+      }));
+    } catch (error) {
+      setMessage(translate('daily.saveFailed'));
+    }
     finally { setBusy(false); }
   }
   async function clearPointage(event) {
@@ -142,18 +151,18 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     setClearError('');
     setClearing(true);
     try {
-      if (!await verifyPointageCorrectionCode(clearCode)) throw new Error('Code RH incorrect.');
+      if (!await verifyPointageCorrectionCode(clearCode)) throw new Error(translate('daily.importScreen.incorrectCode'));
       const result = await clearPointageSnapshot();
-      if (result.mode !== 'supabase') throw new Error(result.message);
+      if (result.mode !== 'supabase') throw new Error(translate('daily.importScreen.clearFailed'));
       onSaved(null);
       setDetail(null);
       setListDetail(null);
       setSelectedDay('');
       setSearch('');
       setStatusFilter('ALL');
-      setMessage(`${result.message} Vous pouvez repartir avec un nouveau fichier pointage.`);
+      setMessage(translate('daily.importScreen.cleared'));
     } catch (error) {
-      setClearError(error.message || 'Vidage du pointage impossible.');
+      setClearError(error.message || translate('daily.importScreen.clearFailed'));
     } finally {
       setClearCode('');
       setClearing(false);
@@ -208,12 +217,12 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         <dl className="daily-import__punches"><div><dt>{translate('daily.importScreen.entry')}</dt><dd>{detail.entry.slice(11) || translate('daily.unavailable')}</dd></div><div><dt>{translate('daily.importScreen.exit')}</dt><dd>{detail.exit.slice(11) || translate('daily.importScreen.missingExit')}</dd></div></dl>
         <p>{translate('daily.importScreen.calculated')} : <strong>{detail.status === 'POINTAGE' ? detail.display : detail.status === 'ABS' ? translate('daily.importScreen.absentStatus') : translate('daily.importScreen.reviewStatus')}</strong></p>
         <p>{translate('daily.importScreen.passages', 'Punches on {date}', { date: dayLabel(detail.isoDate) })} : {detail.detail.split(' | ').map((value) => value.slice(11)).join(' · ') || translate('daily.importScreen.none')}</p>
-        {['POINTAGE', 'AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} />}
+        {['POINTAGE', 'AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} translate={translate} />}
       </div>
     </dialog>}
     {listDetail && <dialog ref={listDialogRef} className="daily-import__dialog daily-import__dialog--list" aria-labelledby="attendance-detail-title" onClose={() => setListDetail(null)} onClick={(event) => { if (event.target === event.currentTarget) listDialogRef.current.close(); }}>
       <div className="daily-import__detail">
-        <div className="rh-modal__header"><div><h2 id="attendance-detail-title">{listDetail.title}</h2><p>{dayLabel(listDetail.date)} · {listDetail.people.length} {translate('modal.people', '{count} people', { count: listDetail.people.length })}</p></div><button type="button" autoFocus className="rh-modal__close" onClick={() => listDialogRef.current.close()}>{translate('daily.importScreen.close')}</button></div>
+        <div className="rh-modal__header"><div><h2 id="attendance-detail-title">{listDetail.title}</h2><p>{dayLabel(listDetail.date)} · {translate('daily.importScreen.peopleCount', '{count} people', { count: listDetail.people.length })}</p></div><button type="button" autoFocus className="rh-modal__close" onClick={() => listDialogRef.current.close()}>{translate('daily.importScreen.close')}</button></div>
         <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('table.department', 'Department')}</th><th>MOD / MOI</th><th>{translate('daily.importScreen.status')}</th><th>{translate('daily.importScreen.entry')}</th><th>{translate('daily.importScreen.late')}</th></tr></thead><tbody>{listDetail.people.length ? listDetail.people.map((person) => <tr key={person.employeeKey}><td>{person.id}</td><td>{person.fullName}</td><td>{person.department}</td><td>{person.kind}</td><td>{{ POINTAGE: translate('status.present', 'Present'), AVR: translate('status.verify', 'To verify'), EMPTY: translate('status.noData', 'No data') }[person.status] || person.status}</td><td>{person.entry || '-'}</td><td>{person.delay ? translate('daily.importScreen.minutes', '{count} min', { count: person.delay }) : '-'}</td></tr>) : <tr><td colSpan={7} className="rh-table__empty">{translate('daily.importScreen.noPeople')}</td></tr>}</tbody></table></div>
       </div>
     </dialog>}

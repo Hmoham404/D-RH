@@ -31,7 +31,7 @@ function buildImportId(snapshot) {
 }
 
 function normalizeSnapshot(snapshot) {
-  if (!snapshot || typeof snapshot !== 'object') {
+  if (!snapshot || typeof snapshot !== 'object' || snapshot.cleared) {
     return null;
   }
 
@@ -44,6 +44,8 @@ function normalizeSnapshot(snapshot) {
   return {
     importId,
     fileName: snapshot.fileName || '',
+    sourceOnlyVersion: snapshot.sourceOnlyVersion || null,
+    sourceWeeklySheets: Array.isArray(snapshot.sourceWeeklySheets) ? snapshot.sourceWeeklySheets : [],
     dateNormalizationVersion: snapshot.dateNormalizationVersion || null,
     sheetCount: Number(snapshot.sheetCount || 0),
     sheetNames: Array.isArray(snapshot.sheetNames) ? snapshot.sheetNames : [],
@@ -116,6 +118,24 @@ function clearLocalPointageSnapshot() {
 function clearLocalPointageHistory() {
 }
 
+async function clearStoredPointageRecords(filter) {
+  await filter(supabase.from(TABLE_NAME).delete());
+  const { data: remaining, error: readError } = await filter(supabase.from(TABLE_NAME).select('id'));
+  if (readError) throw readError;
+  if (!remaining?.length) return;
+
+  // Some installations allow UPDATE but have no DELETE policy. Erase the payload there.
+  const { error: clearError } = await filter(supabase.from(TABLE_NAME)
+    .update({ payload: { cleared: true }, updated_at: new Date().toISOString() }));
+  if (clearError) throw clearError;
+  const { data: verified, error: verifyError } = await filter(supabase.from(TABLE_NAME)
+    .select('id,cleared:payload->>cleared'));
+  if (verifyError) throw verifyError;
+  if (verified.some((row) => String(row.cleared) !== 'true')) {
+    throw new Error('Le serveur n a pas efface les anciennes donnees de pointage.');
+  }
+}
+
 async function persistSnapshotRows(normalized, resetBeforeSave = false) {
   writeLocalSnapshot(normalized);
   upsertLocalHistoryEntry(normalized);
@@ -159,10 +179,9 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false) {
     // Publish the replacement before removing history, keeping the old data if publication fails.
     if (resetBeforeSave) {
       try {
-        const { error: historyDeleteError } = await supabase.from(TABLE_NAME).delete()
+        await clearStoredPointageRecords((query) => query
           .like('id', `${HISTORY_RECORD_PREFIX}%`)
-          .neq('id', `${HISTORY_RECORD_PREFIX}${normalized.importId}`);
-        if (historyDeleteError) historyResetError = formatSupabaseError(historyDeleteError, 'Suppression de l ancien historique');
+          .neq('id', `${HISTORY_RECORD_PREFIX}${normalized.importId}`));
       } catch (error) {
         historyResetError = formatSupabaseError(error, 'Suppression de l ancien historique');
       }
@@ -214,7 +233,7 @@ export async function loadPointageSnapshot() {
       };
     }
 
-    if (!data?.payload) {
+    if (!data?.payload || data.payload.cleared) {
       return {
         data: null,
         mode: 'remote-empty',
@@ -259,6 +278,7 @@ export async function loadPointageHistory(limit = 15) {
       .from(TABLE_NAME)
       .select('id, payload, updated_at')
       .like('id', `${HISTORY_RECORD_PREFIX}%`)
+      .or('payload->>cleared.is.null,payload->>cleared.eq.false')
       .order('updated_at', { ascending: false })
       .limit(limit);
 
@@ -324,14 +344,7 @@ export async function clearPointageSnapshot() {
   }
 
   try {
-    const { error } = await supabase.from(TABLE_NAME).delete().eq('id', CURRENT_RECORD_ID);
-
-    if (error) {
-      return {
-        mode: 'local-disabled',
-        message: formatSupabaseError(error, 'Reset pointage'),
-      };
-    }
+    await clearStoredPointageRecords((query) => query.eq('id', CURRENT_RECORD_ID));
   } catch (error) {
     return {
       mode: 'local-disabled',

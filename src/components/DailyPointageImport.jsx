@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, prepareDailyPointage } from '../lib/dailyPointage.js';
 import DailyAttendanceOverview from './DailyAttendanceOverview';
-import { clearPointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
+import { clearPointageSnapshot, replacePointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
 import { correctDailyPointage, verifyPointageCorrectionCode } from '../lib/pointageCorrection.js';
 import PointageCorrectionForm from './PointageCorrectionForm';
 import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDates.js';
@@ -87,8 +87,11 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   useEffect(() => {
     if (listDetail) listDialogRef.current?.showModal();
   }, [listDetail]);
-  const dates = useMemo(() => [...new Set((data?.rawRows || []).map((row) => row.isoDate).filter(Boolean))].sort(), [data]);
-  const table = useMemo(() => buildDailyTable(data, employees, dates), [data, employees, dates]);
+  const dates = useMemo(() => [...new Set([
+    ...(data?.rawRows || []).map((row) => row.isoDate),
+    ...(data?.sourceWeeklySheets || []).flatMap((sheet) => sheet.dayColumns.map((day) => day.isoDate)),
+  ].filter(Boolean))].sort(), [data]);
+  const table = useMemo(() => buildDailyTable(data, importEmployees, dates), [data, importEmployees, dates]);
   const dayLabel = formatPointageDate;
   const analysisDate = selectedDay && dates.includes(selectedDay) ? selectedDay : getDefaultPointageDate(dates, today);
   const filteredRows = table.rows.filter((row) =>
@@ -114,16 +117,12 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       setMessage(translate('daily.importScreen.invalidFile'));
       return;
     }
-    if (!importEmployees.length) {
-      setMessage(translate('daily.importScreen.baseRequired'));
-      return;
-    }
     setBusy(true); setMessage(translate('daily.reading'));
     try {
       const next = await prepareDailyPointage(file, importEmployees, snapshot, rules);
       const info = next.importDiagnostics;
       setMessage(translate('daily.saving'));
-      const result = await savePointageSnapshot(next);
+      const result = await replacePointageSnapshot(next);
       if (result.mode !== 'supabase') throw new Error(result.message);
       onSaved(result.data);
       setDetail(null);
@@ -176,14 +175,14 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       baseMonthDate={baseMonthDate}
       onImport={importFile}
       busy={busy || correcting}
-      importDisabled={loading || !importEmployees.length}
+      importDisabled={loading}
       translate={translate}
       locale={locale}
     />
     <DailyAttendanceOverview day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={setSelectedDay}
       baseEmployees={baseEmployees} baseMonthDate={baseMonthDate} onOpen={setListDetail}
       target={productionModTarget} onTargetChange={onProductionModTargetChange} onImport={importFile}
-      busy={busy || correcting} importDisabled={loading || !importEmployees.length} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
+      busy={busy || correcting} importDisabled={loading} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
     <article className="rh-card rh-card--table"><div className="rh-card__header rh-card__header--table"><div><h2>{translate('daily.importScreen.recorded')}</h2></div><div className="rh-table-tools">
       <input aria-label={translate('daily.importScreen.search')} placeholder={translate('daily.importScreen.nameOrId')} value={search} onChange={(e) => setSearch(e.target.value)} />
       <label className="daily-import__filter">{translate('daily.importScreen.status')}<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>

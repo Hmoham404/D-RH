@@ -27,9 +27,7 @@ test('French date labels and daily department rates exclude STC and future hires
   assert.equal(injection.expected, 2);
   assert.deepEqual(result[0].absences.map((person) => person.id), ['B']);
   assert.deepEqual(result[1].absences.map((person) => person.id), ['A']);
-  const guarding = result[1].departments.find((group) => group.label === 'Gardiennage');
-  assert.equal(guarding.percent, 0);
-  assert.equal(guarding.unknown, 1);
+  assert.equal(result[1].departments.some((group) => group.label === 'Gardiennage'), false);
 });
 
 test('department groups combine services, split MOD/MOI and detect lateness from entry only', () => {
@@ -67,20 +65,74 @@ test('latest file view excludes history and exposes entry and exit from that fil
   assert.equal(table.rows[0].days[0].entry, '10/09/2026 07:42:00');
   assert.equal(table.rows[0].days[0].exit, '10/09/2026 18:05:00');
   assert.equal(current.rawRows.length, 2);
-  assert.equal(next.rawRows.length, 3);
-  assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-04-09', '2026-09-10']);
-  assert.equal(getCurrentFilePointage({ rawRows: old.rawRows }), null);
+  assert.equal(next.rawRows.length, 2);
+  assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-09-10']);
+  assert.deepEqual(getCurrentFilePointage({ rawRows: old.rawRows, dateNormalizationVersion: 3 }).rawRows, old.rawRows);
 });
 
-test('French dates, full names, duration, active absence and STC', async () => {
+test('French dates, full names and duration without inventing absences or STC', async () => {
   const result = await prepareDailyPointage(file([[4, 'Seifeddine.Z', '09/10/2026 07:42'], [4, 'Seifeddine.Z', '09/10/2026 18:05']]), employees, null, rules);
   assert.equal(cell(result, '4', '2026-09-10').display, '10:23');
   assert.equal(cell(result, '4', '2026-09-10').status, 'POINTAGE');
-  assert.equal(cell(result, '6', '2026-09-10').status, 'ABS');
-  assert.equal(cell(result, '10', '2026-09-10').status, 'STC');
+  assert.equal(cell(result, '6', '2026-09-10'), undefined);
+  assert.equal(cell(result, '10', '2026-09-10'), undefined);
   assert.equal(cell(result, '6', '2026-10-10'), undefined);
   assert.deepEqual(result.weeklySheets[0].dayColumns.map((day) => day.isoDate), ['2026-09-10']);
   assert.equal(result.weeklySheets[0].rows[0].fullName, 'ZAIDI SEIFEDDINE');
+});
+
+test('future hires are not marked absent before their hire date', async () => {
+  const base = [
+    ...employees,
+    { id: '342', fullName: 'DOUZI KHOULOUD', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hired_at: '24/9/2026' },
+    { id: '343', fullName: 'CHAIEB BAYA', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '24' },
+  ];
+  const result = await prepareDailyPointage(file([
+    [4, 'Z', '09/21/2026 07:42'],
+    [4, 'Z', '09/22/2026 07:42'],
+    [4, 'Z', '09/23/2026 07:42'],
+    [4, 'Z', '09/24/2026 07:42'],
+    [342, 'DOUZI KHOULOUD', '09/24/2026 07:30'],
+    [343, 'CHAIEB BAYA', '09/24/2026 07:30'],
+  ]), base, null, rules);
+
+  assert.equal(cell(result, '342', '2026-09-23').status, 'EMPTY');
+  assert.equal(cell(result, '342', '2026-09-24').status, 'AVR');
+  assert.equal(cell(result, '343', '2026-09-23').status, 'EMPTY');
+  assert.equal(cell(result, '343', '2026-09-24').status, 'AVR');
+  for (const date of ['2026-09-21', '2026-09-22', '2026-09-23']) {
+    const table = buildDailyTable(result, base, [date]);
+    assert.deepEqual(table.rows.map((row) => row.id), ['4']);
+  }
+
+  const attendance = buildAttendanceByDay(buildDailyTable(result, base, ['2026-09-23', '2026-09-24']));
+  assert.equal(attendance[0].absences.some((person) => person.id === '342'), false);
+  assert.equal(attendance[1].absences.some((person) => person.id === '342'), false);
+  assert.equal(attendance[0].absences.some((person) => person.id === '343'), false);
+  assert.equal(attendance[1].absences.some((person) => person.id === '343'), false);
+});
+
+test('blank cells become ABS only from a recorded hire date onward', async () => {
+  const base = [
+    ...employees,
+    { id: '342', fullName: 'DOUZI KHOULOUD', status: 'Actif', hiredAt: '24/09/2026' },
+    { id: '343', fullName: 'CHAIEB BAYA', status: 'Actif', hiredAt: '' },
+  ];
+  const result = await prepareDailyPointage(file([
+    [4, 'Z', '09/23/2026 07:30'],
+    [4, 'Z', '09/24/2026 07:30'],
+    [342, 'DOUZI KHOULOUD', '09/25/2026 07:30'],
+    [343, 'CHAIEB BAYA', '09/25/2026 07:30'],
+  ]), base, null, rules);
+
+  assert.equal(cell(result, '342', '2026-09-23').display, '-');
+  assert.equal(cell(result, '342', '2026-09-24').status, 'ABS');
+  assert.equal(cell(result, '342', '2026-09-25').status, 'AVR');
+  assert.equal(cell(result, '343', '2026-09-24').display, '-');
+  const attendance = buildAttendanceByDay(buildDailyTable(result, base, ['2026-09-23', '2026-09-24']));
+  assert.equal(attendance[0].absences.some((person) => person.id === '342'), false);
+  assert.equal(attendance[1].absences.some((person) => person.id === '342'), true);
+  assert.equal(attendance[1].absences.some((person) => person.id === '343'), false);
 });
 
 test('prestation employees without a punch are not imported as absent', async () => {
@@ -95,8 +147,7 @@ test('prestation employees without a punch are not imported as absent', async ()
     rules,
   );
   const prestationDay = cell(result, '296', '2026-09-10');
-  assert.equal(prestationDay.status, 'PRESTATION');
-  assert.equal(prestationDay.display, 'PREST.');
+  assert.equal(prestationDay, undefined);
 
   const attendance = buildAttendanceByDay(buildDailyTable(result, prestationEmployees, ['2026-09-10']))[0];
   assert.equal(attendance.absences.some((person) => person.id === '296'), false);
@@ -241,7 +292,7 @@ test('daily accumulation is idempotent and completes an incomplete day', async (
   assert.deepEqual(third.weeklySheets, second.weeklySheets);
 });
 
-test('reimporting an existing date replaces that date and keeps other saved dates', async () => {
+test('reimporting replaces every saved date with the dates in the new file', async () => {
   const first = await prepareDailyPointage(file([
     [4, 'Z', '09/10/2026 07:42'],
     [4, 'Z', '09/10/2026 18:05'],
@@ -254,17 +305,17 @@ test('reimporting an existing date replaces that date and keeps other saved date
     [4, 'Z', '09/12/2026 07:50'],
   ]), employees, first, rules);
 
-  assert.equal(cell(second, '4', '2026-09-10').display, '10:23');
+  assert.equal(cell(second, '4', '2026-09-10'), undefined);
   assert.equal(cell(second, '4', '2026-09-11').display, '09:50');
   assert.equal(cell(second, '4', '2026-09-12').display, '07:50');
   assert.deepEqual(second.rawRows.filter((row) => row.isoDate === '2026-09-11').map((row) => row.pointageAt.slice(11, 16)), ['08:10', '18:00']);
-  assert.equal(second.rawRows.length, 5);
+  assert.equal(second.rawRows.length, 3);
 });
 
 test('optional pause and rounding apply, open days do not imply absence', async () => {
   const result = await prepareDailyPointage(file([[4, 'Z', '09/10/2026 07:42'], [4, 'Z', '09/10/2026 18:05']]), employees, null, { ...rules, breakMinutes: 30, roundingMinutes: 30, closeDays: false });
   assert.equal(cell(result, '4', '2026-09-10').display, '09:30');
-  assert.equal(cell(result, '6', '2026-09-10').status, 'EMPTY');
+  assert.equal(cell(result, '6', '2026-09-10'), undefined);
 });
 
 test('invalid dates are reported and wholly invalid new imports fail', async () => {
@@ -351,7 +402,7 @@ test('stored 1109 mdy snapshots repair coherent but inverted dates and accumulat
   assert.equal(restored.generatedAt, previous.generatedAt);
   assert.deepEqual(await normalizeSavedPointageSnapshot(restored, employees), restored);
   const next = await prepareDailyPointage(file([[4, 'Z', '09/11/2026 18:00']]), employees, previous, rules);
-  assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-09-10', '2026-09-11']);
+  assert.deepEqual([...new Set(next.rawRows.map((row) => row.isoDate))].sort(), ['2026-09-11']);
   assert.equal(cell(next, '4', '2026-09-11').display, '18:00');
   assert.deepEqual(previous, JSON.parse(JSON.stringify({ ...original, dateNormalizationVersion: undefined,
     fileName: '1109.xlsx', currentFilePointage: { ...original.currentFilePointage, fileName: '1109.xlsx', dateNormalizationVersion: undefined } })));
@@ -376,12 +427,12 @@ test('all source sheets and dates are grouped even with reordered columns and un
   assert.equal(cell(result, '4', '2026-08-10').display, '10:00');
   assert.equal(cell(result, '4', '2026-09-10').display, '10:00');
   assert.equal(cell(result, '4', '2026-12-10').display, '08:00');
-  assert.equal(cell(result, '6', '2026-08-10').status, 'ABS');
-  assert.equal(cell(result, '10', '2026-12-10').status, 'STC');
+  assert.equal(cell(result, '6', '2026-08-10'), undefined);
+  assert.equal(cell(result, '10', '2026-12-10'), undefined);
   assert.ok(result.rawRows.some((row) => row.sheetName === 'Pointeuse B'));
 });
 
-test('table uses base personnel and actual file dates, ignoring old weekly tables and unknown people', async () => {
+test('table uses only file personnel and dates, including people missing from the RH base', async () => {
   const first = await prepareDailyPointage(file([[4, 'Z', '04/09/2026 08:00'], [4, 'Z', '04/09/2026 16:00']]), employees, null, rules);
   const next = await prepareDailyPointage(file([
     [4, 'Z', '10/09/2026 08:00'], [4, 'Z', '10/09/2026 17:00'],
@@ -390,19 +441,18 @@ test('table uses base personnel and actual file dates, ignoring old weekly table
   next.weeklySheets = [{ dayColumns: [{ isoDate: '2026-08-24' }], rows: [] }];
   const table = buildDailyTable(next, employees, next.importDiagnostics.incomingDates);
   assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-10-09']);
-  assert.deepEqual(table.rows.map((row) => row.id), ['4', '6', '10']);
+  assert.deepEqual(table.rows.map((row) => row.id), ['4', '999']);
   assert.equal(table.rows[0].totalHours, '09:00');
-  assert.equal(table.rows[1].days[0].status, 'ABS');
-  assert.equal(table.rows[2].days[0].status, 'STC');
-  assert.equal(next.rawRows.length, 5);
+  assert.equal(table.rows[1].days[0].status, 'AVR');
+  assert.equal(next.rawRows.length, 3);
   const combined = buildDailyTable(next, employees, ['2026-04-09', '2026-10-09']);
-  assert.equal(combined.dayColumns.length, 2);
-  assert.equal(combined.rows[0].totalHours, '17:00');
+  assert.equal(combined.dayColumns.length, 1);
+  assert.equal(combined.rows[0].totalHours, '09:00');
   const filteredBase = buildDailyTable(next, employees.slice(0, 2), ['2026-10-09']);
   assert.equal(filteredBase.rows.length, 2);
 });
 
-test('saved imports keep previous days and use the current RH department and service', async () => {
+test('saved imports replace previous days and use the current RH department and service', async () => {
   const base = [
     { ...employees[0], department: 'PRODUCTION', service: 'INJ' },
     { ...employees[1], department: 'ADMINISTRATION', service: 'GARDIENNAGE' },
@@ -413,11 +463,66 @@ test('saved imports keep previous days and use the current RH department and ser
   const reloaded = JSON.parse(JSON.stringify(next));
   const dates = [...new Set(reloaded.rawRows.map((row) => row.isoDate))].sort();
   const table = buildDailyTable(reloaded, base, dates);
-  assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-08-09', '2026-09-09']);
-  assert.deepEqual(table.rows[0].days.map((day) => day.display), ['08:00', '09:00']);
+  assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-09-09']);
+  assert.deepEqual(table.rows[0].days.map((day) => day.display), ['09:00']);
   assert.equal(table.rows[0].department, 'PRODUCTION');
   assert.equal(table.rows[0].service, 'INJ');
-  assert.equal(table.rows[1].service, 'GARDIENNAGE');
+  assert.equal(table.rows.length, 1);
   const updated = buildDailyTable(reloaded, [{ ...base[0], service: 'TECHNIQUE' }, base[1]], dates);
   assert.equal(updated.rows[0].service, 'TECHNIQUE');
+});
+
+test('file statuses distinguish explicit ABS, leave and blank days before and after reload', async () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Semaine 2026'],
+    ['ID', 'Nom', 'Prenom', 'Departement', 'Categorie', '09/23', '09/24', 'Heures standard'],
+    [4, 'ZAIDI', 'SEIFEDDINE', 'Maintenance', 'MOI', '08:00', '', ''],
+    [6, 'ESSID', 'HOUSSEM EDDINE', 'PRODUCTION', 'MOD', 'ABS', 'CM', ''],
+    [342, 'DOUZI', 'KHOULOUD', 'PRODUCTION', 'MOD', 'ABS', 'ABS', ''],
+    [343, 'CHAIEB', 'BAYA', 'PRODUCTION', 'MOD', '', '', ''],
+  ]), 'S1');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['ID Emp.', 'Nom', 'Temps du Ptg'], [4, 'Z', '09/23/2026 07:00'], [4, 'Z', '09/23/2026 15:00'],
+  ]), 'Export');
+  const base = [...employees, { id: '342', fullName: 'DOUZI KHOULOUD', hiredAt: '2026-09-24' }];
+  const imported = await prepareDailyPointage({ name: 'statuses.xlsx', arrayBuffer: async () => XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) }, base, null, rules);
+  const restored = await normalizeSavedPointageSnapshot(JSON.parse(JSON.stringify(imported)), base);
+  for (const value of [imported, restored]) {
+    const table = buildDailyTable(value, base, ['2026-09-23', '2026-09-24']);
+    const [day23, day24] = buildAttendanceByDay(table);
+    assert.deepEqual(day23.absences.map((person) => person.id), ['6']);
+    assert.deepEqual(day24.absences.map((person) => person.id), ['342']);
+    assert.deepEqual(day23.departments.flatMap((group) => group.people).map((person) => person.id).sort(), ['4', '6']);
+    assert.equal(day24.departments.flatMap((group) => group.people).find((person) => person.id === '6').status, 'CM');
+    assert.equal(table.rows.some((row) => row.id === '343'), false);
+  }
+});
+
+test('legacy reload discards synthetic absences and all punches outside the latest file', async () => {
+  const old = await prepareDailyPointage(file([[6, 'Old', '09/20/2026 08:00']]), employees, null, rules);
+  const current = await prepareDailyPointage(file([[4, 'Z', '09/23/2026 07:00']]), employees, null, rules);
+  const legacy = JSON.parse(JSON.stringify(current));
+  delete legacy.sourceOnlyVersion;
+  delete legacy.currentFilePointage.sourceOnlyVersion;
+  legacy.rawRows.push(...old.rawRows);
+  legacy.weeklySheets[0].rows.push({ employeeKey: '342', id: '342', fullName: 'New arrival',
+    days: [{ isoDate: '2026-09-23', status: 'ABS', display: 'ABS' }] });
+  const original = JSON.stringify(legacy);
+  const restored = await normalizeSavedPointageSnapshot(legacy, [...employees, { id: '342', status: 'Actif' }]);
+  assert.equal(JSON.stringify(legacy), original);
+  assert.deepEqual(restored.rawRows.map((row) => row.isoDate), ['2026-09-23']);
+  assert.deepEqual(restored.weeklySheets[0].rows.map((row) => row.id), ['4']);
+  assert.deepEqual(restored.dailySummaries.map((day) => day.isoDate), ['2026-09-23']);
+  assert.deepEqual(await normalizeSavedPointageSnapshot(JSON.parse(JSON.stringify(restored)), employees), JSON.parse(JSON.stringify(restored)));
+});
+
+test('an empty RH directory still analyzes actual file people without synthetic absences', async () => {
+  const result = await prepareDailyPointage(file([[342, 'New arrival', '09/24/2026 07:30']]), [], null, rules);
+  const table = buildDailyTable(result, [], ['2026-09-24']);
+  assert.deepEqual(table.rows.map((row) => row.id), ['342']);
+  const [day] = buildAttendanceByDay(table);
+  assert.equal(day.departments[0].expected, 1);
+  assert.equal(day.departments[0].present, 1);
+  assert.equal(day.absences.length, 0);
 });

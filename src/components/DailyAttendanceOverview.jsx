@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatPointageDate } from '../lib/dailyPointage.js';
-import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
+import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
 import { KpiCard, ProductionFocusSection } from './AttendanceDashboard';
 import AttendanceCharts from './AttendanceCharts';
 import DashboardIcon from './DashboardIcon';
@@ -9,7 +9,6 @@ const percent = (count, total) => total ? count / total * 100 : 0;
 const isPresent = (person) => ['POINTAGE', 'AVR'].includes(person.status);
 const isProduction = (person) => /^production/i.test(person.department || '');
 const isMod = (person) => String(person.kind || '').toUpperCase() === 'MOD';
-const getPersonKey = (person) => String(person.employeeKey || person.zk || person.id || person.finalCode || person.saber || person.fullName || '').trim();
 const serviceTypes = [
   { key: 'injection', label: 'Injection', tone: 'blue' },
   { key: 'metallisation', label: 'Metallisation', tone: 'orange' },
@@ -286,17 +285,14 @@ export default function DailyAttendanceOverview({ day, history, analysisDate,
   const late = people.filter((person) => person.delay > 0);
   const toPerson = (employee) => ({ ...employee, employeeKey: employee.zk || employee.id,
     id: employee.zk || employee.id, status: employee.status });
-  const activeBase = baseEmployees.filter((employee) => isEmployeeActiveInMonth(employee, baseMonthDate)).map(toPerson);
-  const presentKeys = new Set(present.map(getPersonKey).filter(Boolean));
-  const peopleByKey = new Map(people.map((person) => [getPersonKey(person), person]));
-  const workforce = activeBase.length ? activeBase.map((employee) => ({ ...employee, ...(peopleByKey.get(getPersonKey(employee)) || {}) })) : people;
-  const absent = workforce.filter((person) => !presentKeys.has(getPersonKey(person))).map((person) => ({ ...person, status: 'ABS' }));
+  const workforce = people;
+  const absent = workforce.filter((person) => person.status === 'ABS');
   const production = workforce.filter(isProduction);
   const productionPresent = present.filter(isProduction);
-  const productionAbsent = production.filter((person) => !presentKeys.has(getPersonKey(person))).map((person) => ({ ...person, status: 'ABS' }));
+  const productionAbsent = absent.filter(isProduction);
   const modPeople = production.filter(isMod);
   const modPresent = present.filter((person) => isProduction(person) && isMod(person));
-  const modAbsent = modPeople.filter((person) => !presentKeys.has(getPersonKey(person))).map((person) => ({ ...person, status: 'ABS' }));
+  const modAbsent = productionAbsent.filter(isMod);
   const recruits = baseEmployees.filter((employee) => isEmployeeHiredInMonth(employee, baseMonthDate)).map(toPerson);
   const stc = baseEmployees.filter((employee) => isEmployeeStcInMonth(employee, baseMonthDate)).map(toPerson);
   const productionRecruits = recruits.filter(isProduction);

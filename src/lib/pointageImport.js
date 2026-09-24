@@ -233,6 +233,14 @@ function parseWeeklyCellValue(value) {
     return { raw: text, display: text, status: 'AVR' };
   }
 
+  if (/^\d{1,3}:\d{2}$/.test(text)) {
+    return { raw: text, display: text, status: 'POINTAGE' };
+  }
+
+  if (normalized === 'X' || text === '-') {
+    return { raw: text, display: '-', status: 'EMPTY' };
+  }
+
   return {
     raw: text,
     display: text,
@@ -797,7 +805,7 @@ export async function analyzePointageFile(file, employees, options = {}) {
     const matchedEmployee = match.employee;
     const employeeKey = matchedEmployee
       ? buildEmployeeKey(matchedEmployee)
-      : `${normalizeCode(sourceId)}|${normalizeName(sourceName)}` || `row-${rowIndex + 1}`;
+      : normalizeCode(sourceId) || normalizeName(sourceName) || `row-${rowIndex + 1}`;
     const isoDate = formatIsoDate(pointageDate);
     const safeSourceName = sourceName || '-';
     const matchedName = matchedEmployee?.fullName || safeSourceName.toUpperCase();

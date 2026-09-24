@@ -5,8 +5,7 @@ import DashboardIcon from './components/DashboardIcon';
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './components/AttendanceDashboard';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
 import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
-import { analyzePointageFile } from './lib/pointageImport';
-import { normalizeSavedPointageSnapshot } from './lib/dailyPointage.js';
+import { buildDailyWeeks, normalizeSavedPointageSnapshot, prepareDailyPointage } from './lib/dailyPointage.js';
 import { dailyPointageTranslations } from './lib/dailyPointageTranslations.js';
 import {
   clearEmployeeDirectory,
@@ -1093,6 +1092,42 @@ function normalizeLookupText(value) {
     .trim();
 }
 
+function getEmployeeHireIso(employee, referenceIsoDate = '') {
+  const rawHire = String(
+    employee?.hiredAt ??
+    employee?.hired_at ??
+    employee?.Date_Embauche ??
+    employee?.dateEmbauche ??
+    employee?.date_embauche ??
+    employee?.hireDate ??
+    '',
+  ).trim();
+  const isoHire = rawHire.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  const frenchHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  const dayOnlyHire = rawHire.match(/^(\d{1,2})$/);
+  if (!isoHire && !frenchHire && !dayOnlyHire) {
+    return '';
+  }
+  const reference = String(referenceIsoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dayOnlyHire && !reference) {
+    return '';
+  }
+  const [year, month, day] = dayOnlyHire
+    ? [Number(reference[1]), Number(reference[2]), Number(dayOnlyHire[1])]
+    : isoHire
+      ? [Number(isoHire[1]), Number(isoHire[2]), Number(isoHire[3])]
+      : [Number(frenchHire[3]), Number(frenchHire[2]), Number(frenchHire[1])];
+  if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) {
+    return '';
+  }
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function hasEmployeeStartedBy(employee, isoDate) {
+  const hire = getEmployeeHireIso(employee, isoDate);
+  return !hire || hire <= isoDate;
+}
+
 function isFutureMarkerDay(day) {
   const raw = normalizeLookupText(day?.raw ?? day?.display ?? '');
   return raw === 'X';
@@ -1142,37 +1177,76 @@ function getFirstActiveDateInPeriod(days) {
   return firstActiveDay?.isoDate || '';
 }
 
+function getEmployeeCodeLookupKeys(value) {
+  const normalized = normalizeLookupText(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const keys = new Set([normalized]);
+  if (/^\d+$/.test(normalized)) {
+    keys.add(String(Number(normalized)));
+  }
+  const digitGroups = normalized.match(/\d+/g) || [];
+  digitGroups.forEach((group) => {
+    keys.add(group);
+    keys.add(String(Number(group)));
+  });
+
+  return [...keys].filter(Boolean);
+}
+
+function getEmployeeNameLookupKeys(value) {
+  const normalized = normalizeLookupText(value);
+  if (!normalized) {
+    return [];
+  }
+
+  const words = normalized.split(/\s+/).filter(Boolean);
+  const keys = new Set([normalized, words.join('')]);
+  if (words.length > 1) {
+    keys.add([...words].sort().join(' '));
+    keys.add([...words].sort().join(''));
+  }
+
+  return [...keys].filter(Boolean);
+}
+
 function buildEmployeeLookup(employees) {
   const byCode = new Map();
   const byName = new Map();
 
   employees.forEach((employee) => {
     [employee.id, employee.finalCode, employee.zk, employee.saber].forEach((code) => {
-      const normalizedCode = normalizeLookupText(code);
-      if (normalizedCode && !byCode.has(normalizedCode)) {
-        byCode.set(normalizedCode, employee);
-      }
+      getEmployeeCodeLookupKeys(code).forEach((normalizedCode) => {
+        if (!byCode.has(normalizedCode)) {
+          byCode.set(normalizedCode, employee);
+        }
+      });
     });
 
-    const normalizedName = normalizeLookupText(employee.fullName);
-    if (normalizedName && !byName.has(normalizedName)) {
-      byName.set(normalizedName, employee);
-    }
+    getEmployeeNameLookupKeys(employee.fullName).forEach((normalizedName) => {
+      if (!byName.has(normalizedName)) {
+        byName.set(normalizedName, employee);
+      }
+    });
   });
 
   return function findEmployeeMatch(row) {
     const codeCandidates = [row?.id, row?.employeeKey];
 
     for (const candidate of codeCandidates) {
-      const normalizedCode = normalizeLookupText(candidate);
-      if (normalizedCode && byCode.has(normalizedCode)) {
-        return byCode.get(normalizedCode);
+      for (const normalizedCode of getEmployeeCodeLookupKeys(candidate)) {
+        if (byCode.has(normalizedCode)) {
+          return byCode.get(normalizedCode);
+        }
       }
     }
 
-    const normalizedName = normalizeLookupText(row?.fullName);
-    if (normalizedName && byName.has(normalizedName)) {
-      return byName.get(normalizedName);
+    for (const normalizedName of getEmployeeNameLookupKeys(row?.fullName)) {
+      if (byName.has(normalizedName)) {
+        return byName.get(normalizedName);
+      }
     }
 
     return null;
@@ -1855,6 +1929,9 @@ function getDayStatusMeta(day) {
   const token = getWeeklyCellToken(day);
 
   switch (statusValue) {
+    case 'EMPTY':
+    case 'X':
+      return { code: statusValue, label: '-', tone: 'neutral', isPresent: false };
     case 'POINTAGE':
       return { code: 'POINTAGE', label: 'Present', tone: 'green', isPresent: true };
     case 'AVR':
@@ -1964,8 +2041,13 @@ function buildDayRoster(selectedWeek, selectedDate, employees = []) {
   return rows
     .map((row) => {
       const day = row.days?.[dayIndex];
-      const status = getDayStatusMeta(day);
       const matchedEmployee = findEmployeeMatch(row);
+      const employeeForDate = matchedEmployee || row;
+      const isBeforeHireDate = !hasEmployeeStartedBy(employeeForDate, selectedDate);
+      const effectiveDay = isBeforeHireDate
+        ? { ...day, status: 'X', display: '-', raw: 'X' }
+        : day;
+      const status = getDayStatusMeta(effectiveDay);
 
       return {
         employeeKey: row.employeeKey,
@@ -1976,8 +2058,10 @@ function buildDayRoster(selectedWeek, selectedDate, employees = []) {
         address: matchedEmployee?.address || '',
         bus: matchedEmployee?.bus || '',
         kind: row.kind || matchedEmployee?.kind || '-',
-        display: day?.display || '-',
-        rawDisplay: day?.raw || day?.display || '-',
+        hiredAt: matchedEmployee?.hiredAt || matchedEmployee?.hired_at || row.hiredAt || row.hired_at || '',
+        display: effectiveDay?.display || '-',
+        rawDisplay: effectiveDay?.raw || effectiveDay?.display || '-',
+        entry: effectiveDay?.entry || '',
         totalHours: row.totalHours || '-',
         control: row.control || '-',
         statusCode: status.code,
@@ -2032,7 +2116,7 @@ function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
         .find(Boolean);
       const rosterStatusCode = String(rosterRow?.statusCode || '').toUpperCase();
 
-      if (rosterStatusCode === 'STC') {
+      if (!rosterRow || rosterStatusCode === 'STC') {
         return;
       }
 
@@ -2055,7 +2139,7 @@ function buildBusPointageRows(baseEmployees = [], dayRoster = []) {
       group.total += 1;
       group.today += isPresentToday ? 1 : 0;
       group.present += isPresentToday ? 1 : 0;
-      group.absent += !isPresentToday ? 1 : 0;
+      group.absent += rosterStatusCode === 'ABS' ? 1 : 0;
       group.verify += isVerify ? 1 : 0;
       group.people.push({
         employeeKey: rosterRow?.employeeKey || employee.recordId,
@@ -4542,9 +4626,11 @@ export default function App() {
     try {
       setIsImporting(true);
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
-      const nextSnapshot = await analyzePointageFile(file, employees, { dateOrder: 'mdy' });
+      const nextSnapshot = await prepareDailyPointage(file, employees, null,
+        { dateOrder: 'mdy', breakMinutes: 0, roundingMinutes: 1, closeDays: true });
       setStatusMessage(translate('messages.replacingBase', 'Remplacement de la base pointage en cours...'));
       const saveResult = await replacePointageSnapshot(nextSnapshot);
+      if (saveResult.mode !== 'supabase') throw new Error(saveResult.message);
       const savedSnapshot = saveResult.data || nextSnapshot;
       setSnapshot(savedSnapshot);
       setSelectedDate(getDefaultSelectedDate(savedSnapshot));
@@ -4649,7 +4735,9 @@ export default function App() {
     }
   }, [availableDates, selectedDate, snapshot]);
 
-  const selectedWeek = useMemo(() => getSelectedWeek(snapshot, selectedDate), [snapshot, selectedDate]);
+  const selectedWeek = useMemo(() => getSelectedWeek(
+    { weeklySheets: snapshot ? buildDailyWeeks(snapshot, employees) : [] }, selectedDate,
+  ), [snapshot, employees, selectedDate]);
   const sourceRowsForDate = useMemo(() => getSelectedRows(snapshot, selectedDate), [snapshot, selectedDate]);
   const sourceSummaryForDate = useMemo(
     () => snapshot?.dailySummaries?.find((item) => item.isoDate === selectedDate) || null,
@@ -4727,9 +4815,8 @@ export default function App() {
       dayRoster
         .filter((row) => {
           if (!row.isPresent) return false;
-          const sourceValue = row.rawDisplay || row.display || '';
-          const lateMinutes = parseWorkedMinutes(sourceValue);
-          return lateMinutes > 7 * 60 + 30;
+          const entry = row.entry.match(/(\d{2}):(\d{2})(?::(\d{2}))?$/);
+          return entry && Number(entry[1]) * 3600 + Number(entry[2]) * 60 + Number(entry[3] || 0) > 7.5 * 3600;
         })
         .map((row) => ({
           id: row.id || row.employeeKey || '-',
@@ -4737,7 +4824,7 @@ export default function App() {
           department: row.department || '-',
           kind: row.kind || '-',
           status: 'Retard',
-          detail: row.rawDisplay || row.display || '-',
+          detail: row.entry || '-',
         })),
     [dayRoster],
   );
@@ -4745,10 +4832,16 @@ export default function App() {
     () => presentRoster.filter((row) => isProductionDepartment(row.department)),
     [presentRoster],
   );
-  const absenceRoster = useMemo(
-    () => dayRoster.filter((row) => !row.isPresent && isTrackedAbsenceRow(row)),
-    [dayRoster],
-  );
+  const absenceRoster = useMemo(() => {
+    const findEmployeeMatch = buildEmployeeLookup(employees);
+    return dayRoster.filter((row) => {
+      if (row.isPresent || !isTrackedAbsenceRow(row)) {
+        return false;
+      }
+      const matchedEmployee = findEmployeeMatch(row);
+      return hasEmployeeStartedBy(matchedEmployee || row, selectedDate);
+    });
+  }, [dayRoster, employees, selectedDate]);
   const productionNewRows = useMemo(
     () => newRoster.filter((row) => isProductionDepartment(row.department)),
     [newRoster],
@@ -4758,29 +4851,51 @@ export default function App() {
     [stcEmployees],
   );
   const { serviceBreakdown: productionServiceBreakdown, kindBreakdown: productionKindBreakdown } = useMemo(
-    () => buildProductionBreakdown(productionBaseRows, productionPresentRows, productionDayRows, productionStcRows),
-    [productionBaseRows, productionDayRows, productionPresentRows, productionStcRows],
+    () => buildProductionBreakdown(productionDayRows, productionPresentRows, productionDayRows, productionStcRows),
+    [productionDayRows, productionPresentRows, productionStcRows],
   );
   const productionModPresentCount = useMemo(
     () => productionKindBreakdown.find((item) => item.key === 'MOD')?.presentCount || 0,
     [productionKindBreakdown],
   );
   const kindComparison = useMemo(
-    () => buildKindComparison(activeEmployees, presentRoster),
-    [activeEmployees, presentRoster],
+    () => buildKindComparison(selectedDayEffectifRows, presentRoster),
+    [selectedDayEffectifRows, presentRoster],
   );
   const departmentComparison = useMemo(
-    () => buildDepartmentComparison(activeEmployees, presentRoster),
-    [activeEmployees, presentRoster],
+    () => buildDepartmentComparison(selectedDayEffectifRows, presentRoster),
+    [selectedDayEffectifRows, presentRoster],
   );
 
   const departmentSegments = useMemo(() => getDepartmentSegments(selectedRows), [selectedRows]);
   const filteredWeekRows = useMemo(() => {
     const rows = Array.isArray(selectedWeek?.rows) ? selectedWeek.rows : [];
-    return rows.filter((row) =>
-      matchesSearch([row.id, row.fullName, row.department, row.kind], searchValue),
-    );
-  }, [searchValue, selectedWeek]);
+    const findEmployeeMatch = buildEmployeeLookup(employees);
+    return rows
+      .map((row) => {
+        const matchedEmployee = findEmployeeMatch(row);
+        const displayRow = {
+          ...row,
+          id: row.id || matchedEmployee?.finalCode || matchedEmployee?.id || matchedEmployee?.zk || '-',
+          fullName: row.fullName || matchedEmployee?.fullName || '-',
+          department: row.department || matchedEmployee?.department || '-',
+          kind: row.kind || matchedEmployee?.kind || '-',
+          hiredAt: matchedEmployee?.hiredAt || matchedEmployee?.hired_at || row.hiredAt || row.hired_at || '',
+        };
+
+        return {
+          ...displayRow,
+          days: (row.days || []).map((day) =>
+            day?.isoDate && !hasEmployeeStartedBy(matchedEmployee || row, day.isoDate)
+              ? { ...day, status: 'X', display: '-', raw: 'X' }
+              : day,
+          ),
+        };
+      })
+      .filter((row) =>
+        matchesSearch([row.id, row.fullName, row.department, row.kind], searchValue),
+      );
+  }, [employees, searchValue, selectedWeek]);
   const departmentBaseRows = useMemo(
     () => buildDepartmentBaseRows(employees, currentMonthDate),
     [employees, currentMonthDate],
@@ -4874,11 +4989,11 @@ export default function App() {
     [employees],
   );
 
-  const totalEmployees = monthlyActiveEmployees.length;
-  const presentEmployees = Number(selectedSummary?.presentEmployees || 0);
+  const totalEmployees = selectedDayEffectifRows.length;
+  const presentEmployees = presentRoster.length;
   const absentEmployees = useMemo(
-    () => dayRoster.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').length,
-    [dayRoster],
+    () => absenceRoster.filter((row) => String(row.statusCode || '').toUpperCase() === 'ABS').length,
+    [absenceRoster],
   );
   const showLateKpi = Boolean(selectedDate) && selectedDate >= getTodayIsoDate();
   const lateEmployees = lateRoster.length;
@@ -4886,7 +5001,7 @@ export default function App() {
   const stcCount = stcEmployees.length;
   const attendanceRate = totalEmployees ? (presentEmployees / totalEmployees) * 100 : 0;
   const productionMetrics = useMemo(() => {
-    const total = productionBaseRows.length;
+    const total = productionDayRows.length;
     const present = productionPresentRows.length;
     const absent = productionDayRows.filter(
       (row) => String(row.statusCode || '').toUpperCase() === 'ABS',
@@ -4910,7 +5025,7 @@ export default function App() {
     () =>
       activeKpiModal
         ? buildKpiDetailConfig(activeKpiModal, {
-            workforceEmployees: monthlyActiveEmployees,
+            workforceEmployees: selectedDayEffectifRows,
             presentRoster,
             absentRoster: absenceRoster,
             lateRoster,
@@ -4931,7 +5046,7 @@ export default function App() {
         : null,
     [
       activeKpiModal,
-      monthlyActiveEmployees,
+      selectedDayEffectifRows,
       presentRoster,
       absenceRoster,
       lateRoster,
@@ -4976,7 +5091,7 @@ export default function App() {
       activeProductionModal
         ? buildProductionDetailConfig(activeProductionModal, {
             productionMetrics,
-            productionBaseRows,
+            productionBaseRows: productionDayRows,
             productionDayRows,
             productionPresentRows,
             productionNewRows,

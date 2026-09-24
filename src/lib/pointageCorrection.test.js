@@ -28,16 +28,22 @@ test('RH correction replaces odd punches, recalculates totals and retains origin
   assert.equal(restored.generatedAt, original.generatedAt);
   assert.equal(JSON.stringify(original), copy);
 });
-test('ABS correction creates a presence, recalculates late arrivals and keeps history and other employees', async () => {
+test('explicit ABS correction creates a presence and preserves other file statuses without old history', async () => {
   const old = await snapshot([[4, 'Employé A', '09/14/2026 07:00'], [4, 'Employé A', '09/14/2026 16:00']]);
   const original = await snapshot([[4, 'Employé A', '09/15/2026 07:00'], [4, 'Employé A', '09/15/2026 16:00']], old);
+  const sourceWeeklySheets = [{ dayColumns: [{ isoDate: '2026-09-15' }], rows: [
+    { employeeKey: '6', id: '6', fullName: 'Employee B', days: [{ isoDate: '2026-09-15', status: 'ABS', display: 'ABS' }] },
+    { employeeKey: '7', id: '7', fullName: 'Employee C', days: [{ isoDate: '2026-09-15', status: 'CM', display: 'CM' }] },
+  ] }];
+  original.sourceWeeklySheets = original.currentFilePointage.sourceWeeklySheets = sourceWeeklySheets;
   const next = await correctDailyPointage(original, employees, { employeeKey: '6', isoDate: '2026-09-15', entry: '08:00', exit: '16:30' });
   assert.equal(table(next).rows[1].days[0].display, '08:30');
   assert.equal(table(next).rows[0].days[0].display, '09:00');
   const [attendance] = buildAttendanceByDay(table(next));
   assert.equal(attendance.absences.length, 0);
   assert.equal(attendance.late[0].delay, 30);
-  assert.equal(next.rawRows.filter((row) => row.isoDate === '2026-09-14').length, 2);
+  assert.equal(next.rawRows.filter((row) => row.isoDate === '2026-09-14').length, 0);
+  assert.equal(table(next).rows.find((row) => row.id === '7').days[0].status, 'CM');
   assert.equal(next.currentFilePointage.rawRows.some((row) => row.isoDate === '2026-09-14'), false);
   assert.equal(next.manualCorrections[0].before.status, 'ABS');
 });

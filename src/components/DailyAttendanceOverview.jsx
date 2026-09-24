@@ -43,7 +43,7 @@ function RingMetric({ title, value, caption, tone = 'blue', icon = 'people', onC
   );
 }
 
-function RatePanel({ tone, title, value, label, delta, icon }) {
+function RatePanel({ tone, title, value, label, delta, previous, icon }) {
   return (
     <article className={`mod-rate-card mod-rate-card--${tone}`}>
       <div className="mod-rate-card__icon"><DashboardIcon type={icon} /></div>
@@ -53,7 +53,7 @@ function RatePanel({ tone, title, value, label, delta, icon }) {
         <div>
           <span>{label}</span>
           <strong>{delta}</strong>
-          <small>vs mois precedent</small>
+          <small>{previous}</small>
         </div>
       </div>
     </article>
@@ -86,7 +86,7 @@ function getWeekNumber(date) {
   return Math.floor((date.getUTCDate() + first.getUTCDay() - 1) / 7) + 1;
 }
 
-function buildChartDataset(history, analysisDate, period, locale) {
+function buildChartDataset(history, analysisDate, period, locale, translate) {
   const sorted = [...(history || [])]
     .filter((day) => day.isoDate && day.isoDate <= analysisDate)
     .sort((a, b) => a.isoDate.localeCompare(b.isoDate));
@@ -107,7 +107,7 @@ function buildChartDataset(history, analysisDate, period, locale) {
       const rate = getModRateFromDay(sorted.find((item) => item.isoDate === isoDate));
       return rate?.value ?? null;
     });
-    return { labels: labels.map((item) => item.label), values, captions: [{ x: 292, label: 'Semaine actuelle' }] };
+    return { labels: labels.map((item) => item.label), values, captions: [{ x: 292, label: translate('daily.overview.currentWeek') }] };
   }
 
   if (period === 'month') {
@@ -127,7 +127,7 @@ function buildChartDataset(history, analysisDate, period, locale) {
     return {
       labels: weeks.map((week) => `S${week}`),
       values: weeks.map((week) => average(buckets.get(week) || [])),
-      captions: [{ x: 292, label: `Mois actuel (${monthFormatter.format(current)})` }],
+      captions: [{ x: 292, label: translate('daily.overview.currentMonth', 'Mois actuel ({month})', { month: monthFormatter.format(current) }) }],
     };
   }
 
@@ -178,22 +178,22 @@ function buildChartDataset(history, analysisDate, period, locale) {
     labels,
     values,
     captions: [
-      { x: 98, label: '3 derniers mois' },
-      { x: 292, label: `Mois actuel (${monthFormatter.format(current)})` },
-      { x: 470, label: 'Semaine actuelle' },
+      { x: 98, label: translate('daily.overview.lastThreeMonths') },
+      { x: 292, label: translate('daily.overview.currentMonth', 'Mois actuel ({month})', { month: monthFormatter.format(current) }) },
+      { x: 470, label: translate('daily.overview.currentWeek') },
     ],
   };
 }
 
-function PresenceEvolutionChart({ history = [], analysisDate, currentRate, locale }) {
+function PresenceEvolutionChart({ history = [], analysisDate, currentRate, locale, translate }) {
   const [period, setPeriod] = useState('quarter');
   const latestRate = Math.round(currentRate || 87);
   const titles = {
-    quarter: 'Vue selon les donnees importees : mois, semaines et semaine courante',
-    month: 'Detail du mois actuel selon les donnees importees',
-    week: 'Detail de la semaine actuelle selon les donnees importees',
+    quarter: translate('daily.overview.importedQuarter'),
+    month: translate('daily.overview.importedMonth'),
+    week: translate('daily.overview.importedWeek'),
   };
-  const dataset = buildChartDataset(history, analysisDate, period, locale);
+  const dataset = buildChartDataset(history, analysisDate, period, locale, translate);
   const labels = dataset.labels.length ? dataset.labels : ['MOD'];
   const values = (dataset.values.length ? dataset.values : [latestRate]).map((value) => value ?? null);
   const captions = dataset.captions;
@@ -208,9 +208,9 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
     segments.at(-1).push(point);
   });
   const tabs = [
-    { key: 'quarter', label: '3 mois' },
-    { key: 'month', label: 'Mois actuel' },
-    { key: 'week', label: 'Semaine actuelle' },
+    { key: 'quarter', label: translate('daily.overview.quarter') },
+    { key: 'month', label: translate('daily.overview.month') },
+    { key: 'week', label: translate('daily.overview.week') },
   ];
 
   return (
@@ -219,11 +219,11 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
         <div>
           <span className="mod-section-icon"><DashboardIcon type="chart" /></span>
           <div>
-            <h2>Evolution du taux de presence</h2>
+            <h2>{translate('daily.overview.evolution')}</h2>
             <p>{titles[period]}</p>
           </div>
         </div>
-        <div className="mod-chart-tabs" aria-label="Periode du graphique">
+        <div className="mod-chart-tabs" aria-label={translate('daily.overview.periodAria')}>
           {tabs.map((tab) => (
             <button
               key={tab.key}
@@ -343,29 +343,29 @@ export default function DailyAttendanceOverview({ day, history, analysisDate,
           <article className="mod-safety-card">
             <div className="mod-safety-card__icon"><DashboardIcon type="lock" /></div>
             <div>
-              <h2>Jours sans accident de travail</h2>
+              <h2>{t('daily.overview.accidentTitle')}</h2>
             </div>
             <strong>{number(daysSinceAccident(analysisDate))}</strong>
-            <div className="mod-safety-card__gain"><b>+1</b><span>chaque jour<br />sans accident</span></div>
+            <div className="mod-safety-card__gain"><b>+1</b><span>{t('daily.overview.eachDay')}<br />{t('daily.overview.accidentFree')}</span></div>
           </article>
 
-          <RingMetric title="Nombre du personnel" value={number(modPeople.length || production.length)} caption="Effectif total MOD" tone="blue" onClick={() => open('Personnel MOD', modPeople.length ? modPeople : production)} />
-          <RingMetric title="Presents MOD" value={number(modPresent.length)} caption="Actuellement sur site" tone="green" onClick={() => open('Presents MOD', modPresent)} />
+          <RingMetric title={t('daily.overview.staffCount')} value={number(modPeople.length || production.length)} caption={t('daily.overview.totalMod')} tone="blue" onClick={() => open(t('daily.overview.staffCount'), modPeople.length ? modPeople : production)} />
+          <RingMetric title={t('daily.overview.presentMod')} value={number(modPresent.length)} caption={t('daily.overview.onSite')} tone="green" onClick={() => open(t('daily.overview.presentMod'), modPresent)} />
 
           <div className="mod-dashboard__rates">
-            <RatePanel tone="red" title="% ABS MOD" value={formatRate(modAbsentRate, locale)} label="Taux d'absenteisme" delta="+ 2,1 pts" icon="clock" />
-            <RatePanel tone="green" title="Taux MOD" value={formatRate(modRate || targetCoverage, locale)} label="Taux de presence" delta="+ 1,8 pts" icon="chart" />
+            <RatePanel tone="red" title={t('daily.overview.absentTitle')} value={formatRate(modAbsentRate, locale)} label={t('daily.overview.absentRate')} delta={t('daily.overview.absentDelta')} previous={t('daily.overview.previousMonth')} icon="clock" />
+            <RatePanel tone="green" title={t('daily.overview.modRateTitle')} value={formatRate(modRate || targetCoverage, locale)} label={t('daily.overview.presenceRate')} delta={t('daily.overview.presenceDelta')} previous={t('daily.overview.previousMonth')} icon="chart" />
           </div>
         </div>
 
-        <PresenceEvolutionChart history={history} analysisDate={analysisDate} currentRate={modRate || targetCoverage} locale={locale} />
+        <PresenceEvolutionChart history={history} analysisDate={analysisDate} currentRate={modRate || targetCoverage} locale={locale} translate={t} />
       </div>
 
       <footer className="mod-dashboard__footer">
-        <strong><DashboardIcon type="clock" /> Bon a savoir</strong>
-        <span>Le taux de presence est stable cette semaine. Continuons nos efforts pour maintenir cette dynamique !</span>
-        <small>Derniere mise a jour : {analysisDate ? formatPointageDate(analysisDate, locale) : '-'} a 10:24</small>
-        <b>Donnees a jour</b>
+        <strong><DashboardIcon type="clock" /> {t('daily.overview.advice')}</strong>
+        <span>{t('daily.overview.stable')}</span>
+        <small>{t('daily.overview.lastUpdated', 'Dernière mise à jour : {date} à 10:24', { date: analysisDate ? formatPointageDate(analysisDate, locale) : '-' })}</small>
+        <b>{t('daily.overview.dataCurrent')}</b>
       </footer>
 
       <section className="daily-dashboard__legacy" aria-label={t('daily.summary', 'Synthese de la journee')}>

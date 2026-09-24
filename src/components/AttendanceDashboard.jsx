@@ -39,7 +39,7 @@ export function KpiCard({ tone, label, value, note, tag = '', isActive = false, 
   );
 }
 
-export function ProductionModTargetGauge({ presentCount, target, onTargetChange, locale, targetHint = 'Double-cliquez pour changer le target MOD production', targetLabel = 'Target MOD production' }) {
+export function ProductionModTargetGauge({ presentCount, target, onTargetChange, locale, targetHint = 'Double-cliquez pour changer le target MOD production', targetLabel = 'Target MOD production', targetSaveLabel = 'Save target', targetCancelLabel = 'Cancel', objectiveLabel = 'Target', presentLabel = 'MOD present', coverageLabel = 'Coverage' }) {
   const [isEditing, setIsEditing] = useState(false);
   const [draftTarget, setDraftTarget] = useState(String(target || DEFAULT_PRODUCTION_MOD_TARGET));
   const safeTarget = normalizePositiveTarget(target);
@@ -92,13 +92,13 @@ export function ProductionModTargetGauge({ presentCount, target, onTargetChange,
               className="w-20 text-center" value={draftTarget} onChange={(event) => setDraftTarget(event.target.value)}
               onKeyDown={(event) => { if (event.key === 'Escape') cancelEdit(); }} />
             <div className="flex gap-2">
-              <button type="submit" aria-label="Enregistrer l’objectif" className="rounded-md bg-brand px-2 py-1 text-xs text-white">✓</button>
-              <button type="button" aria-label="Annuler" onClick={cancelEdit} className="rounded-md bg-slate-100 px-2 py-1 text-xs">×</button>
+              <button type="submit" aria-label={targetSaveLabel} className="rounded-md bg-brand px-2 py-1 text-xs text-white">✓</button>
+              <button type="button" aria-label={targetCancelLabel} onClick={cancelEdit} className="rounded-md bg-slate-100 px-2 py-1 text-xs">×</button>
             </div>
-          </form> : ring(safeTarget.toLocaleString(locale), 'Objectif', '#346fda')}
+          </form> : ring(safeTarget.toLocaleString(locale), objectiveLabel, '#346fda')}
         </div>
-        {ring(Number(presentCount || 0).toLocaleString(locale), 'MOD présents', '#0d9f76')}
-        {ring(formatPercent(percent, locale), 'Couverture', tones[tone], clampedPercent)}
+        {ring(Number(presentCount || 0).toLocaleString(locale), presentLabel, '#0d9f76')}
+        {ring(formatPercent(percent, locale), coverageLabel, tones[tone], clampedPercent)}
       </div>
     </div>
   );

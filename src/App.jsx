@@ -40,55 +40,77 @@ const LANGUAGE_LOCALES = {
 };
 const BUS_DASHBOARD_TRANSLATIONS = {
   fr: {
+    eyebrow: 'Suivi bus', pageTitle: 'BUS', pageSubtitle: (date) => `${date} | Suivi bus selon la colonne Bus de la base RH.`,
+    search: 'Rechercher nom, bus, service...', noResults: 'Aucun resultat pour cette recherche.',
+    columns: { id: 'ID', name: 'Nom', department: 'Departement', status: 'Statut', detail: 'Detail', departureReason: 'Cause de depart', bus: 'Bus' },
     cards: { bus: 'Nombre de bus', busNote: (date) => `Bus actifs le ${date}`, people: 'Employes affectes', peopleNote: 'Actifs avec affectation bus', present: 'Employes presents', today: "Aujourd'hui", rate: 'Taux de pointage', global: 'Presence globale' },
     donut: { title: 'Repartition des presences par bus', subtitle: 'Personnes presentes aujourd\'hui, reparties par bus' },
-    detail: { title: 'Detail des bus', subtitle: 'Taux de presence par bus. Double-cliquez sur un bus pour voir la liste.', chart: 'Actifs et personnes par bus vs capacite', active: 'Nombre actif', present: "Personnes presentes aujourd'hui", capacity: 'Capacite du bus', number: 'Nombre', empty: 'Aucune donnee bus disponible pour cette date.' },
+    detail: { title: 'Detail des bus', subtitle: 'Taux de presence par bus. Double-cliquez sur un bus pour voir la liste.', chart: 'Actifs et personnes par bus vs capacite', active: 'Nombre actif', present: "Personnes presentes aujourd'hui", capacity: 'Capacite du bus', number: 'Nombre', empty: 'Aucune donnee bus disponible pour cette date.', peopleCount: (count) => `${count} personne(s)` },
     table: { title: 'Detail par bus', subtitle: 'Capacite, occupation et places disponibles pour chaque transport', active: "Nombre d'actifs", present: "Personnes presentes aujourd'hui", capacity: 'Capacite', activeRate: 'Taux occupation actifs', todayRate: "Taux capacite aujourd'hui", missing: "Places manquantes aujourd'hui", available: "Places libres aujourd'hui", status: 'Statut', add: 'Ajouter' },
     status: { unknown: 'Non renseignee', overloaded: 'Surcharge', normal: 'Normal', available: 'Disponible', active: 'Actif', present: 'Present' },
-    actions: { openPeople: 'Ouvrir la liste des personnes', editCapacity: 'Modifier la capacite', enterCapacity: "Cliquez sur l'icone pour saisir la capacite", doubleClick: 'Double-cliquez pour ouvrir la liste des personnes', chooseTransport: 'Choisir un transport' },
-    capacity: { title: 'Capacite bus', places: 'Nombre de places', cancel: 'Annuler', save: 'Enregistrer', saving: 'Enregistrement...', remove: 'Supprimer la capacite', saved: (count, bus) => `Capacite ${count} enregistree pour ${bus}.`, removed: (bus) => `Capacite supprimee pour ${bus}.` },
+    actions: { close: 'Fermer', openPeople: 'Ouvrir la liste des personnes', editCapacity: 'Modifier la capacite', enterCapacity: "Cliquez sur l'icone pour saisir la capacite", doubleClick: 'Double-cliquez pour ouvrir la liste des personnes', chooseTransport: 'Choisir un transport' },
+    capacity: { title: 'Capacite bus', places: 'Nombre de places', cancel: 'Annuler', save: 'Enregistrer', saving: 'Enregistrement...', remove: 'Supprimer la capacite', saved: (count, bus, mode) => `Capacite ${count} enregistree pour ${bus}${mode === 'supabase' ? ' dans Supabase.' : ' localement (Supabase indisponible).'}`, removed: (bus, mode) => `Capacite supprimee pour ${bus}${mode === 'supabase' ? ' dans Supabase.' : ' localement (Supabase indisponible).'}` },
     footer: 'A jour',
   },
   en: {
+    eyebrow: 'Bus tracking', pageTitle: 'BUS', pageSubtitle: (date) => `${date} | Bus tracking based on the Bus column in the HR base.`,
+    search: 'Search name, bus, service...', noResults: 'No results for this search.',
+    columns: { id: 'ID', name: 'Name', department: 'Department', status: 'Status', detail: 'Detail', departureReason: 'Departure reason', bus: 'Bus' },
     cards: { bus: 'Number of buses', busNote: (date) => `Buses active on ${date}`, people: 'Assigned employees', peopleNote: 'Active employees assigned to a bus', present: 'Employees present', today: 'Today', rate: 'Attendance rate', global: 'Overall attendance' },
     donut: { title: 'Attendance by bus', subtitle: "People present today, grouped by bus" },
-    detail: { title: 'Bus details', subtitle: 'Attendance rate by bus. Double-click a bus to view its list.', chart: 'Active employees and people by bus vs capacity', active: 'Active employees', present: 'People present today', capacity: 'Bus capacity', number: 'Number', empty: 'No bus data available for this date.' },
+    detail: { title: 'Bus details', subtitle: 'Attendance rate by bus. Double-click a bus to view its list.', chart: 'Active employees and people by bus vs capacity', active: 'Active employees', present: 'People present today', capacity: 'Bus capacity', number: 'Number', empty: 'No bus data available for this date.', peopleCount: (count) => `${count} people` },
     table: { title: 'Details by bus', subtitle: 'Capacity, occupancy and available seats for each transport', active: 'Active employees', present: 'People present today', capacity: 'Capacity', activeRate: 'Active occupancy rate', todayRate: "Today's capacity rate", missing: 'Over capacity today', available: 'Available seats today', status: 'Status', add: 'Add' },
     status: { unknown: 'Not set', overloaded: 'Over capacity', normal: 'Normal', available: 'Available', active: 'Active', present: 'Present' },
-    actions: { openPeople: 'Open people list', editCapacity: 'Edit capacity', enterCapacity: 'Click the icon to enter bus capacity', doubleClick: 'Double-click to open the people list', chooseTransport: 'Choose a transport' },
-    capacity: { title: 'Bus capacity', places: 'Number of seats', cancel: 'Cancel', save: 'Save', saving: 'Saving...', remove: 'Remove capacity', saved: (count, bus) => `Capacity ${count} saved for ${bus}.`, removed: (bus) => `Capacity removed for ${bus}.` },
+    actions: { close: 'Close', openPeople: 'Open people list', editCapacity: 'Edit capacity', enterCapacity: 'Click the icon to enter bus capacity', doubleClick: 'Double-click to open the people list', chooseTransport: 'Choose a transport' },
+    capacity: { title: 'Bus capacity', places: 'Number of seats', cancel: 'Cancel', save: 'Save', saving: 'Saving...', remove: 'Remove capacity', saved: (count, bus, mode) => `Capacity ${count} saved for ${bus}${mode === 'supabase' ? ' in Supabase.' : ' locally (Supabase unavailable).'}`, removed: (bus, mode) => `Capacity removed for ${bus}${mode === 'supabase' ? ' in Supabase.' : ' locally (Supabase unavailable).'}` },
     footer: 'Up to date',
   },
   it: {
+    eyebrow: 'Monitoraggio autobus', pageTitle: 'AUTOBUS', pageSubtitle: (date) => `${date} | Monitoraggio basato sulla colonna Autobus della base HR.`,
+    search: 'Cerca nome, autobus, servizio...', noResults: 'Nessun risultato per questa ricerca.',
+    columns: { id: 'ID', name: 'Nome', department: 'Reparto', status: 'Stato', detail: 'Dettaglio', departureReason: 'Motivo di partenza', bus: 'Autobus' },
     cards: { bus: 'Numero di autobus', busNote: (date) => `Autobus attivi il ${date}`, people: 'Dipendenti assegnati', peopleNote: 'Attivi assegnati a un autobus', present: 'Dipendenti presenti', today: 'Oggi', rate: 'Tasso di presenza', global: 'Presenza complessiva' },
     donut: { title: 'Presenze per autobus', subtitle: 'Persone presenti oggi, suddivise per autobus' },
-    detail: { title: 'Dettaglio autobus', subtitle: "Presenze per autobus. Doppio clic su un autobus per vedere l'elenco.", chart: 'Dipendenti attivi e persone per autobus vs capienza', active: 'Dipendenti attivi', present: 'Persone presenti oggi', capacity: 'Capienza autobus', number: 'Numero', empty: 'Nessun dato autobus per questa data.' },
+    detail: { title: 'Dettaglio autobus', subtitle: "Presenze per autobus. Doppio clic su un autobus per vedere l'elenco.", chart: 'Dipendenti attivi e persone per autobus vs capienza', active: 'Dipendenti attivi', present: 'Persone presenti oggi', capacity: 'Capienza autobus', number: 'Numero', empty: 'Nessun dato autobus per questa data.', peopleCount: (count) => `${count} persone` },
     table: { title: 'Dettaglio per autobus', subtitle: 'Capienza, occupazione e posti disponibili per ogni trasporto', active: 'Dipendenti attivi', present: 'Persone presenti oggi', capacity: 'Capienza', activeRate: 'Tasso di occupazione attivi', todayRate: 'Capienza occupata oggi', missing: 'Posti oltre capienza oggi', available: 'Posti liberi oggi', status: 'Stato', add: 'Aggiungi' },
     status: { unknown: 'Non indicata', overloaded: 'Sovraccarico', normal: 'Normale', available: 'Disponibile', active: 'Attivo', present: 'Presente' },
-    actions: { openPeople: 'Apri elenco persone', editCapacity: 'Modifica capienza', enterCapacity: "Clicca l'icona per inserire la capienza", doubleClick: "Doppio clic per aprire l'elenco persone", chooseTransport: 'Scegli un trasporto' },
-    capacity: { title: 'Capienza autobus', places: 'Numero di posti', cancel: 'Annulla', save: 'Salva', saving: 'Salvataggio...', remove: 'Rimuovi capienza', saved: (count, bus) => `Capienza ${count} salvata per ${bus}.`, removed: (bus) => `Capienza rimossa per ${bus}.` },
+    actions: { close: 'Chiudi', openPeople: 'Apri elenco persone', editCapacity: 'Modifica capienza', enterCapacity: "Clicca l'icona per inserire la capienza", doubleClick: "Doppio clic per aprire l'elenco persone", chooseTransport: 'Scegli un trasporto' },
+    capacity: { title: 'Capienza autobus', places: 'Numero di posti', cancel: 'Annulla', save: 'Salva', saving: 'Salvataggio...', remove: 'Rimuovi capienza', saved: (count, bus, mode) => `Capienza ${count} salvata per ${bus}${mode === 'supabase' ? ' in Supabase.' : ' localmente (Supabase non disponibile).'}`, removed: (bus, mode) => `Capienza rimossa per ${bus}${mode === 'supabase' ? ' in Supabase.' : ' localmente (Supabase non disponibile).'}` },
     footer: 'Aggiornato',
   },
   ar: {
+    eyebrow: 'متابعة الحافلات', pageTitle: 'الحافلات', pageSubtitle: (date) => `${date} | متابعة الحافلات حسب عمود الحافلة في قاعدة الموارد البشرية.`,
+    search: 'ابحث عن اسم أو حافلة أو خدمة...', noResults: 'لا توجد نتائج لهذا البحث.',
+    columns: { id: 'المعرف', name: 'الاسم', department: 'القسم', status: 'الحالة', detail: 'التفاصيل', departureReason: 'سبب المغادرة', bus: 'الحافلة' },
     cards: { bus: 'عدد الحافلات', busNote: (date) => `الحافلات النشطة في ${date}`, people: 'الموظفون المعيّنون', peopleNote: 'موظفون نشطون مخصصون لحافلة', present: 'الموظفون الحاضرون', today: 'اليوم', rate: 'معدل الحضور', global: 'الحضور الإجمالي' },
     donut: { title: 'الحضور حسب الحافلة', subtitle: 'الأشخاص الحاضرون اليوم حسب الحافلة' },
-    detail: { title: 'تفاصيل الحافلات', subtitle: 'معدل الحضور حسب الحافلة. انقر مرتين لعرض القائمة.', chart: 'الموظفون النشطون والأشخاص حسب سعة الحافلة', active: 'الموظفون النشطون', present: 'الحاضرون اليوم', capacity: 'سعة الحافلة', number: 'العدد', empty: 'لا توجد بيانات للحافلات في هذا التاريخ.' },
+    detail: { title: 'تفاصيل الحافلات', subtitle: 'معدل الحضور حسب الحافلة. انقر مرتين لعرض القائمة.', chart: 'الموظفون النشطون والأشخاص حسب سعة الحافلة', active: 'الموظفون النشطون', present: 'الحاضرون اليوم', capacity: 'سعة الحافلة', number: 'العدد', empty: 'لا توجد بيانات للحافلات في هذا التاريخ.', peopleCount: (count) => `${count} شخص` },
     table: { title: 'التفاصيل حسب الحافلة', subtitle: 'السعة والإشغال والمقاعد المتاحة لكل وسيلة نقل', active: 'الموظفون النشطون', present: 'الحاضرون اليوم', capacity: 'السعة', activeRate: 'معدل إشغال النشطين', todayRate: 'معدل السعة اليوم', missing: 'المقاعد المطلوبة اليوم', available: 'المقاعد المتاحة اليوم', status: 'الحالة', add: 'إضافة' },
     status: { unknown: 'غير محددة', overloaded: 'تجاوز السعة', normal: 'عادي', available: 'متاح', active: 'نشط', present: 'حاضر' },
-    actions: { openPeople: 'عرض قائمة الأشخاص', editCapacity: 'تعديل السعة', enterCapacity: 'اضغط على الأيقونة لإدخال السعة', doubleClick: 'انقر مرتين لعرض قائمة الأشخاص', chooseTransport: 'اختر وسيلة النقل' },
-    capacity: { title: 'سعة الحافلة', places: 'عدد المقاعد', cancel: 'إلغاء', save: 'حفظ', saving: 'جارٍ الحفظ...', remove: 'حذف السعة', saved: (count, bus) => `تم حفظ السعة ${count} للحافلة ${bus}.`, removed: (bus) => `تم حذف سعة الحافلة ${bus}.` },
+    actions: { close: 'إغلاق', openPeople: 'عرض قائمة الأشخاص', editCapacity: 'تعديل السعة', enterCapacity: 'اضغط على الأيقونة لإدخال السعة', doubleClick: 'انقر مرتين لعرض قائمة الأشخاص', chooseTransport: 'اختر وسيلة النقل' },
+    capacity: { title: 'سعة الحافلة', places: 'عدد المقاعد', cancel: 'إلغاء', save: 'حفظ', saving: 'جارٍ الحفظ...', remove: 'حذف السعة', saved: (count, bus, mode) => `تم حفظ السعة ${count} للحافلة ${bus}${mode === 'supabase' ? ' في Supabase.' : ' محلياً (Supabase غير متاح).'}`, removed: (bus, mode) => `تم حذف سعة الحافلة ${bus}${mode === 'supabase' ? ' من Supabase.' : ' محلياً (Supabase غير متاح).'}` },
     footer: 'محدّث',
   },
   zh: {
+    eyebrow: '巴士跟踪', pageTitle: '巴士', pageSubtitle: (date) => `${date} | 根据人事数据库中的巴士栏跟踪。`,
+    search: '搜索姓名、巴士或服务...', noResults: '没有找到符合条件的结果。',
+    columns: { id: '编号', name: '姓名', department: '部门', status: '状态', detail: '详情', departureReason: '离职原因', bus: '巴士' },
     cards: { bus: '巴士数量', busNote: (date) => `${date}运营的巴士`, people: '已分配员工', peopleNote: '已分配巴士的在职员工', present: '出勤员工', today: '今天', rate: '出勤率', global: '总体出勤' },
     donut: { title: '各巴士出勤情况', subtitle: '按巴士显示今日出勤人数' },
-    detail: { title: '巴士详情', subtitle: '各巴士出勤率。双击巴士可查看名单。', chart: '各巴士在职员工和乘车人数与容量', active: '在职员工', present: '今日出勤人数', capacity: '巴士容量', number: '人数', empty: '此日期没有巴士数据。' },
+    detail: { title: '巴士详情', subtitle: '各巴士出勤率。双击巴士可查看名单。', chart: '各巴士在职员工和乘车人数与容量', active: '在职员工', present: '今日出勤人数', capacity: '巴士容量', number: '人数', empty: '此日期没有巴士数据。', peopleCount: (count) => `${count} 人` },
     table: { title: '各巴士详情', subtitle: '各交通工具的容量、占用和空余座位', active: '在职员工', present: '今日出勤人数', capacity: '容量', activeRate: '在职员工占用率', todayRate: '今日容量使用率', missing: '今日超出座位数', available: '今日空余座位', status: '状态', add: '添加' },
     status: { unknown: '未设置', overloaded: '超载', normal: '正常', available: '有空位', active: '在职', present: '出勤' },
-    actions: { openPeople: '打开人员名单', editCapacity: '修改容量', enterCapacity: '点击图标输入巴士容量', doubleClick: '双击打开人员名单', chooseTransport: '选择交通工具' },
-    capacity: { title: '巴士容量', places: '座位数', cancel: '取消', save: '保存', saving: '正在保存...', remove: '删除容量', saved: (count, bus) => `已为${bus}保存容量${count}。`, removed: (bus) => `已删除${bus}的容量。` },
+    actions: { close: '关闭', openPeople: '打开人员名单', editCapacity: '修改容量', enterCapacity: '点击图标输入巴士容量', doubleClick: '双击打开人员名单', chooseTransport: '选择交通工具' },
+    capacity: { title: '巴士容量', places: '座位数', cancel: '取消', save: '保存', saving: '正在保存...', remove: '删除容量', saved: (count, bus, mode) => `已为${bus}保存容量${count}${mode === 'supabase' ? '（Supabase）' : '（本地，Supabase不可用）'}。`, removed: (bus, mode) => `已删除${bus}的容量${mode === 'supabase' ? '（Supabase）' : '（本地，Supabase不可用）'}。` },
     footer: '已更新',
   },
+};
+const STC_DASHBOARD_TRANSLATIONS = {
+  fr: { cards: { month: 'STC du mois', reasons: 'Raisons renseignees', missing: 'sans raison', main: 'Raison principale', people: 'personne(s)' }, chart: { title: 'Courbe des raisons de depart', subtitle: 'Repartition des STC selon la cause de depart', empty: 'Aucun STC pour ce mois.' }, reasons: { title: 'Raisons de depart', rank: 'Classement par volume', search: 'Rechercher STC, raison, service...', empty: 'Aucune raison de depart.', unknown: 'Non renseigne', noData: 'Aucune donnee', count: (count) => `${count} fiche(s) visible(s)` }, table: { title: 'Liste STC', code: 'Code', name: 'Nom', department: 'Departement', service: 'Service', reason: 'Raison de depart', exitMonth: 'Mois sortie', action: 'Action', edit: 'Modifier', empty: 'Aucun STC trouve.' } },
+  en: { cards: { month: 'STC this month', reasons: 'Reasons provided', missing: 'without a reason', main: 'Main reason', people: 'people' }, chart: { title: 'Departure reasons', subtitle: 'STC records by departure reason', empty: 'No STC records this month.' }, reasons: { title: 'Departure reasons', rank: 'Ranked by count', search: 'Search STC, reason, service...', empty: 'No departure reasons.', unknown: 'Not provided', noData: 'No data', count: (count) => `${count} visible record(s)` }, table: { title: 'STC list', code: 'Code', name: 'Name', department: 'Department', service: 'Service', reason: 'Departure reason', exitMonth: 'Exit month', action: 'Action', edit: 'Edit', empty: 'No STC records found.' } },
+  it: { cards: { month: 'STC del mese', reasons: 'Motivi indicati', missing: 'senza motivo', main: 'Motivo principale', people: 'persone' }, chart: { title: 'Motivi di uscita', subtitle: 'Distribuzione STC per motivo di uscita', empty: 'Nessun STC questo mese.' }, reasons: { title: 'Motivi di uscita', rank: 'Ordine per quantità', search: 'Cerca STC, motivo, servizio...', empty: 'Nessun motivo di uscita.', unknown: 'Non indicato', noData: 'Nessun dato', count: (count) => `${count} schede visibili` }, table: { title: 'Elenco STC', code: 'Codice', name: 'Nome', department: 'Reparto', service: 'Servizio', reason: 'Motivo di uscita', exitMonth: 'Mese di uscita', action: 'Azione', edit: 'Modifica', empty: 'Nessun STC trovato.' } },
+  ar: { cards: { month: 'STC هذا الشهر', reasons: 'الأسباب المحددة', missing: 'دون سبب', main: 'السبب الرئيسي', people: 'أشخاص' }, chart: { title: 'أسباب المغادرة', subtitle: 'توزيع حالات STC حسب سبب المغادرة', empty: 'لا توجد حالات STC هذا الشهر.' }, reasons: { title: 'أسباب المغادرة', rank: 'ترتيب حسب العدد', search: 'ابحث عن STC أو سبب أو خدمة...', empty: 'لا توجد أسباب مغادرة.', unknown: 'غير محدد', noData: 'لا توجد بيانات', count: (count) => `${count} سجل ظاهر` }, table: { title: 'قائمة STC', code: 'الرمز', name: 'الاسم', department: 'القسم', service: 'الخدمة', reason: 'سبب المغادرة', exitMonth: 'شهر المغادرة', action: 'الإجراء', edit: 'تعديل', empty: 'لم يتم العثور على STC.' } },
+  zh: { cards: { month: '本月STC', reasons: '已填写原因', missing: '未填写原因', main: '主要原因', people: '人' }, chart: { title: '离职原因趋势', subtitle: '按离职原因统计STC', empty: '本月没有STC记录。' }, reasons: { title: '离职原因', rank: '按数量排序', search: '搜索STC、原因或服务...', empty: '没有离职原因。', unknown: '未填写', noData: '无数据', count: (count) => `${count} 条记录` }, table: { title: 'STC名单', code: '编号', name: '姓名', department: '部门', service: '服务', reason: '离职原因', exitMonth: '离职月份', action: '操作', edit: '编辑', empty: '没有找到STC记录。' } },
 };
 const UI_TRANSLATIONS = {
   fr: {
@@ -98,6 +120,7 @@ const UI_TRANSLATIONS = {
       noDate: 'Aucune date',
       menu: 'Menu',
       userRole: 'RH Manager',
+      greeting: 'Bonjour ZK Dashboard',
       userCompany: 'MYC Beauty',
     },
     sidebar: {
@@ -194,6 +217,7 @@ const UI_TRANSLATIONS = {
       noDate: 'لا يوجد تاريخ',
       menu: 'القائمة',
       userRole: 'مدير الموارد البشرية',
+      greeting: 'مرحبًا بلوحة ZK',
       userCompany: 'MYC Beauty',
     },
     sidebar: {
@@ -288,6 +312,7 @@ const UI_TRANSLATIONS = {
       noDate: 'No date',
       menu: 'Menu',
       userRole: 'HR Manager',
+      greeting: 'Hello ZK Dashboard',
       userCompany: 'MYC Beauty',
     },
     sidebar: {
@@ -382,6 +407,7 @@ const UI_TRANSLATIONS = {
       noDate: 'Nessuna data',
       menu: 'Menu',
       userRole: 'Responsabile HR',
+      greeting: 'Benvenuto in ZK Dashboard',
       userCompany: 'MYC Beauty',
     },
     sidebar: {
@@ -476,6 +502,7 @@ const UI_TRANSLATIONS = {
       noDate: '无日期',
       menu: '菜单',
       userRole: '人力资源经理',
+      greeting: '欢迎使用 ZK Dashboard',
       userCompany: 'MYC Beauty',
     },
     sidebar: {
@@ -3176,6 +3203,7 @@ function BusBaseSurface({
   labels,
   locale,
 }) {
+  const t = labels.dashboard;
   const [selectedBus, setSelectedBus] = useState(null);
   const [selectedBusFilter, setSelectedBusFilter] = useState('all');
   const [capacityEditorBus, setCapacityEditorBus] = useState(null);
@@ -3222,7 +3250,7 @@ function BusBaseSurface({
           && String(person.statusCode || '').trim().toUpperCase() !== 'STC';
       })
     : [];
-  const selectedDetailLabel = selectedBusFilter === 'today' ? 'Personnes présentes aujourd’hui' : 'Nombre actif';
+  const selectedDetailLabel = selectedBusFilter === 'today' ? t.detail.present : t.detail.active;
   const maxTotal = Math.max(1, ...busRows.map((row) => row.total));
   const palette = ['blue', 'green', 'violet', 'amber', 'red', 'purple'];
   const selectedDateLabel = formatDateLabel(selectedDate, locale);
@@ -3286,10 +3314,10 @@ function BusBaseSurface({
 
   function getCapacityStatus(row) {
     const rateValue = getCapacityRate(row);
-    if (rateValue === null) return { label: 'Non renseignee', tone: 'neutral' };
-    if (rateValue > 95) return { label: 'Surcharge', tone: 'red' };
-    if (rateValue >= 70) return { label: 'Normal', tone: 'green' };
-    return { label: 'Disponible', tone: 'green' };
+    if (rateValue === null) return { label: t.status.unknown, tone: 'neutral' };
+    if (rateValue > 95) return { label: t.status.overloaded, tone: 'red' };
+    if (rateValue >= 70) return { label: t.status.normal, tone: 'green' };
+    return { label: t.status.available, tone: 'green' };
   }
 
   function getDisplayedRouteRate(row) {
@@ -3330,7 +3358,7 @@ function BusBaseSurface({
     const next = Math.round(Number(capacityDraft));
     if (!capacityDraft.trim()) {
       const result = await persistBusCapacity(capacityEditorBus, 0);
-      setCapacityMessage(`Capacite supprimee pour ${capacityEditorBus}. ${result.message}`);
+      setCapacityMessage(t.capacity.removed(capacityEditorBus, result.mode));
       closeCapacityEditor();
       return;
     }
@@ -3338,7 +3366,7 @@ function BusBaseSurface({
       return;
     }
     const result = await persistBusCapacity(capacityEditorBus, next);
-    setCapacityMessage(`Capacite ${next} sauvegardee pour ${capacityEditorBus}. ${result.message}`);
+    setCapacityMessage(t.capacity.saved(next, capacityEditorBus, result.mode));
     closeCapacityEditor();
   }
 
@@ -3359,20 +3387,18 @@ function BusBaseSurface({
 
         <div className="bus-dashboard__cards">
           {[
-            { label: 'Nombre de bus', value: busRows.length, note: 'Bus actifs aujourd’hui', icon: 'building', tone: 'blue' },
-            { label: 'Employes affectes', value: totals.people, note: 'Actifs avec affectation bus', icon: 'people', tone: 'green' },
-            { label: 'Employes presents', value: totals.present, note: 'Aujourd’hui', icon: 'people', tone: 'violet' },
-            { label: 'Taux de pointage', value: `${rate}%`, note: 'Presence globale', icon: 'chart', tone: 'mint', ring: rate },
+            { key: 'bus', label: t.cards.bus, value: busRows.length, note: t.cards.busNote(selectedDateLabel), icon: 'building', tone: 'blue' },
+            { key: 'people', label: t.cards.people, value: totals.people, note: t.cards.peopleNote, icon: 'people', tone: 'green' },
+            { key: 'present', label: t.cards.present, value: totals.present, note: t.cards.today, icon: 'people', tone: 'violet' },
+            { key: 'rate', label: t.cards.rate, value: `${rate}%`, note: t.cards.global, icon: 'chart', tone: 'mint', ring: rate },
           ].map((card) => (
-            <article className={`bus-stat-card bus-stat-card--${card.tone}`} key={card.label}>
+            <article className={`bus-stat-card bus-stat-card--${card.tone}`} key={card.key}>
               <span className="bus-stat-card__icon"><DashboardIcon type={card.icon} /></span>
               <div>
                 <p>{card.label}</p>
                 <strong>{card.value}</strong>
                 <small>
-                  {card.label === 'Nombre de bus'
-                    ? `Bus actifs le ${selectedDateLabel}`
-                    : card.label === 'Employes presents'
+                  {card.key === 'present'
                       ? selectedDateLabel
                       : card.note}
                 </small>
@@ -3386,8 +3412,8 @@ function BusBaseSurface({
           <article className="bus-panel bus-panel--split">
             <header>
               <div>
-                <h2>Repartition des presences par bus</h2>
-                <p>Vue d’ensemble des employes presents et absents</p>
+                <h2>{t.donut.title}</h2>
+                <p>{t.donut.subtitle}</p>
               </div>
             </header>
             <div className="bus-donut-layout">
@@ -3402,15 +3428,15 @@ function BusBaseSurface({
             </div>
             <footer>
               <span><DashboardIcon type="calendar" /> {selectedDateLabel}</span>
-              <b>A jour</b>
+              <b>{t.footer}</b>
             </footer>
           </article>
 
           <article className="bus-panel bus-panel--details">
             <header>
               <div>
-                <h2>Detail des bus</h2>
-                <p>Taux de presence par bus. Double-clique sur un bus pour voir la liste.</p>
+                <h2>{t.detail.title}</h2>
+                <p>{t.detail.subtitle}</p>
               </div>
               <input
                 type="search"
@@ -3421,12 +3447,12 @@ function BusBaseSurface({
             </header>
             <div className="bus-lollipop-chart">
               <header>
-                <h3>Actifs et personnes par bus vs Capacite</h3>
-                <div><span className="is-active" />Nombre actif <span className="is-reserved" />Personnes présentes aujourd’hui <span className="is-capacity" />Capacite du bus</div>
+                <h3>{t.detail.chart}</h3>
+                <div><span className="is-active" />{t.detail.active} <span className="is-reserved" />{t.detail.present} <span className="is-capacity" />{t.detail.capacity}</div>
               </header>
               {comparisonBusRows.length ? (
                 <div className="bus-lollipop-chart__surface">
-                  <svg viewBox="0 0 620 264" role="img" aria-label="Nombre actif, personnes présentes aujourd’hui et capacite des quatre bus">
+                  <svg viewBox="0 0 620 264" role="img" aria-label={`${t.detail.active}, ${t.detail.present}, ${t.detail.capacity}`}>
                     {[0, 1, 2, 3, 4].map((step) => {
                       const y = 202 - step * 37;
                       const value = Math.round((comparisonMaximum * step) / 4);
@@ -3434,7 +3460,7 @@ function BusBaseSurface({
                     })}
                     <line className="bus-lollipop-chart__axis" x1="62" x2="582" y1="202" y2="202" />
                     <line className="bus-lollipop-chart__axis" x1="62" x2="62" y1="212" y2="44" />
-                    <text className="bus-lollipop-chart__axis-label" x="18" y="125" textAnchor="middle" transform="rotate(-90 18 125)">Nombre</text>
+                    <text className="bus-lollipop-chart__axis-label" x="18" y="125" textAnchor="middle" transform="rotate(-90 18 125)">{t.detail.number}</text>
                     {comparisonBusRows.map((row, index) => {
                       const x = 124 + index * 142;
                       const activeY = 202 - ((row.total / comparisonMaximum) * 148);
@@ -3449,7 +3475,7 @@ function BusBaseSurface({
                           className="bus-lollipop-chart__value-button"
                           role="button"
                           tabIndex="0"
-                          aria-label={`${row.bus}, nombre actif: ${row.total}`}
+                          aria-label={`${row.bus}, ${t.detail.active}: ${row.total}`}
                           onClick={() => openBus(row, 'all')}
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -3467,7 +3493,7 @@ function BusBaseSurface({
                           className="bus-lollipop-chart__value-button"
                           role="button"
                           tabIndex="0"
-                          aria-label={`${row.bus}, personnes présentes aujourd’hui: ${row.today}`}
+                          aria-label={`${row.bus}, ${t.detail.present}: ${row.today}`}
                           onClick={() => openBus(row, 'today')}
                           onKeyDown={(event) => {
                             if (event.key === 'Enter' || event.key === ' ') {
@@ -3722,8 +3748,8 @@ function BusBaseSurface({
         <article className="bus-panel">
           <header>
             <div>
-              <h2>Detail par bus</h2>
-              <p>Capacite, occupation et places disponibles pour chaque transport</p>
+              <h2>{t.table.title}</h2>
+              <p>{t.table.subtitle}</p>
             </div>
           </header>
           <div className="rh-table-wrap">
@@ -3731,14 +3757,14 @@ function BusBaseSurface({
             <thead>
               <tr>
                 <th>{labels.columns.bus}</th>
-                <th>Nombre d’actifs</th>
-                <th>Personnes présentes aujourd’hui</th>
-                <th>Capacite</th>
-                <th>Taux occupation actifs</th>
-                <th>Taux capacite aujourd'hui</th>
-                <th>Places manquantes aujourd'hui</th>
-                <th>Places libres aujourd'hui</th>
-                <th>Statut</th>
+                <th>{t.table.active}</th>
+                <th>{t.table.present}</th>
+                <th>{t.table.capacity}</th>
+                <th>{t.table.activeRate}</th>
+                <th>{t.table.todayRate}</th>
+                <th>{t.table.missing}</th>
+                <th>{t.table.available}</th>
+                <th>{t.table.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -3750,7 +3776,7 @@ function BusBaseSurface({
                     <td>{row.today}</td>
                     <td>
                       <button className="bus-capacity-button" type="button" onClick={(event) => handleEditCapacity(event, row)}>
-                        {getCapacity(row) || 'Ajouter'}
+                        {getCapacity(row) || t.table.add}
                       </button>
                     </td>
                     <td>{getCapacityRate(row) === null ? '-' : <span className={`bus-rate-pill bus-rate-pill--${getOccupationTone(row)}`}>{getCapacityRate(row)}%</span>}</td>
@@ -3781,7 +3807,7 @@ function BusBaseSurface({
               <div>
                 <p className="rh-eyebrow">Bus</p>
                 <h2 id="bus-detail-title">{selectedRow.bus}</h2>
-                <p>{selectedDetailLabel} : {selectedPeople.length} personne(s)</p>
+                <p>{selectedDetailLabel}: {t.detail.peopleCount(selectedPeople.length)}</p>
               </div>
               <button className="rh-modal__close" type="button" onClick={closeBusDetail}>{labels.close}</button>
             </div>
@@ -3794,7 +3820,7 @@ function BusBaseSurface({
                       <td>{person.id || '-'}</td>
                       <td>{person.fullName || '-'}</td>
                       <td>{[person.department, person.service].filter(Boolean).join(' / ') || '-'}</td>
-                      <td>{selectedBusFilter === 'today' ? 'Present' : 'Actif'}</td>
+                      <td>{selectedBusFilter === 'today' ? t.status.present : t.status.active}</td>
                       <td>{person.display || '-'}</td>
                       <td>{person.departureReason || '-'}</td>
                     </tr>
@@ -3813,12 +3839,12 @@ function BusBaseSurface({
             <div className="bus-capacity-modal__header">
               <span><DashboardIcon type="building" /></span>
               <div>
-                <p className="rh-eyebrow">Capacite bus</p>
+                <p className="rh-eyebrow">{t.capacity.title}</p>
                 <h2 id="bus-capacity-title">{capacityEditorBus}</h2>
               </div>
             </div>
             <label>
-              <span>Nombre de places</span>
+              <span>{t.capacity.places}</span>
               <input
                 autoFocus
                 type="number"
@@ -3831,13 +3857,13 @@ function BusBaseSurface({
               />
             </label>
             <div className="bus-capacity-modal__actions">
-              <button type="button" className="ghost-button" onClick={closeCapacityEditor}>Annuler</button>
+              <button type="button" className="ghost-button" onClick={closeCapacityEditor}>{t.capacity.cancel}</button>
               <button
                 type="submit"
                 className="primary-button"
                 disabled={Boolean(capacityDraft.trim()) && (!Number.isFinite(Number(capacityDraft)) || Number(capacityDraft) <= 0)}
               >
-                Enregistrer
+                {capacityDraft.trim() ? t.capacity.save : t.capacity.remove}
               </button>
             </div>
           </form>
@@ -3854,7 +3880,9 @@ function StcDepartureSurface({
   onEdit,
   locale,
   currentMonthLabel,
+  labels,
 }) {
+  const t = labels;
   const filteredEmployees = useMemo(
     () =>
       employees.filter((employee) =>
@@ -3877,15 +3905,15 @@ function StcDepartureSurface({
   const reasonRows = useMemo(() => {
     const counts = new Map();
     employees.forEach((employee) => {
-      const reason = String(employee.departureReason || '').trim() || 'Non renseigne';
+      const reason = String(employee.departureReason || '').trim() || t.reasons.unknown;
       counts.set(reason, (counts.get(reason) || 0) + 1);
     });
     return [...counts.entries()]
       .map(([reason, count]) => ({ reason, count, percent: employees.length ? Math.round((count / employees.length) * 100) : 0 }))
       .sort((left, right) => right.count - left.count || left.reason.localeCompare(right.reason));
-  }, [employees]);
+  }, [employees, t.reasons.unknown]);
   const maxCount = Math.max(1, ...reasonRows.map((row) => row.count));
-  const mainReason = reasonRows[0]?.reason || 'Aucune donnee';
+  const mainReason = reasonRows[0]?.reason || t.reasons.noData;
   const missingReasonCount = employees.filter((employee) => !String(employee.departureReason || '').trim()).length;
   const palette = ['blue', 'red', 'amber', 'violet', 'green', 'slate'];
   const chartPoints = reasonRows.map((row, index) => {
@@ -3903,15 +3931,15 @@ function StcDepartureSurface({
       <div className="stc-dashboard__cards">
         <article className="stc-stat-card stc-stat-card--blue">
           <span><DashboardIcon type="file" /></span>
-          <div><p>STC du mois</p><strong>{employees.length}</strong><small>{currentMonthLabel}</small></div>
+          <div><p>{t.cards.month}</p><strong>{employees.length}</strong><small>{currentMonthLabel}</small></div>
         </article>
         <article className="stc-stat-card stc-stat-card--red">
           <span><DashboardIcon type="clock" /></span>
-          <div><p>Raisons renseignees</p><strong>{employees.length - missingReasonCount}</strong><small>{missingReasonCount} sans raison</small></div>
+          <div><p>{t.cards.reasons}</p><strong>{employees.length - missingReasonCount}</strong><small>{missingReasonCount} {t.cards.missing}</small></div>
         </article>
         <article className="stc-stat-card stc-stat-card--green">
           <span><DashboardIcon type="chart" /></span>
-          <div><p>Raison principale</p><strong>{mainReason}</strong><small>{reasonRows[0]?.count || 0} personne(s)</small></div>
+          <div><p>{t.cards.main}</p><strong>{mainReason}</strong><small>{reasonRows[0]?.count || 0} {t.cards.people}</small></div>
         </article>
       </div>
 
@@ -3919,8 +3947,8 @@ function StcDepartureSurface({
         <article className="stc-panel stc-panel--chart">
           <header>
             <div>
-              <h2>Courbe des raisons de depart</h2>
-              <p>Repartition des STC selon la cause de depart</p>
+              <h2>{t.chart.title}</h2>
+              <p>{t.chart.subtitle}</p>
             </div>
           </header>
           {chartPoints.length ? (
@@ -3937,19 +3965,19 @@ function StcDepartureSurface({
                 </g>
               ))}
             </svg>
-          ) : <div className="rh-empty-inline">Aucun STC pour ce mois.</div>}
+          ) : <div className="rh-empty-inline">{t.chart.empty}</div>}
         </article>
 
         <article className="stc-panel">
           <header>
             <div>
-              <h2>Raisons de depart</h2>
-              <p>Classement par volume</p>
+              <h2>{t.reasons.title}</h2>
+              <p>{t.reasons.rank}</p>
             </div>
             <input
               type="search"
               value={searchValue}
-              placeholder="Rechercher STC, raison, service..."
+              placeholder={t.reasons.search}
               onChange={(event) => onSearchChange(event.target.value)}
             />
           </header>
@@ -3958,11 +3986,11 @@ function StcDepartureSurface({
               <div className={`stc-reason-card stc-reason-card--${palette[index % palette.length]}`} key={row.reason}>
                 <div>
                   <strong>{row.reason}</strong>
-                  <span>{row.count} personne(s) | {row.percent}%</span>
+                  <span>{row.count} {t.cards.people} | {row.percent}%</span>
                 </div>
                 <i><b style={{ width: `${Math.max(4, row.percent)}%` }} /></i>
               </div>
-            )) : <div className="rh-empty-inline">Aucune raison de depart.</div>}
+            )) : <div className="rh-empty-inline">{t.reasons.empty}</div>}
           </div>
         </article>
       </div>
@@ -3970,13 +3998,13 @@ function StcDepartureSurface({
       <article className="stc-panel">
         <header>
           <div>
-            <h2>Liste STC</h2>
-            <p>{filteredEmployees.length} fiche(s) visible(s)</p>
+            <h2>{t.table.title}</h2>
+            <p>{t.reasons.count(filteredEmployees.length)}</p>
           </div>
         </header>
         <div className="rh-table-wrap">
           <table className="rh-table">
-            <thead><tr><th>Code</th><th>Nom</th><th>Departement</th><th>Service</th><th>Raison de depart</th><th>Mois sortie</th><th>Action</th></tr></thead>
+            <thead><tr><th>{t.table.code}</th><th>{t.table.name}</th><th>{t.table.department}</th><th>{t.table.service}</th><th>{t.table.reason}</th><th>{t.table.exitMonth}</th><th>{t.table.action}</th></tr></thead>
             <tbody>
               {filteredEmployees.length ? filteredEmployees.map((employee) => (
                 <tr key={employee.recordId || employee.finalCode || employee.fullName}>
@@ -3986,9 +4014,9 @@ function StcDepartureSurface({
                   <td>{employee.service || '-'}</td>
                   <td>{employee.departureReason || '-'}</td>
                   <td>{employee.inactiveFrom || '-'}</td>
-                  <td><button className="ghost-button ghost-button--small" type="button" onClick={() => onEdit(employee)}>Modifier</button></td>
+                  <td><button className="ghost-button ghost-button--small" type="button" onClick={() => onEdit(employee)}>{t.table.edit}</button></td>
                 </tr>
-              )) : <tr><td className="rh-table__empty" colSpan={7}>Aucun STC trouve.</td></tr>}
+              )) : <tr><td className="rh-table__empty" colSpan={7}>{t.table.empty}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -4239,6 +4267,13 @@ export default function App() {
       presence: translate('production.presence', 'Presence'),
       absence: translate('production.absence', 'ABS'),
       prefix: translate('production.prefix', 'Production -'),
+      targetHint: translate('daily.targetHint', 'Double-cliquez pour modifier l’objectif MOD production'),
+      targetLabel: translate('daily.targetLabel', 'Objectif MOD production'),
+      targetSave: translate('daily.overview.save', 'Enregistrer l’objectif'),
+      targetCancel: translate('daily.overview.cancel', 'Annuler'),
+      objective: translate('daily.overview.objective', 'Objectif'),
+      modPresent: translate('daily.overview.modPresent', 'MOD présents'),
+      coverage: translate('daily.overview.coverage', 'Couverture'),
     }),
     [language],
   );
@@ -4358,20 +4393,28 @@ export default function App() {
     [language],
   );
   const busBaseLabels = useMemo(
-    () => ({
+    () => {
+      const dashboard = BUS_DASHBOARD_TRANSLATIONS[language] || BUS_DASHBOARD_TRANSLATIONS.fr;
+      return ({
       ...busPointageLabels,
-      dashboard: BUS_DASHBOARD_TRANSLATIONS[language] || BUS_DASHBOARD_TRANSLATIONS.fr,
-      eyebrow: translate('busBase.eyebrow', 'Suivi bus'),
-      title: translate('busBase.title', 'BUS'),
-      subtitle: translateFn('busBase.subtitle', (date) => `${date} | Suivi bus selon la colonne Bus de la base RH.`),
+      dashboard,
+      search: dashboard.search,
+      noResults: dashboard.noResults,
+      empty: dashboard.detail.empty,
+      close: dashboard.actions.close,
+      columns: { ...busPointageLabels.columns, ...dashboard.columns },
+      eyebrow: dashboard.eyebrow,
+      title: dashboard.pageTitle,
+      subtitle: (date) => dashboard.pageSubtitle(formatDateLabel(date, locale)),
       cards: {
         bus: translate('busBase.cards.bus', 'Bus'),
         people: translate('busBase.cards.people', 'Employes affectes'),
         present: translate('busBase.cards.present', 'Presents'),
         rate: translate('busBase.cards.rate', 'Taux pointage'),
       },
-    }),
-    [busPointageLabels, language],
+    });
+    },
+    [busPointageLabels, language, locale],
   );
   const departmentBaseLabels = useMemo(
     () => ({
@@ -5151,7 +5194,7 @@ export default function App() {
             <span />
           </button>
 
-          <div className="pointage-topbar-title"><strong>{isSettingsSection ? 'Bonjour ZK Dashboard' : sidebarItems.find((item) => item.key === activeSection)?.label}</strong>{!isSettingsSection && <span>{sidebarItems.find((item) => item.key === activeSection)?.note}</span>}</div>
+          <div className="pointage-topbar-title"><strong>{isSettingsSection ? translate('topbar.greeting', 'Bonjour ZK Dashboard') : sidebarItems.find((item) => item.key === activeSection)?.label}</strong>{!isSettingsSection && <span>{sidebarItems.find((item) => item.key === activeSection)?.note}</span>}</div>
           <div className="rh-topbar__actions">
             {isSettingsSection && <div id="daily-pointage-topbar-tools" className="daily-pointage-topbar-tools" />}
 
@@ -5208,6 +5251,13 @@ export default function App() {
                 presentCount={productionModPresentCount}
                 target={productionModTarget}
                 onTargetChange={setProductionModTarget}
+                targetHint={productionLabels.targetHint}
+                targetLabel={productionLabels.targetLabel}
+                targetSaveLabel={productionLabels.targetSave}
+                targetCancelLabel={productionLabels.targetCancel}
+                objectiveLabel={productionLabels.objective}
+                presentLabel={productionLabels.modPresent}
+                coverageLabel={productionLabels.coverage}
               />
             </div>
 
@@ -5421,6 +5471,7 @@ export default function App() {
                 onEdit={handleOpenEditEmployee}
                 locale={locale}
                 currentMonthLabel={currentMonthLabel}
+                labels={STC_DASHBOARD_TRANSLATIONS[language] || STC_DASHBOARD_TRANSLATIONS.fr}
               />
             ) : isAbsenceSection ? (
               <AbsenceSurface

@@ -135,6 +135,30 @@ test('blank cells become ABS only from a recorded hire date onward', async () =>
   assert.equal(attendance[1].absences.some((person) => person.id === '343'), false);
 });
 
+test('new active hires from employee base appear absent only from hire date', async () => {
+  const base = [
+    ...employees,
+    { id: '350', zk: '350', fullName: 'NOUVEL EMPLOYE', status: 'Actif', department: 'PRODUCTION', service: 'INJ', kind: 'MOD', hiredAt: '24/09/2026' },
+  ];
+  const result = await prepareDailyPointage(file([
+    [4, 'Z', '09/23/2026 07:30'],
+    [4, 'Z', '09/24/2026 07:30'],
+  ]), base, null, rules);
+
+  assert.equal(cell(result, '350', '2026-09-23').status, 'EMPTY');
+  assert.equal(cell(result, '350', '2026-09-24').status, 'ABS');
+
+  const beforeHire = buildDailyTable(result, base, ['2026-09-23']);
+  assert.equal(beforeHire.rows.some((row) => row.id === '350'), false);
+
+  const onHire = buildDailyTable(result, base, ['2026-09-24']);
+  const newHire = onHire.rows.find((row) => row.id === '350');
+  assert.equal(newHire.days[0].status, 'ABS');
+
+  const attendance = buildAttendanceByDay(onHire)[0];
+  assert.equal(attendance.absences.some((person) => person.id === '350'), true);
+});
+
 test('prestation employees without a punch are not imported as absent', async () => {
   const prestationEmployees = [
     ...employees,

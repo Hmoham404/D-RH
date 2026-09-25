@@ -38,6 +38,15 @@ function isEmployeeStartedBy(employee, isoDate) {
   return !hire || hire <= isoDate;
 }
 
+function shouldAddEmployeeFromDirectory(employee, observedDates) {
+  const key = employeeKey(employee);
+  const hireDate = getEmployeeHireIso(employee, observedDates[0] || '');
+  const status = String(employee?.status || '').trim().toLowerCase();
+  const contract = String(employee?.contract || '').trim().toLowerCase();
+  if (!key || !hireDate || status !== 'actif' || contract === 'prestation') return false;
+  return observedDates.some((date) => hireDate <= date);
+}
+
 function parseMdyDateTime(value) {
   const match = String(value || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
   if (!match) return null;
@@ -181,6 +190,17 @@ export function buildDailyWeeks(analysis, employees) {
     });
   }));
   (analysis.dayRows || []).forEach(addPerson);
+  employees
+    .filter((employee) => shouldAddEmployeeFromDirectory(employee, observed))
+    .forEach((employee) => addPerson({
+      employeeKey: employeeKey(employee),
+      id: employee.id || employee.finalCode || employee.zk || employee.saber,
+      fullName: employee.fullName || `${employee.lastName || ''} ${employee.firstName || ''}`.trim(),
+      department: employee.department || '',
+      service: employee.service || '',
+      kind: employee.kind || '',
+      employeeStatus: employee.status || '',
+    }));
   const days = new Map((analysis.dayRows || []).map((row) => [`${row.employeeKey}|${row.isoDate}`, row]));
   const corrections = new Map((analysis.manualCorrections || []).map((item) => [`${item.employeeKey}|${item.isoDate}`, item.after]));
   return starts.map((start) => {

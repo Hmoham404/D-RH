@@ -456,7 +456,7 @@ test('all source sheets and dates are grouped even with reordered columns and un
   assert.ok(result.rawRows.some((row) => row.sheetName === 'Pointeuse B'));
 });
 
-test('table uses only file personnel and dates, including people missing from the RH base', async () => {
+test('table uses only file dates and hides people missing from the RH base', async () => {
   const first = await prepareDailyPointage(file([[4, 'Z', '04/09/2026 08:00'], [4, 'Z', '04/09/2026 16:00']]), employees, null, rules);
   const next = await prepareDailyPointage(file([
     [4, 'Z', '10/09/2026 08:00'], [4, 'Z', '10/09/2026 17:00'],
@@ -465,15 +465,15 @@ test('table uses only file personnel and dates, including people missing from th
   next.weeklySheets = [{ dayColumns: [{ isoDate: '2026-08-24' }], rows: [] }];
   const table = buildDailyTable(next, employees, next.importDiagnostics.incomingDates);
   assert.deepEqual(table.dayColumns.map((day) => day.isoDate), ['2026-10-09']);
-  assert.deepEqual(table.rows.map((row) => row.id), ['4', '999']);
+  assert.deepEqual(table.rows.map((row) => row.id), ['4']);
   assert.equal(table.rows[0].totalHours, '09:00');
-  assert.equal(table.rows[1].days[0].status, 'AVR');
   assert.equal(next.rawRows.length, 3);
+  assert.equal(next.rawRows.some((row) => row.sourceId === '999' && row.matchState === 'unmatched'), true);
   const combined = buildDailyTable(next, employees, ['2026-04-09', '2026-10-09']);
   assert.equal(combined.dayColumns.length, 1);
   assert.equal(combined.rows[0].totalHours, '09:00');
   const filteredBase = buildDailyTable(next, employees.slice(0, 2), ['2026-10-09']);
-  assert.equal(filteredBase.rows.length, 2);
+  assert.equal(filteredBase.rows.length, 1);
 });
 
 test('saved imports replace previous days and use the current RH department and service', async () => {
@@ -541,12 +541,11 @@ test('legacy reload discards synthetic absences and all punches outside the late
   assert.deepEqual(await normalizeSavedPointageSnapshot(JSON.parse(JSON.stringify(restored)), employees), JSON.parse(JSON.stringify(restored)));
 });
 
-test('an empty RH directory still analyzes actual file people without synthetic absences', async () => {
+test('an empty RH directory analyzes imports but displays no daily personnel', async () => {
   const result = await prepareDailyPointage(file([[342, 'New arrival', '09/24/2026 07:30']]), [], null, rules);
   const table = buildDailyTable(result, [], ['2026-09-24']);
-  assert.deepEqual(table.rows.map((row) => row.id), ['342']);
+  assert.deepEqual(table.rows.map((row) => row.id), []);
   const [day] = buildAttendanceByDay(table);
-  assert.equal(day.departments[0].expected, 1);
-  assert.equal(day.departments[0].present, 1);
+  assert.deepEqual(day.departments, []);
   assert.equal(day.absences.length, 0);
 });

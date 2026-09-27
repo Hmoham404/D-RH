@@ -43,7 +43,7 @@ test('explicit ABS correction creates a presence and preserves other file status
   assert.equal(attendance.absences.length, 0);
   assert.equal(attendance.late[0].delay, 30);
   assert.equal(next.rawRows.filter((row) => row.isoDate === '2026-09-14').length, 0);
-  assert.equal(table(next).rows.find((row) => row.id === '7').days[0].status, 'CM');
+  assert.equal(table(next).rows.some((row) => row.id === '7'), false);
   assert.equal(next.currentFilePointage.rawRows.some((row) => row.isoDate === '2026-09-14'), false);
   assert.equal(next.manualCorrections[0].before.status, 'ABS');
 });

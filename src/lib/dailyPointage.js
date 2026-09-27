@@ -170,7 +170,8 @@ export function buildDailyWeeks(analysis, employees) {
   const directory = new Map(employees.map((employee) => [employeeKey(employee), employee]));
   const roster = new Map();
   const addPerson = (source) => {
-    const employee = directory.get(source.employeeKey) || {};
+    const employee = directory.get(source.employeeKey);
+    if (!employee) return;
     const person = {
       employeeKey: source.employeeKey, id: source.sourceId || source.id || source.employeeKey,
       fullName: source.matchedName || source.fullName || source.sourceName || employee.fullName || '-',

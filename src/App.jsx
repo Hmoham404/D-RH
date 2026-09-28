@@ -1104,19 +1104,25 @@ function getEmployeeHireIso(employee, referenceIsoDate = '') {
   ).trim();
   const isoHire = rawHire.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   const frenchHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  const frenchShortYearHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+  const frenchMonthDayHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})$/);
   const dayOnlyHire = rawHire.match(/^(\d{1,2})$/);
-  if (!isoHire && !frenchHire && !dayOnlyHire) {
+  if (!isoHire && !frenchHire && !frenchShortYearHire && !frenchMonthDayHire && !dayOnlyHire) {
     return '';
   }
   const reference = String(referenceIsoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dayOnlyHire && !reference) {
+  if ((dayOnlyHire || frenchMonthDayHire) && !reference) {
     return '';
   }
   const [year, month, day] = dayOnlyHire
     ? [Number(reference[1]), Number(reference[2]), Number(dayOnlyHire[1])]
     : isoHire
       ? [Number(isoHire[1]), Number(isoHire[2]), Number(isoHire[3])]
-      : [Number(frenchHire[3]), Number(frenchHire[2]), Number(frenchHire[1])];
+      : frenchHire
+        ? [Number(frenchHire[3]), Number(frenchHire[2]), Number(frenchHire[1])]
+        : frenchShortYearHire
+          ? [2000 + Number(frenchShortYearHire[3]), Number(frenchShortYearHire[2]), Number(frenchShortYearHire[1])]
+          : [Number(reference[1]), Number(frenchMonthDayHire[2]), Number(frenchMonthDayHire[1])];
   if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) {
     return '';
   }
@@ -1124,6 +1130,11 @@ function getEmployeeHireIso(employee, referenceIsoDate = '') {
 }
 
 function hasEmployeeStartedBy(employee, isoDate) {
+  const hire = getEmployeeHireIso(employee, isoDate);
+  return !hire || hire <= isoDate;
+}
+
+function isEmployeeAbsenceEligibleBy(employee, isoDate) {
   const hire = getEmployeeHireIso(employee, isoDate);
   return !hire || hire <= isoDate;
 }
@@ -1988,6 +1999,10 @@ function isPresentWeeklyCell(day) {
   return getDayStatusMeta(day).isPresent;
 }
 
+function isAbsenceLikeDay(day) {
+  return TRACKED_ABSENCE_CODES.has(getDayStatusMeta(day).code);
+}
+
 function buildWeeklyFallbackMetrics(selectedWeek, selectedDate) {
   const dayIndex = getSelectedDayIndex(selectedWeek, selectedDate);
   if (dayIndex < 0) {
@@ -2044,7 +2059,8 @@ function buildDayRoster(selectedWeek, selectedDate, employees = []) {
       const matchedEmployee = findEmployeeMatch(row);
       const employeeForDate = matchedEmployee || row;
       const isBeforeHireDate = !hasEmployeeStartedBy(employeeForDate, selectedDate);
-      const effectiveDay = isBeforeHireDate
+      const isBeforeAbsenceEligibility = isAbsenceLikeDay(day) && !isEmployeeAbsenceEligibleBy(employeeForDate, selectedDate);
+      const effectiveDay = isBeforeHireDate || isBeforeAbsenceEligibility
         ? { ...day, status: 'X', display: '-', raw: 'X' }
         : day;
       const status = getDayStatusMeta(effectiveDay);
@@ -4839,7 +4855,7 @@ export default function App() {
         return false;
       }
       const matchedEmployee = findEmployeeMatch(row);
-      return hasEmployeeStartedBy(matchedEmployee || row, selectedDate);
+      return isEmployeeAbsenceEligibleBy(matchedEmployee || row, selectedDate);
     });
   }, [dayRoster, employees, selectedDate]);
   const productionNewRows = useMemo(
@@ -4885,11 +4901,22 @@ export default function App() {
 
         return {
           ...displayRow,
-          days: (row.days || []).map((day) =>
-            day?.isoDate && !hasEmployeeStartedBy(matchedEmployee || row, day.isoDate)
-              ? { ...day, status: 'X', display: '-', raw: 'X' }
-              : day,
-          ),
+          days: (row.days || []).map((day, dayIndex) => {
+            const isoDate = day?.isoDate || selectedWeek?.dayColumns?.[dayIndex]?.isoDate || '';
+            if (!isoDate) {
+              return day;
+            }
+            const employeeForDate = {
+              ...row,
+              ...(matchedEmployee || {}),
+              hiredAt: displayRow.hiredAt,
+              hired_at: displayRow.hiredAt,
+            };
+            const shouldHideDay =
+              !hasEmployeeStartedBy(employeeForDate, isoDate) ||
+              (isAbsenceLikeDay(day) && !isEmployeeAbsenceEligibleBy(employeeForDate, isoDate));
+            return shouldHideDay ? { ...day, isoDate, status: 'X', display: '-', raw: 'X' } : { ...day, isoDate };
+          }),
         };
       })
       .filter((row) =>

@@ -44,6 +44,11 @@ function isEmployeeStartedBy(employee, isoDate) {
   return !hire || hire <= isoDate;
 }
 
+function isEmployeeAbsenceEligibleBy(employee, isoDate) {
+  const hire = getEmployeeHireIso(employee, isoDate);
+  return !hire || hire <= isoDate;
+}
+
 function shouldAddEmployeeFromDirectory(employee, observedDates) {
   const key = employeeKey(employee);
   const hireDate = getEmployeeHireIso(employee, observedDates[0] || '');
@@ -225,9 +230,15 @@ export function buildDailyWeeks(analysis, employees) {
         const correction = corrections.get(`${row.employeeKey}|${column.isoDate}`);
         const exitOnly = day && !day.exit && correction?.exit && correction.entry === '';
         const started = isEmployeeStartedBy(employee, column.isoDate);
+        const absenceEligible = isEmployeeAbsenceEligibleBy(employee, column.isoDate);
+        const sourceStatus = String(sourceCell?.status || '').toUpperCase();
+        const sourceIsAbsenceLike = sourceCell && !['POINTAGE', 'AVR'].includes(sourceStatus);
         let status = 'EMPTY';
         let display = '-';
         if (!started && (day || sourceCell)) {
+          status = 'X';
+          display = '-';
+        } else if (sourceIsAbsenceLike && !absenceEligible) {
           status = 'X';
           display = '-';
         } else if (day) {
@@ -239,7 +250,7 @@ export function buildDailyWeeks(analysis, employees) {
           status = sourceCell.status; display = sourceCell.display;
         } else {
           const hireDate = getEmployeeHireIso(employee, column.isoDate);
-          // A blank cell becomes ABS only once a recorded hire date has begun.
+          // A blank cell becomes ABS from the recorded hire date onward.
           if (hireDate && hireDate <= column.isoDate) {
             status = 'ABS'; display = 'ABS';
           }

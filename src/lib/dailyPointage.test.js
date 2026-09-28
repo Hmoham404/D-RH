@@ -116,9 +116,9 @@ test('short hire dates prevent ABS before the hire day', async () => {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     ['Semaine 2026'],
-    ['ID', 'Nom', 'Prenom', 'Departement', 'Categorie', '09/26', '09/28', 'Heures standard'],
-    [356, 'BEN BRAHIM', 'SABRINE', 'PRODUCTION', 'MOD', 'ABS', 'ABS', ''],
-    [357, 'CHAHED', 'FERDAOUS', 'PRODUCTION', 'MOD', 'ABS', 'ABS', ''],
+    ['ID', 'Nom', 'Prenom', 'Departement', 'Categorie', '09/26', '09/27', '09/28', '09/29', 'Heures standard'],
+    [356, 'BEN BRAHIM', 'SABRINE', 'PRODUCTION', 'MOD', 'ABS', 'ABS', 'ABS', 'ABS', ''],
+    [357, 'CHAHED', 'FERDAOUS', 'PRODUCTION', 'MOD', 'ABS', 'ABS', 'ABS', 'ABS', ''],
   ]), 'S1');
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
     ['ID Emp.', 'Nom', 'Temps du Ptg'], [4, 'Z', '09/26/2026 07:00'],
@@ -132,18 +132,26 @@ test('short hire dates prevent ABS before the hire day', async () => {
 
   assert.equal(cell(result, '356', '2026-09-26').status, 'X');
   assert.equal(cell(result, '356', '2026-09-26').display, '-');
+  assert.equal(cell(result, '356', '2026-09-27').status, 'X');
+  assert.equal(cell(result, '356', '2026-09-27').display, '-');
+  assert.equal(cell(result, '356', '2026-09-28').status, 'ABS');
   assert.equal(cell(result, '357', '2026-09-26').status, 'X');
   assert.equal(cell(result, '357', '2026-09-26').display, '-');
-  assert.equal(cell(result, '356', '2026-09-28').status, 'ABS');
+  assert.equal(cell(result, '357', '2026-09-27').status, 'X');
+  assert.equal(cell(result, '357', '2026-09-27').display, '-');
   assert.equal(cell(result, '357', '2026-09-28').status, 'ABS');
-  const [day26, day28] = buildAttendanceByDay(buildDailyTable(result, base, ['2026-09-26', '2026-09-28']));
+  assert.equal(cell(result, '356', '2026-09-29').status, 'ABS');
+  assert.equal(cell(result, '357', '2026-09-29').status, 'ABS');
+  const [day26, day28, day29] = buildAttendanceByDay(buildDailyTable(result, base, ['2026-09-26', '2026-09-28', '2026-09-29']));
   assert.equal(day26.absences.some((person) => person.id === '356'), false);
   assert.equal(day26.absences.some((person) => person.id === '357'), false);
   assert.equal(day28.absences.some((person) => person.id === '356'), true);
   assert.equal(day28.absences.some((person) => person.id === '357'), true);
+  assert.equal(day29.absences.some((person) => person.id === '356'), true);
+  assert.equal(day29.absences.some((person) => person.id === '357'), true);
 });
 
-test('blank cells become ABS only from a recorded hire date onward', async () => {
+test('blank cells become ABS from a recorded hire date onward', async () => {
   const base = [
     ...employees,
     { id: '342', fullName: 'DOUZI KHOULOUD', status: 'Actif', hiredAt: '24/09/2026' },
@@ -166,7 +174,7 @@ test('blank cells become ABS only from a recorded hire date onward', async () =>
   assert.equal(attendance[1].absences.some((person) => person.id === '343'), false);
 });
 
-test('new active hires from employee base appear absent only from hire date', async () => {
+test('new active hires from employee base appear absent from hire date onward', async () => {
   const base = [
     ...employees,
     { id: '350', zk: '350', fullName: 'NOUVEL EMPLOYE', status: 'Actif', department: 'PRODUCTION', service: 'INJ', kind: 'MOD', hiredAt: '24/09/2026' },
@@ -174,20 +182,75 @@ test('new active hires from employee base appear absent only from hire date', as
   const result = await prepareDailyPointage(file([
     [4, 'Z', '09/23/2026 07:30'],
     [4, 'Z', '09/24/2026 07:30'],
+    [4, 'Z', '09/25/2026 07:30'],
   ]), base, null, rules);
 
   assert.equal(cell(result, '350', '2026-09-23').status, 'EMPTY');
   assert.equal(cell(result, '350', '2026-09-24').status, 'ABS');
+  assert.equal(cell(result, '350', '2026-09-25').status, 'ABS');
 
   const beforeHire = buildDailyTable(result, base, ['2026-09-23']);
   assert.equal(beforeHire.rows.some((row) => row.id === '350'), false);
 
   const onHire = buildDailyTable(result, base, ['2026-09-24']);
-  const newHire = onHire.rows.find((row) => row.id === '350');
+  const hireDay = onHire.rows.find((row) => row.id === '350');
+  assert.equal(hireDay.days[0].status, 'ABS');
+
+  const afterHire = buildDailyTable(result, base, ['2026-09-25']);
+  const newHire = afterHire.rows.find((row) => row.id === '350');
   assert.equal(newHire.days[0].status, 'ABS');
 
-  const attendance = buildAttendanceByDay(onHire)[0];
+  const attendance = buildAttendanceByDay(afterHire)[0];
   assert.equal(attendance.absences.some((person) => person.id === '350'), true);
+});
+
+test('new active hires become ABS on their hire date without source cell', async () => {
+  const base = [
+    ...employees,
+    { id: '356', zk: '356', fullName: 'BEN BRAHIM SABRINE', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '28/09/2026' },
+    { id: '357', zk: '357', fullName: 'CHAHED FERDAOUS', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '28/09/2026' },
+  ];
+  const result = await prepareDailyPointage(file([
+    [4, 'Z', '09/25/2026 07:30'],
+    [4, 'Z', '09/28/2026 07:30'],
+    [4, 'Z', '09/29/2026 07:30'],
+  ]), base, null, rules);
+
+  const hireDay = buildDailyTable(result, base, ['2026-09-28']);
+  const row356 = hireDay.rows.find((row) => row.id === '356');
+  const row357 = hireDay.rows.find((row) => row.id === '357');
+  assert.equal(row356.days[0].status, 'ABS');
+  assert.equal(row357.days[0].status, 'ABS');
+
+  const nextDay = buildDailyTable(result, base, ['2026-09-29']);
+  assert.equal(nextDay.rows.find((row) => row.id === '356').days[0].status, 'ABS');
+  assert.equal(nextDay.rows.find((row) => row.id === '357').days[0].status, 'ABS');
+});
+
+test('hire date hides imported ABS before 28 September for employees 356 and 357', async () => {
+  const base = [
+    ...employees,
+    { id: '356', zk: '356', fullName: 'BEN BRAHIM SABRINE', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '28/09/2026' },
+    { id: '357', zk: '357', fullName: 'CHAHED FERDAOUS', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '28/09/2026' },
+  ];
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Semaine 2026'],
+    ['ID', 'Nom', 'Prenom', 'Departement', 'Categorie', '09/25', '09/26', '09/27', '09/28', 'Heures standard'],
+    [356, 'BEN BRAHIM', 'SABRINE', 'PRODUCTION', 'MOD', 'ABS', 'ABS', 'ABS', 'ABS', ''],
+    [357, 'CHAHED', 'FERDAOUS', 'PRODUCTION', 'MOD', 'ABS', 'ABS', 'ABS', 'ABS', ''],
+  ]), 'S1');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['ID Emp.', 'Nom', 'Temps du Ptg'], [4, 'Z', '09/25/2026 07:00'],
+  ]), 'Pointage');
+  const result = await prepareDailyPointage(workbookFile(workbook), base, null, rules);
+
+  for (const employeeId of ['356', '357']) {
+    assert.equal(cell(result, employeeId, '2026-09-25').display, '-');
+    assert.equal(cell(result, employeeId, '2026-09-26').display, '-');
+    assert.equal(cell(result, employeeId, '2026-09-27').display, '-');
+    assert.equal(cell(result, employeeId, '2026-09-28').display, 'ABS');
+  }
 });
 
 test('prestation employees without a punch are not imported as absent', async () => {

@@ -42,18 +42,19 @@ function RingMetric({ title, value, caption, tone = 'blue', icon = 'people', onC
   );
 }
 
-function RatePanel({ tone, title, value, label, delta, previous, icon }) {
+function RatePanel({ tone, title, value, label, delta, previous, icon, ringPercent = 0, targetLabel, targetDraft, editing, onDoubleClick, onDraftChange, onSave, onCancel, saveLabel, cancelLabel, editHint }) {
   return (
-    <article className={`mod-rate-card mod-rate-card--${tone}`}>
+    <article className={`mod-rate-card mod-rate-card--${tone}${onDoubleClick ? ' mod-rate-card--editable' : ''}`} onDoubleClick={onDoubleClick} title={onDoubleClick ? editHint : undefined}>
       <div className="mod-rate-card__icon"><DashboardIcon type={icon} /></div>
-      <div className="mod-rate-card__ring"><strong>{value}</strong></div>
+      <div className="mod-rate-card__ring" style={{ '--rate-angle': `${Math.max(0, Math.min(100, Number(ringPercent) || 0)) * 3.6}deg` }}><strong>{value}</strong></div>
       <div className="mod-rate-card__copy">
         <h2>{title}</h2>
-        <div>
-          <span>{label}</span>
-          <strong>{delta}</strong>
-          <small>{previous}</small>
-        </div>
+        {editing ? <form className="mod-rate-target-editor" onSubmit={(event) => { event.preventDefault(); onSave(); }} onDoubleClick={(event) => event.stopPropagation()}>
+          <label>{targetLabel}<input autoFocus aria-label={targetLabel} type="number" min="1" step="1" required value={targetDraft} onChange={(event) => onDraftChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }} /></label>
+          <div><button type="submit">{saveLabel}</button><button type="button" onClick={onCancel}>{cancelLabel}</button></div>
+        </form> : <div>
+          <span>{label}</span><strong>{delta}</strong>{previous && <small>{previous}</small>}
+        </div>}
       </div>
     </article>
   );
@@ -198,7 +199,7 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
   const captions = dataset.captions;
   const plottableValues = values.map((value) => Number.isFinite(value) ? value : null);
   const x = (index) => 48 + index * 492 / Math.max(1, values.length - 1);
-  const y = (value) => 120 - value * 0.9;
+  const y = (value) => 210 - value * 1.5;
   const points = plottableValues.map((value, index) => value === null ? null : [x(index), y(value)]);
   const segments = [];
   points.forEach((point, index) => {
@@ -236,7 +237,7 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
           ))}
         </div>
       </header>
-      <svg viewBox="0 0 570 178" role="img" aria-label={values.map((value, index) => `${labels[index]}: ${value === null ? 'sans donnees' : `${Math.round(value)}%`}`).join(', ')}>
+      <svg viewBox="0 0 570 300" role="img" aria-label={values.map((value, index) => `${labels[index]}: ${value === null ? 'sans donnees' : `${Math.round(value)}%`}`).join(', ')}>
         <defs>
           <linearGradient id="presenceEvolutionFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#2f80ed" stopOpacity=".32" />
@@ -250,12 +251,12 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
           </g>
         ))}
         {period === 'quarter' && <>
-          <line className="mod-chart-divider" x1={x(3) - 34} x2={x(3) - 34} y1="22" y2="145" />
-          <line className="mod-chart-divider" x1={x(7) - 20} x2={x(7) - 20} y1="22" y2="145" />
+          <line className="mod-chart-divider" x1={x(3) - 34} x2={x(3) - 34} y1="42" y2="240" />
+          <line className="mod-chart-divider" x1={x(7) - 20} x2={x(7) - 20} y1="42" y2="240" />
         </>}
         {segments.map((segment, index) => (
           <g key={index}>
-            <path d={`M${segment[0][0]},120 L${segment.map((point) => point.join(',')).join(' L')} L${segment.at(-1)[0]},120 Z`} fill="url(#presenceEvolutionFill)" />
+            <path d={`M${segment[0][0]},210 L${segment.map((point) => point.join(',')).join(' L')} L${segment.at(-1)[0]},210 Z`} fill="url(#presenceEvolutionFill)" />
             <polyline points={segment.map((point) => point.join(',')).join(' ')} />
           </g>
         ))}
@@ -265,11 +266,11 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
               <circle cx={x(index)} cy={y(value)} r="3.6" />
               <text className="mod-chart-value" x={x(index)} y={y(value) - 9} textAnchor="middle">{Math.round(value)}%</text>
             </>}
-            <text x={x(index)} y="150" textAnchor="middle">{labels[index]}</text>
+            <text x={x(index)} y="248" textAnchor="middle">{labels[index]}</text>
           </g>
         ))}
         {captions.map((caption) => (
-          <text key={caption.label} className="mod-chart-caption" x={caption.x} y="170" textAnchor="middle">{caption.label}</text>
+          <text key={caption.label} className="mod-chart-caption" x={caption.x} y="278" textAnchor="middle">{caption.label}</text>
         ))}
       </svg>
     </article>
@@ -277,7 +278,9 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
 }
 
 export default function DailyAttendanceOverview({ day, history, analysisDate,
-  baseEmployees, baseMonthDate, onOpen, target, message, translate: t, locale, productionLabels }) {
+  baseEmployees, baseMonthDate, onOpen, target, onTargetChange, message, translate: t, locale, productionLabels }) {
+  const [editingModTarget, setEditingModTarget] = useState(false);
+  const [modTargetDraft, setModTargetDraft] = useState(String(target || 65));
   const number = (value) => Number(value || 0).toLocaleString(locale);
   const formatPercent = (count, total) => formatRate(percent(count, total), locale);
   const people = (day?.departments || []).flatMap((group) => group.people);
@@ -349,8 +352,19 @@ export default function DailyAttendanceOverview({ day, history, analysisDate,
           <RingMetric title={t('daily.overview.presentMod')} value={number(modPresent.length)} caption={t('daily.overview.onSite')} tone="green" onClick={() => open(t('daily.overview.presentMod'), modPresent)} />
 
           <div className="mod-dashboard__rates">
-            <RatePanel tone="red" title={t('daily.overview.absentTitle')} value={formatRate(modAbsentRate, locale)} label={t('daily.overview.absentRate')} delta={t('daily.overview.absentDelta')} previous={t('daily.overview.previousMonth')} icon="clock" />
-            <RatePanel tone="green" title={t('daily.overview.modRateTitle')} value={formatRate(modRate || targetCoverage, locale)} label={t('daily.overview.presenceRate')} delta={t('daily.overview.presenceDelta')} previous={t('daily.overview.previousMonth')} icon="chart" />
+            <RatePanel tone="red" title={t('daily.overview.absentTitle')} value={formatRate(modAbsentRate, locale)} ringPercent={modAbsentRate} label={t('daily.overview.absentRate')} delta={t('daily.overview.absentDelta')} previous={t('daily.overview.previousMonth')} icon="clock" />
+            <RatePanel
+              tone="green" title={t('daily.overview.modRateTitle')} value={formatRate(targetCoverage, locale)} ringPercent={targetCoverage}
+              label={t('daily.overview.coverage')} delta={`${number(modPresent.length)} / ${number(safeTarget)} ${t('daily.overview.modPresent')}`}
+              previous="" icon="chart"
+              targetLabel={t('daily.targetLabel', 'Objectif MOD production')} targetDraft={modTargetDraft} editing={editingModTarget}
+              onDoubleClick={() => { setModTargetDraft(String(safeTarget)); setEditingModTarget(true); }}
+              onDraftChange={setModTargetDraft}
+              onSave={() => { onTargetChange?.(Math.max(1, Math.floor(Number(modTargetDraft) || safeTarget))); setEditingModTarget(false); }}
+              onCancel={() => { setModTargetDraft(String(safeTarget)); setEditingModTarget(false); }}
+              saveLabel={t('daily.overview.save', 'Enregistrer')} cancelLabel={t('daily.overview.cancel', 'Annuler')}
+              editHint={t('daily.targetHint', 'Double-cliquez pour modifier l’objectif MOD production')}
+            />
           </div>
         </div>
 

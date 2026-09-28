@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import * as XLSX from 'xlsx';
 import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, prepareDailyPointage } from '../lib/dailyPointage.js';
 import DailyAttendanceOverview from './DailyAttendanceOverview';
 import { clearPointageSnapshot, replacePointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
@@ -97,6 +98,40 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const filteredRows = table.rows.filter((row) =>
     `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase())
     && (statusFilter === 'ALL' || row.days.some((day) => day.isoDate === analysisDate && day.status === statusFilter)));
+  function downloadAttendanceExcel() {
+    const headers = [
+      translate('daily.importScreen.employeeId'),
+      translate('daily.importScreen.name'),
+      translate('daily.importScreen.departmentService'),
+      translate('daily.importScreen.category'),
+      ...table.dayColumns.map((day) => dayLabel(day.isoDate, locale)),
+    ];
+    const dailyTotals = [
+      '', '', '', '',
+      ...table.dayColumns.map((column) => {
+        const cells = table.rows.map((row) => row.days.find((day) => day.isoDate === column.isoDate)).filter(Boolean);
+        const presentCount = cells.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
+        const absentCount = cells.filter((day) => day.status === 'ABS').length;
+        return `${translate('kpi.presents', 'Presents')}: ${presentCount} · ${translate('kpi.absents', 'Absents')}: ${absentCount}`;
+      }),
+    ];
+    const rows = filteredRows.map((row) => [
+      row.id,
+      row.fullName,
+      [row.department, row.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-',
+      row.kind || '-',
+      ...row.days.map((day) => day.display || '-'),
+    ]);
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows, dailyTotals]);
+    worksheet['!cols'] = [
+      { wch: 14 }, { wch: 30 }, { wch: 34 }, { wch: 14 },
+      ...table.dayColumns.map(() => ({ wch: 22 })),
+    ];
+    if (headers.length) worksheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: headers.length - 1 } }) };
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Pointage');
+    XLSX.writeFile(workbook, `pointage_${analysisDate || today}.xlsx`);
+  }
   const baseMonthDate = useMemo(() => getCurrentMonthDate(), []);
   const attendanceHistory = useMemo(() => buildAttendanceByDay(table), [table]);
   const attendance = useMemo(() => attendanceHistory.filter((day) => day.isoDate === analysisDate), [attendanceHistory, analysisDate]);
@@ -193,11 +228,19 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         <option value="STC">{translate('daily.importScreen.stc')}</option>
         <option value="EMPTY">{translate('daily.importScreen.empty')}</option>
       </select></label>
+      <button type="button" className="daily-import__download-button" onClick={downloadAttendanceExcel} disabled={!table.dayColumns.length}>
+        <DashboardIcon type="download" />{translate('daily.importScreen.downloadExcel', 'Télécharger Excel')}
+      </button>
       {statusFilter !== 'ALL' && <label className="daily-import__filter">{translate('daily.importScreen.forDate')}<select value={analysisDate} onChange={(event) => setSelectedDay(event.target.value)} disabled={!dates.length}>
         {dates.map((date) => <option key={date} value={date}>{dayLabel(date)}</option>)}
       </select></label>}
     </div></div>
-      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{table.dayColumns.map((d) => <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => setSelectedDay(d.isoDate)}>{dayLabel(d.isoDate)}</button></th>)}</tr></thead><tbody>{table.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + table.dayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? translate('daily.importScreen.createData') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
+      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{table.dayColumns.map((d) => {
+        const dayRows = table.rows.map((row) => row.days.find((day) => day.isoDate === d.isoDate)).filter(Boolean);
+        const presentCount = dayRows.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
+        const absentCount = dayRows.filter((day) => day.status === 'ABS').length;
+        return <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => setSelectedDay(d.isoDate)}><span>{dayLabel(d.isoDate)}</span><small>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</small></button></th>;
+      })}</tr></thead><tbody>{table.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + table.dayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? translate('daily.importScreen.createData') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
     </article>
     <form className="delete-zone" onSubmit={clearPointage}>
       <div className="delete-zone__copy">

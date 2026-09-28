@@ -231,7 +231,7 @@
   .daily-dashboard__footer i { @apply h-px flex-1 bg-slate-200; }
 
   /* MOD presence and safety dashboard. */
-  .mod-dashboard { @apply grid gap-4 rounded-xl bg-[#f5f7fb] p-2 md:p-3; }
+  .mod-dashboard { @apply grid gap-4 rounded-2xl p-3 md:p-4; background: linear-gradient(145deg,#f2f7f8 0%,#f5f7fb 48%,#eef3fa 100%); }
   .mod-dashboard__hero { @apply flex flex-wrap items-start justify-between gap-5; }
   .mod-dashboard__title { @apply min-w-0 flex-1; }
   .mod-dashboard__title p { @apply text-sm font-medium text-blue-900/70; }
@@ -254,20 +254,21 @@
   .mod-export-button--topbar { @apply min-h-11 rounded-md px-4 text-xs shadow-sm; }
   .mod-dashboard__main { @apply grid items-stretch gap-4 xl:grid-cols-[.98fr_1.02fr]; }
   .mod-dashboard__grid { @apply grid items-stretch gap-4 lg:grid-cols-2 lg:grid-rows-[minmax(150px,auto)_minmax(220px,1fr)_minmax(150px,auto)]; }
-  .mod-safety-card, .mod-metric, .mod-rate-card, .mod-presence-chart, .mod-dashboard__footer { @apply min-w-0 rounded-lg border border-[#cfe0ff] bg-white shadow-[0_8px_24px_-18px_rgba(7,26,85,.35)]; }
-  .mod-safety-card { @apply grid h-full grid-cols-[auto_1fr_auto] items-center gap-x-5 gap-y-3 p-5 lg:col-span-2; background: linear-gradient(135deg,#ffffff 0%,#fbfdff 100%); }
+  .mod-safety-card, .mod-metric, .mod-rate-card, .mod-presence-chart, .mod-dashboard__footer { @apply min-w-0 rounded-2xl border border-[#d9e5eb] bg-white shadow-[0_10px_28px_-20px_rgba(16,43,82,.42)]; }
+  .mod-safety-card { @apply grid h-full grid-cols-[auto_1fr_auto] items-center gap-x-5 gap-y-3 p-5 lg:col-span-2; background: linear-gradient(120deg,#ffffff 0%,#f3faf8 100%); }
   .mod-safety-card__icon, .mod-metric__icon, .mod-rate-card__icon, .mod-section-icon { @apply grid size-12 shrink-0 place-items-center rounded-full bg-[#eef5ff] text-blue-600; }
+  .mod-safety-card__icon { @apply bg-[#eaf7ef] text-[#168255]; }
   .mod-safety-card h2, .mod-metric h2, .mod-rate-card h2, .mod-presence-chart h2 { @apply text-lg font-extrabold text-[#071a55]; }
   .mod-safety-card p { @apply text-sm font-medium text-blue-900/60; }
-  .mod-safety-card > strong { @apply col-span-2 col-start-1 text-6xl font-black leading-none text-blue-800 md:text-7xl; }
-  .mod-safety-card__gain { @apply grid gap-2 text-emerald-700; }
+  .mod-safety-card > strong { @apply col-span-2 col-start-1 text-6xl font-black leading-none text-[#164e8a] md:text-7xl; }
+  .mod-safety-card__gain { @apply grid gap-2 text-[#168255]; }
   .mod-safety-card__gain b { @apply text-4xl font-black leading-none; }
   .mod-safety-card__gain span { @apply text-sm font-semibold text-blue-900/60; }
   .mod-safety-card footer { @apply col-span-3 flex flex-wrap justify-between gap-3 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800; }
   .mod-safety-card footer span { @apply inline-flex items-center gap-2; }
   .mod-safety-card footer svg { @apply size-5; }
-  .mod-metric { @apply grid h-full min-h-56 content-between justify-items-center gap-3 p-5 text-center transition duration-150; background: linear-gradient(180deg,#ffffff 0%,#fcfdff 100%); }
-  .mod-metric.is-clickable { @apply hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md; }
+  .mod-metric { @apply grid h-full min-h-56 content-between justify-items-center gap-3 p-5 text-center transition duration-150; background: linear-gradient(180deg,#ffffff 0%,#f8fbfc 100%); }
+  .mod-metric.is-clickable { @apply hover:-translate-y-0.5 hover:border-[#b5c9d5] hover:shadow-md; }
   .mod-metric__icon { @apply justify-self-start; }
   .mod-metric h2 { @apply justify-self-start text-start; }
   .mod-metric p { @apply text-sm font-medium text-blue-900/60; }
@@ -278,35 +279,45 @@
   .mod-dashboard__rates { @apply grid h-full grid-cols-2 gap-4 lg:col-span-2; }
   .mod-rate-card { @apply grid h-full grid-cols-[auto_1fr_1.25fr] items-center gap-4 p-4; background: linear-gradient(180deg,#ffffff 0%,#fcfdff 100%); }
   .mod-rate-card__icon { @apply size-9; }
-  .mod-rate-card__ring { @apply grid size-24 place-items-center rounded-full p-2; background: conic-gradient(#ef4444 44deg,#ffd8dc 0deg); }
-  .mod-rate-card--green .mod-rate-card__ring { background: conic-gradient(#10a875 316deg,#d9f3ec 0deg); }
+  .mod-rate-card__ring { @apply grid size-24 place-items-center rounded-full p-2; background: conic-gradient(#ef4444 0deg var(--rate-angle,44deg),#ffd8dc var(--rate-angle,44deg) 360deg); }
+  .mod-rate-card--green .mod-rate-card__ring { background: conic-gradient(#10a875 0deg var(--rate-angle,316deg),#d9f3ec var(--rate-angle,316deg) 360deg); }
   .mod-rate-card__ring strong { @apply grid size-full place-items-center rounded-full bg-white text-xl font-black text-[#071a55] tabular-nums; }
   .mod-rate-card__copy { @apply grid gap-3; }
   .mod-rate-card__copy > div { @apply grid gap-1 rounded-md bg-red-50 p-3 text-red-600; }
   .mod-rate-card--green .mod-rate-card__copy > div { @apply bg-emerald-50 text-emerald-700; }
   .mod-rate-card__copy span, .mod-rate-card__copy small { @apply text-xs font-medium text-blue-900/50; }
   .mod-rate-card__copy strong { @apply text-lg font-black; }
-  .mod-presence-chart { @apply grid h-full min-h-[520px] grid-rows-[auto_minmax(0,1fr)] gap-4 p-6; background: linear-gradient(180deg,#ffffff 0%,#fbfdff 100%); }
+  .mod-rate-card--editable { @apply cursor-copy transition duration-150; }
+  .mod-rate-card--editable:hover { @apply -translate-y-0.5 border-emerald-200 shadow-md; }
+  .mod-rate-target-hint { @apply block text-[10px] font-semibold text-emerald-700/70; }
+  .mod-rate-target-editor { @apply grid gap-2 rounded-md bg-emerald-50 p-3; }
+  .mod-rate-target-editor label { @apply grid gap-1 text-[10px] font-bold text-emerald-800; }
+  .mod-rate-target-editor input { @apply min-h-8 w-full rounded-md border border-emerald-200 bg-white px-2 text-sm font-black text-emerald-900; }
+  .mod-rate-target-editor > div { @apply flex flex-wrap gap-2; }
+  .mod-rate-target-editor button { @apply rounded-md bg-emerald-700 px-2.5 py-1.5 text-[10px] font-bold text-white transition hover:bg-emerald-800; }
+  .mod-rate-target-editor button[type="button"] { @apply bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50; }
+  .mod-presence-chart { @apply grid h-full min-h-[520px] grid-rows-[auto_minmax(0,1fr)] gap-3 p-5 md:p-6; background: radial-gradient(ellipse at 95% 5%,#eff8f7 0%,transparent 34%),linear-gradient(180deg,#ffffff 0%,#fbfdff 100%); }
   .mod-presence-chart header { @apply flex flex-wrap items-start justify-between gap-4; }
   .mod-presence-chart header > div:first-child { @apply flex items-center gap-4; }
   .mod-presence-chart p { @apply mt-1 text-sm font-medium text-blue-900/60; }
-  .mod-chart-tabs { @apply grid min-w-0 grid-cols-3 overflow-hidden rounded-lg border border-blue-100 bg-white; }
+  .mod-chart-tabs { @apply grid min-w-0 grid-cols-3 overflow-hidden rounded-lg border border-[#d9e5eb] bg-white shadow-sm; }
   .mod-chart-tabs button { @apply min-h-9 px-5 text-xs font-bold text-blue-900 transition-colors hover:bg-blue-50; }
   .mod-chart-tabs button + button { @apply border-s border-blue-100; }
-  .mod-chart-tabs .is-active { @apply bg-blue-600 text-white shadow-sm; }
-  .mod-presence-chart svg { @apply min-h-0 w-full self-center; height: clamp(300px, 37vh, 390px); }
-  .mod-presence-chart line { @apply stroke-blue-100; }
-  .mod-presence-chart polyline { @apply fill-none stroke-blue-500; stroke-width: 2.6; }
-  .mod-presence-chart circle { @apply fill-blue-500 stroke-white; stroke-width: 2.4; }
-  .mod-presence-chart text { @apply fill-blue-900/60 text-[7px] font-medium; }
-  .mod-presence-chart .mod-chart-value { @apply fill-[#071a55] font-black; }
-  .mod-presence-chart .mod-chart-caption { @apply fill-blue-800 text-[8px] font-bold; }
-  .mod-presence-chart .mod-chart-divider { stroke: #8fb7ff; stroke-dasharray: 3 3; }
-  .mod-dashboard__footer { @apply flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-blue-900/60; background: linear-gradient(90deg,#ffffff 0%,#f8fbff 100%); }
+  .mod-chart-tabs .is-active { @apply bg-[#164e8a] text-white shadow-sm; }
+  .mod-presence-chart svg { @apply min-h-0 w-full self-stretch; height: clamp(330px, 42vh, 420px); }
+  .mod-presence-chart line { @apply stroke-[#dce6ee]; }
+  .mod-presence-chart polyline { @apply fill-none stroke-[#168b83]; stroke-width: 3; }
+  .mod-presence-chart circle { @apply fill-[#168b83] stroke-white; stroke-width: 3; }
+  .mod-presence-chart text { @apply fill-[#718096] text-[8px] font-medium; }
+  .mod-presence-chart .mod-chart-value { @apply fill-[#17385f] font-black; }
+  .mod-presence-chart .mod-chart-caption { @apply fill-[#356b70] text-[9px] font-bold; }
+  .mod-presence-chart .mod-chart-divider { stroke: #a8c6c8; stroke-dasharray: 4 4; }
+  .mod-dashboard__footer { @apply flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-blue-900/60; background: linear-gradient(90deg,#ffffff 0%,#f2f8f7 100%); }
   .mod-dashboard__footer strong { @apply inline-flex items-center gap-2 border-e border-blue-100 pe-4 font-black text-blue-700; }
   .mod-dashboard__footer small { @apply ms-auto text-xs; }
   .mod-dashboard__footer b { @apply rounded-full text-xs font-bold text-blue-900/60; }
   .mod-dashboard__footer b::before { content: ""; @apply me-2 inline-block size-3 rounded-full bg-emerald-500 align-middle; }
+  .mod-dashboard__footer { @apply hidden; }
   .daily-dashboard__legacy { @apply mt-1 grid gap-3 border-t border-blue-100 pt-4; }
 
   @media (max-width: 1279px) {
@@ -331,6 +342,8 @@
   .rh-table-tools { @apply flex min-w-0 flex-wrap items-end gap-3; }
   .rh-table-tools > input { @apply min-w-0 flex-1 sm:min-w-48; }
   .daily-import__filter { @apply grid gap-1.5 text-[10px] font-semibold text-slate-500; }
+  .daily-import__download-button { @apply inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50; }
+  .daily-import__download-button svg { @apply size-4; }
   .rh-table-wrap, .admin-table-wrap { @apply max-w-full overflow-auto rounded-xl border border-slate-200/80; }
   .rh-card--table > .rh-table-wrap { @apply rounded-none border-x-0 border-b-0; }
   .rh-table, .admin-table { @apply w-full border-collapse whitespace-nowrap text-start text-sm; }
@@ -341,6 +354,7 @@
   .rh-table td:nth-child(2), .admin-table td:nth-child(2) { @apply font-semibold text-ink; }
   .rh-table__empty, .admin-table__empty { @apply py-14 text-center text-sm text-slate-400; }
   .daily-import__date-heading { @apply rounded-md p-1.5 transition-colors hover:bg-blue-50; }
+  .daily-import__date-heading small { @apply mt-1 block whitespace-nowrap text-[10px] font-normal text-slate-500; }
   .daily-import__date-heading[aria-pressed="true"], .rh-table th.is-selected { @apply bg-blue-50 text-brand; }
   .daily-import__time { @apply transition hover:ring-2 hover:ring-current/20; }
   .rh-base-surface { @apply grid gap-5; }
@@ -414,31 +428,35 @@
   .bus-panel--split footer { @apply mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-50 bg-slate-50 px-4 py-3 text-xs font-semibold text-blue-900/60; }
   .bus-panel--split footer span { @apply flex items-center gap-2; }
   .bus-panel--split footer b { @apply text-emerald-600; }
-  .bus-lollipop-chart { @apply grid gap-3; }
+  .bus-lollipop-chart { @apply grid gap-4; }
   .bus-lollipop-chart header { @apply mb-0 flex flex-wrap items-center justify-between gap-3; }
-  .bus-lollipop-chart h3 { @apply text-sm font-black text-[#071a55]; }
-  .bus-lollipop-chart header div { @apply flex flex-wrap items-center gap-2 text-[10px] font-bold text-slate-500; }
+  .bus-lollipop-chart h3 { @apply text-sm font-black tracking-tight text-[#102b52]; }
+  .bus-lollipop-chart header div { @apply flex flex-wrap items-center gap-3 rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600 shadow-sm; }
   .bus-lollipop-chart header span { @apply inline-block; }
-  .bus-lollipop-chart header .is-active { @apply size-2 rounded-full bg-blue-600; }
-  .bus-lollipop-chart header .is-reserved { @apply size-2 rounded-full bg-sky-300; }
-  .bus-lollipop-chart header .is-capacity { @apply ml-2 h-px w-5 border-t border-dashed border-red-400; }
-  .bus-lollipop-chart__surface { @apply overflow-x-auto rounded-lg border border-blue-100 p-3; background: linear-gradient(180deg, #f9fcff 0%, #fff 75%); }
-  .bus-lollipop-chart svg { @apply block min-w-[560px] w-full; }
-  .bus-lollipop-chart svg line { @apply stroke-blue-100; }
-  .bus-lollipop-chart svg text { @apply fill-slate-500 text-[11px] font-semibold; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__axis { @apply stroke-slate-400; stroke-width: 1.5; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__axis-label { @apply fill-[#071a55] text-xs font-black; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__capacity-line { @apply stroke-red-400; stroke-width: 1.5; stroke-dasharray: 4 3; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__capacity-value { @apply fill-red-500 text-[10px] font-black; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__active-line { @apply stroke-blue-600; stroke-width: 3; }
+  .bus-lollipop-chart header .bus-lollipop-chart__bus-key { @apply ml-1 inline-flex items-center gap-1.5 rounded-full bg-slate-50 px-2 py-1 text-[9px] font-black uppercase text-slate-600; }
+  .bus-lollipop-chart__bus-key i { @apply size-2 rounded-full; }
+  .bus-lollipop-chart header .bus-lollipop-chart__overcapacity-key { @apply ml-1 inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-1 text-[9px] font-black uppercase text-red-700; }
+  .bus-lollipop-chart__overcapacity-key i { @apply size-2 rounded-full bg-red-500; }
+  .bus-lollipop-chart header .is-active { @apply size-2 rounded-full bg-[#164e8a]; }
+  .bus-lollipop-chart header .is-reserved { @apply size-2 rounded-full bg-[#18a6a0]; }
+  .bus-lollipop-chart header .is-capacity { @apply ml-1 h-px w-5 border-t-2 border-dashed border-[#d49a27]; }
+  .bus-lollipop-chart__surface { @apply overflow-x-auto rounded-2xl border border-[#d8e4ed] p-4 shadow-sm; background: radial-gradient(ellipse at 18% 0%, #edf7f6 0%, transparent 38%), linear-gradient(160deg, #f7fafc 0%, #fff 72%); }
+  .bus-lollipop-chart svg { @apply block min-w-[560px] w-full; min-height: 280px; }
+  .bus-lollipop-chart svg line { @apply stroke-[#dce6ee]; }
+  .bus-lollipop-chart svg text { @apply fill-[#718096] text-[11px] font-semibold; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__axis { @apply stroke-[#8ba0b3]; stroke-width: 1.5; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__axis-label { @apply fill-[#17385f] text-xs font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__capacity-line { @apply stroke-[#d49a27]; stroke-width: 1.7; stroke-dasharray: 5 4; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__capacity-value { @apply fill-[#a87512] text-[10px] font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__active-line { @apply stroke-[#164e8a]; stroke-width: 3; }
   .bus-lollipop-chart svg .bus-lollipop-chart__active-line--overcapacity { @apply stroke-red-500; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-line { @apply stroke-sky-300; stroke-width: 3; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__point { @apply fill-blue-600 stroke-white; stroke-width: 2.5; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-line { @apply stroke-[#18a6a0]; stroke-width: 3; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__point { @apply fill-[#164e8a] stroke-white; stroke-width: 2.5; }
   .bus-lollipop-chart svg .bus-lollipop-chart__point--overcapacity { @apply fill-red-500; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-point { @apply fill-sky-300 stroke-white; stroke-width: 2.5; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__active-value { @apply fill-blue-700 text-xs font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-point { @apply fill-[#18a6a0] stroke-white; stroke-width: 2.5; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__active-value { @apply fill-[#164e8a] text-xs font-black; }
   .bus-lollipop-chart svg .bus-lollipop-chart__active-value--overcapacity { @apply fill-red-600; }
-  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-value { @apply fill-sky-500 text-[10px] font-black; }
+  .bus-lollipop-chart svg .bus-lollipop-chart__reserved-value { @apply fill-[#07837e] text-[10px] font-black; }
   .bus-lollipop-chart svg .bus-lollipop-chart__hit-area { fill: transparent; }
   .bus-lollipop-chart svg .bus-lollipop-chart__value-button { @apply cursor-pointer outline-none transition-opacity; }
   .bus-lollipop-chart svg .bus-lollipop-chart__value-button:hover,
@@ -565,7 +583,10 @@
   .bus-rate-pill--red { @apply bg-red-50 text-red-700; }
   .bus-rate-pill--neutral { @apply bg-slate-100 text-slate-600; }
   .bus-capacity-button { @apply rounded-md border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-black text-blue-700 transition-colors hover:border-blue-200 hover:bg-blue-100; }
-  .bus-detail-table tbody tr { @apply cursor-pointer; }
+  .bus-detail-table thead th { @apply bg-[#f1f6f8] text-[#53687d]; }
+  .bus-detail-table tbody tr { @apply cursor-pointer transition-colors; }
+  .bus-detail-table tbody tr:nth-child(even) { @apply bg-[#f8fbfc]; }
+  .bus-detail-table tbody tr:hover { @apply bg-[#edf7f6]; }
   .bus-capacity-modal { @apply relative z-10 grid w-full max-w-md gap-5 rounded-xl border border-blue-100 bg-white p-6 shadow-xl; }
   .bus-capacity-modal__header { @apply flex items-center gap-4; }
   .bus-capacity-modal__header > span { @apply grid size-12 place-items-center rounded-lg bg-blue-50 text-blue-600; }

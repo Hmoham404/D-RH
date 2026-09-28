@@ -3548,7 +3548,10 @@ function BusBaseSurface({
             <div className="bus-lollipop-chart">
               <header>
                 <h3>{t.detail.chart}</h3>
-                <div><span className="is-active" />{t.detail.active} <span className="is-reserved" />{t.detail.present} <span className="is-capacity" />{t.detail.capacity}</div>
+                <div><span className="is-active" />{t.detail.active} <span className="is-reserved" />{t.detail.present} <span className="is-capacity" />{t.detail.capacity}
+                  {comparisonBusRows.map((row, index) => <span className="bus-lollipop-chart__bus-key" key={row.bus}><i style={{ backgroundColor: comparisonColors[index % comparisonColors.length] }} />{row.bus.replace(/^BUS\s*/i, '')}</span>)}
+                  {comparisonBusRows.some((row) => getCapacity(row) > 0 && row.total > getCapacity(row)) && <span className="bus-lollipop-chart__overcapacity-key"><i />{t.status.overloaded}</span>}
+                </div>
               </header>
               {comparisonBusRows.length ? (
                 <div className="bus-lollipop-chart__surface">
@@ -3563,6 +3566,7 @@ function BusBaseSurface({
                     <text className="bus-lollipop-chart__axis-label" x="18" y="125" textAnchor="middle" transform="rotate(-90 18 125)">{t.detail.number}</text>
                     {comparisonBusRows.map((row, index) => {
                       const x = 124 + index * 142;
+                      const busColor = comparisonColors[index % comparisonColors.length];
                       const activeY = 202 - ((row.total / comparisonMaximum) * 148);
                       const reservedY = 202 - ((row.today / comparisonMaximum) * 148);
                       const capacity = getCapacity(row);
@@ -3570,7 +3574,7 @@ function BusBaseSurface({
                       const capacityY = capacity ? 202 - ((capacity / comparisonMaximum) * 148) : null;
                       const shortName = row.bus.replace(/^BUS\s*/i, '');
                       return <g key={row.bus}>
-                        {capacityY !== null ? <><line className="bus-lollipop-chart__capacity-line" x1={x - 52} x2={x + 52} y1={capacityY} y2={capacityY} /><text className="bus-lollipop-chart__capacity-value" x={x + 58} y={capacityY + 4}>{capacity}</text></> : null}
+                        {capacityY !== null ? <><line className="bus-lollipop-chart__capacity-line" style={{ stroke: busColor }} x1={x - 52} x2={x + 52} y1={capacityY} y2={capacityY} /><text className="bus-lollipop-chart__capacity-value" style={{ fill: busColor }} x={x + 58} y={capacityY + 4}>{capacity}</text></> : null}
                         <g
                           className="bus-lollipop-chart__value-button"
                           role="button"
@@ -3585,9 +3589,9 @@ function BusBaseSurface({
                           }}
                         >
                           <rect className="bus-lollipop-chart__hit-area" x={x - 25} y="40" width="34" height="180" />
-                          <line className={`bus-lollipop-chart__active-line${isOverCapacity ? ' bus-lollipop-chart__active-line--overcapacity' : ''}`} x1={x - 8} x2={x - 8} y1="202" y2={activeY} />
-                          <circle className={`bus-lollipop-chart__point${isOverCapacity ? ' bus-lollipop-chart__point--overcapacity' : ''}`} cx={x - 8} cy={activeY} r="6" />
-                          <text className={`bus-lollipop-chart__active-value${isOverCapacity ? ' bus-lollipop-chart__active-value--overcapacity' : ''}`} x={x - 8} y={activeY - 12} textAnchor="middle">{row.total}</text>
+                          <line className="bus-lollipop-chart__active-line" style={{ stroke: isOverCapacity ? '#ef4444' : busColor }} x1={x - 8} x2={x - 8} y1="202" y2={activeY} />
+                          <circle className="bus-lollipop-chart__point" style={{ fill: isOverCapacity ? '#ef4444' : busColor }} cx={x - 8} cy={activeY} r="6" />
+                          <text className="bus-lollipop-chart__active-value" style={{ fill: isOverCapacity ? '#dc2626' : busColor }} x={x - 8} y={activeY - 12} textAnchor="middle">{row.total}</text>
                         </g>
                         <g
                           className="bus-lollipop-chart__value-button"
@@ -3603,11 +3607,11 @@ function BusBaseSurface({
                           }}
                         >
                           <rect className="bus-lollipop-chart__hit-area" x={x - 1} y="40" width="34" height="180" />
-                          <line className="bus-lollipop-chart__reserved-line" x1={x + 8} x2={x + 8} y1="202" y2={reservedY} />
-                          <circle className="bus-lollipop-chart__reserved-point" cx={x + 8} cy={reservedY} r="5.5" />
-                          <text className="bus-lollipop-chart__reserved-value" x={x + 8} y={reservedY - 12} textAnchor="middle">{row.today}</text>
+                          <line className="bus-lollipop-chart__reserved-line" style={{ stroke: busColor, opacity: 0.48 }} x1={x + 8} x2={x + 8} y1="202" y2={reservedY} />
+                          <circle className="bus-lollipop-chart__reserved-point" style={{ fill: busColor, opacity: 0.62 }} cx={x + 8} cy={reservedY} r="5.5" />
+                          <text className="bus-lollipop-chart__reserved-value" style={{ fill: busColor }} x={x + 8} y={reservedY - 12} textAnchor="middle">{row.today}</text>
                         </g>
-                        <text className="bus-lollipop-chart__bus-label" x={x} y="224" textAnchor="middle">{shortName}</text>
+                        <text className="bus-lollipop-chart__bus-label" style={{ fill: busColor }} x={x} y="224" textAnchor="middle">{shortName}</text>
                       </g>;
                     })}
                   </svg>

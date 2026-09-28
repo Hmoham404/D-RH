@@ -9,18 +9,18 @@ const iso = (date) => date.toISOString().slice(0, 10);
 const localIso = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 function getEmployeeHireIso(employee, referenceIsoDate = '') {
-  const rawHire = String(
-    employee?.hiredAt ??
-    employee?.hired_at ??
-    employee?.Date_Embauche ??
-    employee?.dateEmbauche ??
-    employee?.date_embauche ??
-    employee?.hireDate ??
-    '',
-  ).trim();
-  const isoHire = rawHire.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  const frenchHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
-  const frenchShortYearHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+  const hireValue = [employee?.hiredAt, employee?.hired_at, employee?.Date_Embauche,
+    employee?.dateEmbauche, employee?.date_embauche, employee?.hireDate]
+    .find((value) => value !== undefined && value !== null && String(value).trim() !== '') ?? '';
+  const excelDate = hireValue instanceof Date && !Number.isNaN(hireValue.getTime())
+    ? { y: hireValue.getFullYear(), m: hireValue.getMonth() + 1, d: hireValue.getDate() }
+    : typeof hireValue === 'number' ? XLSX.SSF.parse_date_code(hireValue) : null;
+  const rawHire = (excelDate
+    ? `${excelDate.y}-${String(excelDate.m).padStart(2, '0')}-${String(excelDate.d).padStart(2, '0')}`
+    : String(hireValue)).trim();
+  const isoHire = rawHire.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T.*)?$/);
+  const frenchHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s+.*)?$/);
+  const frenchShortYearHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})(?:\s+.*)?$/);
   const frenchMonthDayHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})$/);
   const dayOnlyHire = rawHire.match(/^(\d{1,2})$/);
   if (!isoHire && !frenchHire && !frenchShortYearHire && !frenchMonthDayHire && !dayOnlyHire) return '';
@@ -46,7 +46,7 @@ function isEmployeeStartedBy(employee, isoDate) {
 
 function isEmployeeAbsenceEligibleBy(employee, isoDate) {
   const hire = getEmployeeHireIso(employee, isoDate);
-  return !hire || hire <= isoDate;
+  return Boolean(hire) && hire <= isoDate;
 }
 
 function shouldAddEmployeeFromDirectory(employee, observedDates) {
@@ -179,13 +179,19 @@ export function buildDailyWeeks(analysis, employees) {
     return iso(date);
   }))];
   const directory = new Map(employees.map((employee) => [employeeKey(employee), employee]));
+  const directoryById = new Map(employees.flatMap((employee) => [employee.id, employee.finalCode]
+    .map(code).filter(Boolean).map((key) => [key, employee])));
   const roster = new Map();
-  const addPerson = (source) => {
-    const employee = directory.get(source.employeeKey);
+  const addPerson = (source, preferId = false) => {
+    const sourceId = code(source.sourceId || source.id);
+    const employee = preferId
+      ? directoryById.get(sourceId) || directory.get(source.employeeKey)
+      : directory.get(source.employeeKey) || directoryById.get(sourceId);
     if (!employee) return;
+    if (String(employee.status || source.employeeStatus || '').trim() && String(employee.status || source.employeeStatus).trim().toLowerCase() !== 'actif') return;
     const person = {
-      employeeKey: source.employeeKey, id: source.sourceId || source.id || source.employeeKey,
-      fullName: source.matchedName || source.fullName || source.sourceName || employee.fullName || '-',
+      employeeKey: employeeKey(employee), id: employee.id || employee.finalCode || employee.zk || employee.saber || source.sourceId || source.id || source.employeeKey,
+      fullName: employee.fullName || `${employee.lastName || ''} ${employee.firstName || ''}`.trim() || source.matchedName || source.fullName || source.sourceName || '-',
       department: employee.department || source.department || '', kind: employee.kind || source.kind || '',
       service: employee.service || source.service || '', employee,
       employeeStatus: employee.status || source.employeeStatus || '',
@@ -194,10 +200,12 @@ export function buildDailyWeeks(analysis, employees) {
   };
   const sourceCells = new Map();
   sourceSheets.forEach((sheet) => sheet.rows.forEach((row) => {
-    addPerson(row);
+    const employee = directoryById.get(code(row.id)) || directory.get(row.employeeKey);
+    addPerson(row, true);
+    if (!employee) return;
     row.days.forEach((day) => {
       if (day.isoDate && !['EMPTY', 'X'].includes(day.status) && day.display !== '-') {
-        sourceCells.set(`${row.employeeKey}|${day.isoDate}`, day);
+        sourceCells.set(`${employeeKey(employee)}|${day.isoDate}`, day);
       }
     });
   }));
@@ -250,7 +258,7 @@ export function buildDailyWeeks(analysis, employees) {
           status = sourceCell.status; display = sourceCell.display;
         } else {
           const hireDate = getEmployeeHireIso(employee, column.isoDate);
-          // A blank cell becomes ABS from the recorded hire date onward.
+          // Before the hire date, the cell stays empty; from the hire date, a blank closed day is ABS.
           if (hireDate && hireDate <= column.isoDate) {
             status = 'ABS'; display = 'ABS';
           }
@@ -260,7 +268,7 @@ export function buildDailyWeeks(analysis, employees) {
         if (!day) total += workedMinutes;
         return { ...column, status, display, raw: display, workedMinutes, detail: day?.punchesDisplay || '', entry: exitOnly ? '' : day?.entry || '', exit: exitOnly ? day.entry : day?.exit || '' };
       });
-      return { ...row, hiredAt: employee.hiredAt || employee.hired_at || '', days: cells, totalHours: clock(total), control: cells.some((day) => day.status === 'AVR') ? 'À vérifier' : '' };
+      return { ...row, hiredAt: employee.hiredAt || employee.hired_at || employee.Date_Embauche || employee.dateEmbauche || employee.date_embauche || employee.hireDate || '', days: cells, totalHours: clock(total), control: cells.some((day) => day.status === 'AVR') ? 'À vérifier' : '' };
     }).filter((row) => row.days.some((day) => day.status !== 'EMPTY'))
       .sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
     return { sheetName: `S_${start}`, weekId: `S${start.replaceAll('-', '')}`, title: `Semaine du ${start}`, dayColumns, rows };
@@ -271,14 +279,33 @@ export function buildDailyTable(analysis, employees, requestedDates) {
   if (!analysis) return { dayColumns: [], rows: [] };
   const allowed = new Set(requestedDates);
   const sheets = buildDailyWeeks(analysis, employees);
-  const dayColumns = sheets.flatMap((sheet) => sheet.dayColumns).filter((day) => allowed.has(day.isoDate));
+  const columnMap = new Map();
+  sheets.forEach((sheet) => sheet.dayColumns.forEach((day) => {
+    if (allowed.has(day.isoDate)) columnMap.set(day.isoDate, day);
+  }));
+  const dayColumns = [...columnMap.values()].sort((left, right) => left.isoDate.localeCompare(right.isoDate));
   const rows = new Map();
   sheets.forEach((sheet) => sheet.rows.forEach((row) => {
-    if (!rows.has(row.employeeKey)) rows.set(row.employeeKey, { ...row, days: [] });
-    rows.get(row.employeeKey).days.push(...row.days.filter((day) => allowed.has(day.isoDate)));
+    if (!rows.has(row.employeeKey)) rows.set(row.employeeKey, { ...row, dayByDate: new Map() });
+    const combined = rows.get(row.employeeKey);
+    row.days.forEach((day) => {
+      if (allowed.has(day.isoDate) && (!combined.dayByDate.has(day.isoDate) || combined.dayByDate.get(day.isoDate).status === 'EMPTY')) combined.dayByDate.set(day.isoDate, day);
+    });
   }));
+  rows.forEach((row) => {
+    row.days = dayColumns.map((column) => {
+      const existing = row.dayByDate.get(column.isoDate);
+      const hireDate = getEmployeeHireIso(row, column.isoDate);
+      if (hireDate && hireDate > column.isoDate) return { ...column, status: 'EMPTY', display: '-', raw: '-', workedMinutes: 0, detail: '', entry: '', exit: '' };
+      if (existing?.status === 'ABS' && !hireDate) return { ...column, status: 'EMPTY', display: '-', raw: '-', workedMinutes: 0, detail: '', entry: '', exit: '' };
+      if (existing && existing.status !== 'EMPTY') return existing;
+      if (hireDate && hireDate <= column.isoDate) return { ...column, status: 'ABS', display: 'ABS', raw: 'ABS', workedMinutes: 0, detail: '', entry: '', exit: '' };
+      return { ...column, status: 'EMPTY', display: '-', raw: '-', workedMinutes: 0, detail: '', entry: '', exit: '' };
+    });
+    delete row.dayByDate;
+  });
   return { dayColumns, rows: [...rows.values()].filter((row) => row.days.some((day) => day.status !== 'EMPTY')).map((row) => ({ ...row,
-    totalHours: clock(row.days.reduce((sum, day) => sum + day.workedMinutes, 0)),
+    totalHours: clock(row.days.reduce((sum, day) => sum + (day.workedMinutes || 0), 0)),
     control: row.days.some((day) => day.status === 'AVR') ? 'À vérifier' : '',
   })) };
 }

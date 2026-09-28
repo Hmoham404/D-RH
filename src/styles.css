@@ -610,13 +610,22 @@
   .stc-panel h2 { @apply text-base font-black text-[#071a55]; }
   .stc-panel p { @apply text-xs font-medium text-blue-900/50; }
   .stc-panel input { @apply min-w-72; }
-  .stc-panel--chart svg { @apply h-72 w-full; }
+  .stc-panel--chart { @apply flex min-h-0 flex-col; }
+  .stc-panel--chart .stc-chart { @apply min-h-[34rem] w-full flex-1; }
   .stc-panel--chart line { @apply stroke-red-100; }
   .stc-panel--chart path { fill: url(#stcReasonFill); }
-  .stc-panel--chart polyline { @apply fill-none stroke-red-500; stroke-width: 2.6; }
+  .stc-panel--chart polyline { @apply fill-none stroke-slate-500; stroke-width: 2.6; }
   .stc-panel--chart circle { @apply fill-red-500 stroke-white; stroke-width: 2.4; }
+  .stc-panel--chart circle { cursor: pointer; }
+  .stc-panel--chart circle:focus { outline: 2px solid #071a55; outline-offset: 3px; }
   .stc-panel--chart text { @apply fill-blue-900/55 text-[8px] font-bold; }
   .stc-panel--chart .stc-chart__value { @apply fill-[#071a55] text-[9px] font-black; }
+  .stc-panel--chart .stc-chart__label { @apply fill-blue-900/70 text-[6px] font-semibold; }
+  .stc-chart__cause { @apply relative mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900; }
+  .stc-chart__cause strong { @apply font-bold; }
+  .stc-chart__cause span { @apply font-semibold; }
+  .stc-chart__cause small { @apply text-blue-900/60; }
+  .stc-chart__cause button { @apply ml-auto rounded px-2 text-base leading-none text-blue-900/60 hover:bg-blue-100; }
   .stc-reason-list { @apply grid gap-3; }
   .stc-reason-card { @apply grid gap-2 rounded-lg border border-slate-200 bg-white p-3; }
   .stc-reason-card strong { @apply text-sm font-black text-[#071a55]; }

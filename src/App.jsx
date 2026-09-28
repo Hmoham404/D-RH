@@ -3330,7 +3330,7 @@ function BusBaseSurface({
     { people: 0, present: 0, absent: 0, verify: 0 },
   );
   const rate = totals.people ? Math.round((totals.present / totals.people) * 100) : 0;
-  const busPresenceColors = ['#2563eb', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
+  const busPresenceColors = ['#94a3b8', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899'];
   const busPresenceRows = busRows
     .filter((row) => normalizeLookupText(row.bus) !== 'SANS BUS')
     .map((row, index) => ({ ...row, color: busPresenceColors[index % busPresenceColors.length] }));
@@ -3987,6 +3987,7 @@ function StcDepartureSurface({
   labels,
 }) {
   const t = labels;
+  const [selectedCause, setSelectedCause] = useState(null);
   const filteredEmployees = useMemo(
     () =>
       employees.filter((employee) =>
@@ -4022,12 +4023,12 @@ function StcDepartureSurface({
   const palette = ['blue', 'red', 'amber', 'violet', 'green', 'slate'];
   const chartPoints = reasonRows.map((row, index) => {
     const x = 44 + index * (reasonRows.length > 1 ? 472 / (reasonRows.length - 1) : 0);
-    const y = 126 - (row.count / maxCount) * 88;
+    const y = 240 - (row.count / maxCount) * 150;
     return { ...row, x, y };
   });
   const polyline = chartPoints.map((point) => `${point.x},${point.y}`).join(' ');
   const area = chartPoints.length
-    ? `M${chartPoints[0].x},126 L${polyline} L${chartPoints.at(-1).x},126 Z`
+    ? `M${chartPoints[0].x},240 L${polyline} L${chartPoints.at(-1).x},240 Z`
     : '';
 
   return (
@@ -4056,19 +4057,46 @@ function StcDepartureSurface({
             </div>
           </header>
           {chartPoints.length ? (
-            <svg viewBox="0 0 570 170" role="img" aria-label={reasonRows.map((row) => `${row.reason}: ${row.count}`).join(', ')}>
+            <>
+            <svg className="stc-chart" viewBox="0 0 570 420" preserveAspectRatio="none" role="img" aria-label={reasonRows.map((row) => `${row.reason}: ${row.count}`).join(', ')}>
               <defs><linearGradient id="stcReasonFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#ef4444" stopOpacity=".28" /><stop offset="100%" stopColor="#ef4444" stopOpacity=".03" /></linearGradient></defs>
-              {[0, 25, 50, 75, 100].map((value) => <g key={value}><line x1="34" x2="548" y1={126 - value * .88} y2={126 - value * .88} /><text x="26" y={130 - value * .88} textAnchor="end">{value}%</text></g>)}
+              {[0, 25, 50, 75, 100].map((value) => <g key={value}><line x1="34" x2="548" y1={240 - value * 1.5} y2={240 - value * 1.5} /><text x="26" y={244 - value * 1.5} textAnchor="end">{value}%</text></g>)}
               <path d={area} />
               <polyline points={polyline} />
               {chartPoints.map((point) => (
                 <g key={point.reason}>
-                  <circle cx={point.x} cy={point.y} r="4" />
+                  <circle
+                    cx={point.x}
+                    cy={point.y}
+                    r="4"
+                    role="button"
+                    tabIndex="0"
+                    aria-label={`Afficher la cause ${point.reason}`}
+                    onClick={() => setSelectedCause(point)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedCause(point);
+                      }
+                    }}
+                  />
                   <text className="stc-chart__value" x={point.x} y={point.y - 10} textAnchor="middle">{point.count}</text>
-                  <text x={point.x} y="150" textAnchor="middle">{point.reason.length > 14 ? `${point.reason.slice(0, 13)}...` : point.reason}</text>
+                  <text className="stc-chart__label" x={point.x} y="260" textAnchor="end" transform={`rotate(-90 ${point.x} 260)`}>
+                    <title>{point.reason}</title>
+                    {point.reason}
+                  </text>
                 </g>
               ))}
             </svg>
+          {selectedCause && (
+            <div className="stc-chart__cause" role="status">
+              <strong>Cause selectionnee</strong>
+              <span>{selectedCause.reason}</span>
+              <small>{selectedCause.count} personne(s)</small>
+              <button type="button" onClick={() => setSelectedCause(null)} aria-label="Fermer">×</button>
+            </div>
+          )}
+            </>
           ) : <div className="rh-empty-inline">{t.chart.empty}</div>}
         </article>
 

@@ -20,15 +20,21 @@ function getEmployeeHireIso(employee, referenceIsoDate = '') {
   ).trim();
   const isoHire = rawHire.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   const frenchHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  const frenchShortYearHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2})$/);
+  const frenchMonthDayHire = rawHire.match(/^(\d{1,2})[/-](\d{1,2})$/);
   const dayOnlyHire = rawHire.match(/^(\d{1,2})$/);
-  if (!isoHire && !frenchHire && !dayOnlyHire) return '';
+  if (!isoHire && !frenchHire && !frenchShortYearHire && !frenchMonthDayHire && !dayOnlyHire) return '';
   const reference = String(referenceIsoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dayOnlyHire && !reference) return '';
+  if ((dayOnlyHire || frenchMonthDayHire) && !reference) return '';
   const [year, month, day] = dayOnlyHire
     ? [Number(reference[1]), Number(reference[2]), Number(dayOnlyHire[1])]
     : isoHire
       ? [Number(isoHire[1]), Number(isoHire[2]), Number(isoHire[3])]
-      : [Number(frenchHire[3]), Number(frenchHire[2]), Number(frenchHire[1])];
+      : frenchHire
+        ? [Number(frenchHire[3]), Number(frenchHire[2]), Number(frenchHire[1])]
+        : frenchShortYearHire
+          ? [2000 + Number(frenchShortYearHire[3]), Number(frenchShortYearHire[2]), Number(frenchShortYearHire[1])]
+          : [Number(reference[1]), Number(frenchMonthDayHire[2]), Number(frenchMonthDayHire[1])];
   if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return '';
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
@@ -218,14 +224,18 @@ export function buildDailyWeeks(analysis, employees) {
         const sourceCell = sourceCells.get(`${row.employeeKey}|${column.isoDate}`);
         const correction = corrections.get(`${row.employeeKey}|${column.isoDate}`);
         const exitOnly = day && !day.exit && correction?.exit && correction.entry === '';
+        const started = isEmployeeStartedBy(employee, column.isoDate);
         let status = 'EMPTY';
         let display = '-';
-        if (day) {
+        if (!started && (day || sourceCell)) {
+          status = 'X';
+          display = '-';
+        } else if (day) {
           const review = day.state !== 'OK' || day.matchState !== 'matched';
           status = review ? 'AVR' : 'POINTAGE';
           display = day.state !== 'OK' ? day.entry.slice(11, 16) : `${day.roundedClock}${review ? ' !' : ''}`;
           total += day.roundedMinutes;
-        } else if (sourceCell && isEmployeeStartedBy(employee, column.isoDate)) {
+        } else if (sourceCell) {
           status = sourceCell.status; display = sourceCell.display;
         } else {
           const hireDate = getEmployeeHireIso(employee, column.isoDate);

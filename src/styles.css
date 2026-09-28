@@ -109,7 +109,7 @@
   .rh-cell-badge--avr, .rh-panel-badge--orange { @apply bg-amber-50 text-amber-700; }
   .rh-cell-badge--abs, .rh-panel-badge--red { @apply bg-rose-50 text-rose-700; }
   .rh-cell-badge--stc, .rh-panel-badge--blue { @apply bg-blue-50 text-blue-700; }
-  .rh-cell-badge--empty, .rh-panel-badge--slate { @apply bg-slate-100 text-slate-500; }
+  .rh-cell-badge--empty, .rh-cell-badge--x, .rh-panel-badge--slate { @apply bg-slate-100 text-slate-500; }
   .rh-panel-badge--violet { @apply bg-violet-50 text-violet-700; }
 
   /* Overview and production indicators. */

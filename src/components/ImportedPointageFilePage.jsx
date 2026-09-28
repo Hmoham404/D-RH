@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { normalizeSavedPointageSnapshot } from '../lib/dailyPointage.js';
+import { loadEmployees } from '../services/employeeStore';
 import { loadPointageSnapshot } from '../services/pointageSnapshotStore';
 
 function formatDateTime(value) {
@@ -58,12 +60,16 @@ export default function ImportedPointageFilePage({ onNavigateHome, onNavigateAdm
 
     async function bootstrapSnapshot() {
       setIsLoading(true);
-      const result = await loadPointageSnapshot();
+      const [employeesResult, result] = await Promise.all([
+        loadEmployees(),
+        loadPointageSnapshot(),
+      ]);
+      const normalizedSnapshot = await normalizeSavedPointageSnapshot(result.data, employeesResult.data || []);
       if (cancelled) return;
 
-      setSnapshot(result.data || null);
+      setSnapshot(normalizedSnapshot || null);
       setStatusMessage(result.message);
-      setSelectedDate(getLatestTrackedDate(result.data));
+      setSelectedDate(getLatestTrackedDate(normalizedSnapshot));
       setIsLoading(false);
     }
 

@@ -112,6 +112,37 @@ test('future hires are not marked absent before their hire date', async () => {
   assert.equal(attendance[1].absences.some((person) => person.id === '343'), false);
 });
 
+test('short hire dates prevent ABS before the hire day', async () => {
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Semaine 2026'],
+    ['ID', 'Nom', 'Prenom', 'Departement', 'Categorie', '09/26', '09/28', 'Heures standard'],
+    [356, 'BEN BRAHIM', 'SABRINE', 'PRODUCTION', 'MOD', 'ABS', 'ABS', ''],
+    [357, 'CHAHED', 'FERDAOUS', 'PRODUCTION', 'MOD', 'ABS', 'ABS', ''],
+  ]), 'S1');
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['ID Emp.', 'Nom', 'Temps du Ptg'], [4, 'Z', '09/26/2026 07:00'],
+  ]), 'Export');
+  const base = [
+    ...employees,
+    { id: '356', fullName: 'BEN BRAHIM SABRINE', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '28/09' },
+    { id: '357', fullName: 'CHAHED FERDAOUS', status: 'Actif', department: 'PRODUCTION', service: 'MET', kind: 'MOD', hiredAt: '28/09/26' },
+  ];
+  const result = await prepareDailyPointage({ name: 'future-hires.xlsx', arrayBuffer: async () => XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) }, base, null, rules);
+
+  assert.equal(cell(result, '356', '2026-09-26').status, 'X');
+  assert.equal(cell(result, '356', '2026-09-26').display, '-');
+  assert.equal(cell(result, '357', '2026-09-26').status, 'X');
+  assert.equal(cell(result, '357', '2026-09-26').display, '-');
+  assert.equal(cell(result, '356', '2026-09-28').status, 'ABS');
+  assert.equal(cell(result, '357', '2026-09-28').status, 'ABS');
+  const [day26, day28] = buildAttendanceByDay(buildDailyTable(result, base, ['2026-09-26', '2026-09-28']));
+  assert.equal(day26.absences.some((person) => person.id === '356'), false);
+  assert.equal(day26.absences.some((person) => person.id === '357'), false);
+  assert.equal(day28.absences.some((person) => person.id === '356'), true);
+  assert.equal(day28.absences.some((person) => person.id === '357'), true);
+});
+
 test('blank cells become ABS only from a recorded hire date onward', async () => {
   const base = [
     ...employees,

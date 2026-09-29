@@ -4641,7 +4641,11 @@ export default function App() {
 
       setEmployees(Array.isArray(employeesResult.data) ? employeesResult.data : []);
       setSnapshot(normalizedSnapshot || null);
-      setStatusMessage(snapshotResult.message || employeesResult.message || translate('messages.dashboardReady', 'Dashboard RH pret.'));
+      setStatusMessage(
+        employeesResult.mode !== 'supabase' && employeesResult.message
+          ? employeesResult.message
+          : snapshotResult.message || employeesResult.message || translate('messages.dashboardReady', 'Dashboard RH pret.'),
+      );
       setSelectedDate(getDefaultSelectedDate(normalizedSnapshot));
       setIsLoading(false);
     }
@@ -5245,6 +5249,9 @@ export default function App() {
       const importResult = await analyzeEmployeeBaseFile(file);
       setStatusMessage(translate('employeeBase.replacingImport', 'Remplacement de la base RH en cours...'));
       const replaceResult = await replaceEmployeeDirectory(importResult.employees);
+      if (replaceResult.mode !== 'supabase') {
+        throw new Error(replaceResult.message || 'Import non confirme dans Supabase.');
+      }
       const importedEmployees = Array.isArray(replaceResult.employees) ? sortEmployeeRecords(replaceResult.employees) : [];
       setEmployees(importedEmployees);
       setSearchValue('');

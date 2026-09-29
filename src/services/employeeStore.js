@@ -385,6 +385,35 @@ async function saveActiveDirectoryRecordIds(employees = []) {
   }
 }
 
+async function activateSavedEmployee(recordId) {
+  const { data: state, error: stateError } = await supabase
+    .from(DIRECTORY_STATE_TABLE)
+    .select('payload')
+    .eq('id', DIRECTORY_STATE_ID)
+    .maybeSingle();
+  if (stateError) throw stateError;
+
+  let activeIds = Array.isArray(state?.payload?.recordIds)
+    ? new Set(state.payload.recordIds.map((value) => cleanText(value)).filter(Boolean))
+    : null;
+  if (activeIds) {
+    activeIds.add(cleanText(recordId));
+  } else {
+    // Older installations may not have a directory state row. Keep every existing
+    // remote employee active when creating that row for the first time.
+    const { data: rows, error: rowsError } = await supabase.from(TABLE_NAME).select('record_id');
+    if (rowsError) throw rowsError;
+    activeIds = new Set((rows || []).map((row) => cleanText(row.record_id)).filter(Boolean));
+    activeIds.add(cleanText(recordId));
+  }
+
+  const { error } = await supabase.from(DIRECTORY_STATE_TABLE).upsert(
+    { id: DIRECTORY_STATE_ID, payload: { recordIds: [...activeIds] }, updated_at: new Date().toISOString() },
+    { onConflict: 'id' },
+  );
+  if (error) throw error;
+}
+
 function mergeEmployees(baseEmployees, incomingEmployees) {
   const merged = dedupeEmployees(baseEmployees).map((employee, index) =>
     normalizeEmployee(employee, index),
@@ -541,22 +570,35 @@ export async function loadEmployees() {
   }
 
   try {
-    const { data, error } = await supabase.from(TABLE_NAME).select('*').order('full_name');
-
-    if (error) {
-      return {
-        data: localFallbackEmployees,
-        mode: storedEmployees.length ? 'local-cache' : 'local-disabled',
-        message: storedEmployees.length
-          ? 'Connexion Supabase indisponible. Base RH locale chargee depuis ce navigateur.'
-          : 'Connexion Supabase indisponible. Aucune sauvegarde locale des employes n est utilisee.',
-      };
-    }
-
     const activeRecordIds = await loadActiveDirectoryRecordIds();
-    const directoryRows = activeRecordIds
-      ? (data || []).filter((row) => activeRecordIds.has(cleanText(row.record_id)))
-      : data || [];
+    let directoryRows = [];
+
+    if (activeRecordIds) {
+      const activeIds = [...activeRecordIds];
+      // Supabase caps each response page. Fetch the authoritative active IDs in
+      // small batches so larger directories are never silently truncated.
+      for (let offset = 0; offset < activeIds.length; offset += 100) {
+        const { data, error } = await supabase
+          .from(TABLE_NAME)
+          .select('*')
+          .in('record_id', activeIds.slice(offset, offset + 100));
+        if (error) throw error;
+        directoryRows.push(...(data || []));
+      }
+    } else {
+      // Legacy installs without an active-ID list need explicit pagination too.
+      const pageSize = 500;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+          .from(TABLE_NAME)
+          .select('*')
+          .order('full_name')
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        directoryRows.push(...(data || []));
+        if ((data || []).length < pageSize) break;
+      }
+    }
 
     if (!directoryRows.length) {
       // The shared directory is authoritative: remove stale browser copies when it is empty.
@@ -568,9 +610,14 @@ export async function loadEmployees() {
       };
     }
 
-    const remoteEmployees = applyDeletedRecordFilter(
-      mergeLocalOnlyFields(dedupeEmployees(directoryRows.map(mapRowToEmployee)), storedEmployees),
+    // Supabase is authoritative after a successful fetch. Browser tombstones are
+    // only a local fallback; applying them here can hide valid remote employees
+    // after an earlier delete failed partway through its online synchronization.
+    const remoteEmployees = mergeLocalOnlyFields(
+      dedupeEmployees(directoryRows.map(mapRowToEmployee)),
+      storedEmployees,
     );
+    if (activeRecordIds) writeDeletedRecordIds(new Set());
     writeLocalEmployees(remoteEmployees);
 
     return {
@@ -583,24 +630,18 @@ export async function loadEmployees() {
         data: localFallbackEmployees,
         mode: localCacheExists ? 'local-cache' : 'local-disabled',
         message: localCacheExists
-          ? 'Connexion Supabase indisponible. Base RH locale chargee depuis ce navigateur.'
-          : 'Connexion Supabase indisponible. Aucune sauvegarde locale des employes n est utilisee.',
+          ? `${formatSupabaseError(error, 'Chargement de la base RH')} Donnees locales affichees; les changements recents en ligne peuvent manquer.`
+          : formatSupabaseError(error, 'Chargement de la base RH'),
       };
   }
 }
 
 export async function saveEmployeeRecord(employee) {
-  const localSave = upsertEmployeeLocally(employee);
-  const normalized = localSave.employee;
+  const normalized = normalizeEmployee(employee);
   const configIssue = getSupabaseConfigIssue();
 
   if (!hasSupabaseEnv || !supabase) {
-    return {
-      employee: normalized,
-      employees: localSave.employees,
-      mode: 'local-disabled',
-      message: `${configIssue || 'Supabase indisponible.'} La fiche de ${normalized.fullName || 'ce collaborateur'} est sauvegardee dans la base locale du navigateur.`,
-    };
+    throw new Error(`${configIssue || 'Supabase indisponible.'} La fiche n a pas ete sauvegardee en ligne.`);
   }
 
   const row = mapEmployeeToRow(normalized);
@@ -613,20 +654,15 @@ export async function saveEmployeeRecord(employee) {
 
     if (error) {
       const supabaseMessage = formatSupabaseError(error, 'Sauvegarde employe');
-      return {
-        employee: normalized,
-        employees: localSave.employees,
-        mode: 'local-disabled',
-        message: `${supabaseMessage} La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
-      };
+      throw new Error(supabaseMessage);
     }
 
     const savedEmployee = {
       ...mapRowToEmployee(data),
       userLevel: normalized.userLevel,
     };
+    await activateSavedEmployee(savedEmployee.recordId);
     const syncedSave = upsertEmployeeLocally(savedEmployee);
-    await saveActiveDirectoryRecordIds(syncedSave.employees);
 
     return {
       employee: savedEmployee,
@@ -635,13 +671,10 @@ export async function saveEmployeeRecord(employee) {
       message: `Fiche de ${savedEmployee.fullName} sauvegardee dans Supabase.`,
     };
   } catch (error) {
-    const supabaseMessage = formatSupabaseError(error, 'Sauvegarde employe');
-    return {
-      employee: normalized,
-      employees: localSave.employees,
-      mode: 'local-disabled',
-      message: `${supabaseMessage} La fiche de ${normalized.fullName || 'ce collaborateur'} reste sauvegardee dans la base locale du navigateur.`,
-    };
+    const supabaseMessage = error instanceof Error && error.message
+      ? error.message
+      : formatSupabaseError(error, 'Sauvegarde employe');
+    throw new Error(`${supabaseMessage} La fiche n a pas ete confirmee dans la base en ligne.`);
   }
 }
 
@@ -671,60 +704,39 @@ export async function syncEmployeesToSupabase(employeeList = localEmployeesSeed)
 export async function replaceEmployeeDirectory(employeeList = []) {
   // A replacement must contain only the newly imported Excel records.
   const normalizedEmployees = buildPreparedEmployeeList(employeeList);
-  writeDeletedRecordIds(new Set());
-  writeLocalEmployees(normalizedEmployees);
   const configIssue = getSupabaseConfigIssue();
 
   if (!hasSupabaseEnv || !supabase) {
-    return {
-      employees: normalizedEmployees,
-      mode: 'local-disabled',
-      message: `${configIssue || 'Supabase indisponible.'} La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
-    };
+    throw new Error(`${configIssue || 'Supabase indisponible.'} L import n a pas ete sauvegarde en ligne.`);
   }
 
   try {
-    let retainedLegacyRecords = false;
-
-    try {
-      await deleteAllRemoteEmployees();
-    } catch {
-      // The directory state below keeps legacy records out of the active RH base.
-      retainedLegacyRecords = true;
-    }
-
     if (normalizedEmployees.length) {
       const rows = normalizedEmployees.map(mapEmployeeToRow);
       const { error } = await supabase.from(TABLE_NAME).upsert(rows, { onConflict: 'record_id' });
 
       if (error) {
-        const supabaseMessage = formatSupabaseError(error, 'Import base RH');
-        return {
-          employees: normalizedEmployees,
-          mode: 'local-disabled',
-          message: `${supabaseMessage} La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
-        };
+        throw new Error(formatSupabaseError(error, 'Import base RH'));
       }
     }
 
+    // Publish the new active set only after every imported row was accepted.
     await saveActiveDirectoryRecordIds(normalizedEmployees);
+    writeDeletedRecordIds(new Set());
+    writeLocalEmployees(normalizedEmployees);
 
     return {
       employees: normalizedEmployees,
       mode: 'supabase',
       message: normalizedEmployees.length
-        ? retainedLegacyRecords
-          ? `Base RH active remplacee par ${normalizedEmployees.length} fiche(s).`
-          : `Base RH remplacee par ${normalizedEmployees.length} fiche(s) dans Supabase.`
+        ? `Base RH remplacee par ${normalizedEmployees.length} fiche(s) dans Supabase.`
         : 'Base RH videe dans Supabase.',
     };
   } catch (error) {
-    const supabaseMessage = formatSupabaseError(error, 'Import base RH');
-    return {
-      employees: normalizedEmployees,
-      mode: 'local-disabled',
-      message: `${supabaseMessage} La base RH locale du navigateur a ete remplacee par ${normalizedEmployees.length} fiche(s).`,
-    };
+    const message = error instanceof Error && error.message
+      ? error.message
+      : formatSupabaseError(error, 'Import base RH');
+    throw new Error(`${message} L ancienne base reste affichee; le nouvel import n a pas ete confirme en ligne.`);
   }
 }
 

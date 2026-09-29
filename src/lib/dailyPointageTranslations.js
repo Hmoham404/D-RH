@@ -2,11 +2,11 @@ export const dailyPointageTranslations = {
   fr: {
     overview: {
       accidentTitle: 'Jours sans accident de travail', eachDay: 'chaque jour', accidentFree: 'sans accident',
-      staffCount: 'Nombre du personnel', totalMod: 'Effectif total MOD', presentMod: 'Présents MOD', onSite: 'Actuellement sur site',
-      absentTitle: '% ABS MOD', modRateTitle: 'Taux MOD', absentRate: 'Taux d’absentéisme', presenceRate: 'Taux de présence', previousMonth: 'vs mois précédent', absentDelta: '+ 2,1 pts', presenceDelta: '+ 1,8 pts',
+      staffCount: 'Totale de MOD Actif', totalMod: 'Effectif total MOD', presentMod: 'Présents MOD', onSite: 'Actuellement sur site',
+      absentTitle: 'Pourcentage d’absentéisme MOD', modRateTitle: 'MOD présente / MOD Target', absentRate: 'Taux d’absentéisme', presenceRate: 'Taux de présence', previousMonth: 'vs mois précédent', absentDelta: '+ 2,1 pts', presenceDelta: '+ 1,8 pts',
       advice: 'Bon à savoir', stable: 'Le taux de présence est stable cette semaine. Continuons nos efforts pour maintenir cette dynamique !',
       lastUpdated: 'Dernière mise à jour : {date} à 10:24', dataCurrent: 'Données à jour',
-      evolution: 'Évolution du taux de présence', periodAria: 'Période du graphique',
+      evolution: 'Évolution de la présence des MOD', periodAria: 'Période du graphique',
       quarter: '3 mois', month: 'Mois actuel', week: 'Semaine actuelle',
       importedQuarter: 'Vue selon les données importées : mois, semaines et semaine courante', importedMonth: 'Détail du mois actuel selon les données importées', importedWeek: 'Détail de la semaine actuelle selon les données importées',
       lastThreeMonths: '3 derniers mois', currentMonth: 'Mois actuel ({month})', currentWeek: 'Semaine actuelle', target: 'Objectif : 90%',

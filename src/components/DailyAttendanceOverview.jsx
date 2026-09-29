@@ -46,9 +46,9 @@ function RatePanel({ tone, title, value, label, delta, previous, icon, ringPerce
   return (
     <article className={`mod-rate-card mod-rate-card--${tone}${onDoubleClick ? ' mod-rate-card--editable' : ''}`} onDoubleClick={onDoubleClick} title={onDoubleClick ? editHint : undefined}>
       <div className="mod-rate-card__icon"><DashboardIcon type={icon} /></div>
+      <h2>{title}</h2>
       <div className="mod-rate-card__ring" style={{ '--rate-angle': `${Math.max(0, Math.min(100, Number(ringPercent) || 0)) * 3.6}deg` }}><strong>{value}</strong></div>
       <div className="mod-rate-card__copy">
-        <h2>{title}</h2>
         {editing ? <form className="mod-rate-target-editor" onSubmit={(event) => { event.preventDefault(); onSave(); }} onDoubleClick={(event) => event.stopPropagation()}>
           <label>{targetLabel}<input autoFocus aria-label={targetLabel} type="number" min="1" step="1" required value={targetDraft} onChange={(event) => onDraftChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }} /></label>
           <div><button type="submit">{saveLabel}</button><button type="button" onClick={onCancel}>{cancelLabel}</button></div>
@@ -188,11 +188,6 @@ function buildChartDataset(history, analysisDate, period, locale, translate) {
 function PresenceEvolutionChart({ history = [], analysisDate, currentRate, locale, translate }) {
   const [period, setPeriod] = useState('quarter');
   const latestRate = Math.round(currentRate || 87);
-  const titles = {
-    quarter: translate('daily.overview.importedQuarter'),
-    month: translate('daily.overview.importedMonth'),
-    week: translate('daily.overview.importedWeek'),
-  };
   const dataset = buildChartDataset(history, analysisDate, period, locale, translate);
   const labels = dataset.labels.length ? dataset.labels : ['MOD'];
   const values = (dataset.values.length ? dataset.values : [latestRate]).map((value) => value ?? null);
@@ -220,7 +215,6 @@ function PresenceEvolutionChart({ history = [], analysisDate, currentRate, local
           <span className="mod-section-icon"><DashboardIcon type="chart" /></span>
           <div>
             <h2>{translate('daily.overview.evolution')}</h2>
-            <p>{titles[period]}</p>
           </div>
         </div>
         <div className="mod-chart-tabs" aria-label={translate('daily.overview.periodAria')}>

@@ -4679,7 +4679,7 @@ export default function App() {
       setIsImporting(true);
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
       const nextSnapshot = await prepareDailyPointage(file, employees, null,
-        { dateOrder: 'mdy', breakMinutes: 0, roundingMinutes: 1, closeDays: true });
+        { dateOrder: 'mdy', breakMinutes: 24, roundingMinutes: 1, closeDays: true });
       setStatusMessage(translate('messages.replacingBase', 'Remplacement de la base pointage en cours...'));
       const saveResult = await replacePointageSnapshot(nextSnapshot);
       if (saveResult.mode !== 'supabase') throw new Error(saveResult.message);

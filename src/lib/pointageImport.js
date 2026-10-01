@@ -169,6 +169,14 @@ function formatMinutesAsClock(totalMinutes) {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
+function getBreakMinutes(dayRow, configuredBreakMinutes) {
+  const department = cleanText(dayRow.department).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const service = cleanText(dayRow.service).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+  const noBreak = (department.includes('ADMINISTRATION') && service.includes('GARDIENNAGE'))
+    || (department.includes('PRODUCTION') && (/\bINJ\b/.test(service) || service.includes('INJECTION')));
+  return noBreak ? 0 : configuredBreakMinutes;
+}
+
 function excelFractionToClock(value) {
   if (!Number.isFinite(value)) return '';
   const totalMinutes = Math.round(value * 24 * 60);
@@ -921,7 +929,8 @@ export async function analyzePointageFile(file, employees, options = {}) {
       const firstPunch = sortedPunches[0];
       const lastPunch = sortedPunches[sortedPunches.length - 1];
       const bruteMinutes = isOdd ? 0 : Math.max(0, Math.round((lastPunch - firstPunch) / 60000));
-      const afterBreakMinutes = isOdd ? 0 : Math.max(0, bruteMinutes - (options.breakMinutes ?? 30));
+      const breakMinutes = getBreakMinutes(dayRow, options.breakMinutes ?? 30);
+      const afterBreakMinutes = isOdd ? 0 : Math.max(0, bruteMinutes - breakMinutes);
       const rounding = options.roundingMinutes ?? 30;
       const roundedMinutes = isOdd ? 0 : Math.floor(afterBreakMinutes / Math.max(1, rounding)) * Math.max(1, rounding);
 
@@ -943,6 +952,7 @@ export async function analyzePointageFile(file, employees, options = {}) {
         entry: firstPunch ? formatFrDateTime(firstPunch) : '',
         exit: !isOdd && lastPunch ? formatFrDateTime(lastPunch) : '',
         bruteMinutes,
+        breakMinutes,
         afterBreakMinutes,
         roundedMinutes,
         roundedClock: formatMinutesAsClock(roundedMinutes),

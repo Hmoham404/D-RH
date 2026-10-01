@@ -345,7 +345,7 @@ export async function normalizeSavedPointageSnapshot(snapshot, employees) {
   const current = getCurrentFilePointage(snapshot);
   const original = snapshot.currentFilePointage;
   const datesChanged = original && current?.rawRows?.some((row, index) => row.isoDate !== original.rawRows[index]?.isoDate);
-  if (snapshot.sourceOnlyVersion === 1 && !datesChanged) {
+  if (snapshot.sourceOnlyVersion === 1 && !datesChanged && Number(current.calculationRules?.breakMinutes) === 24) {
     return { ...snapshot, weeklySheets: buildDailyWeeks(snapshot, employees) };
   }
   if (!current?.rawRows?.length) return null;
@@ -361,7 +361,7 @@ export async function normalizeSavedPointageSnapshot(snapshot, employees) {
   sheets.forEach((rows, name) => XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), name));
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
   const result = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, snapshot,
-    { breakMinutes: 0, roundingMinutes: 1, closeDays: true, ...current.calculationRules, dateOrder: 'mdy' });
+    { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakMinutes: 24, dateOrder: 'mdy' });
   const sourceWeeklySheets = current.sourceWeeklySheets || [];
   const rebuilt = { ...result, sourceWeeklySheets, manualCorrections: current.manualCorrections || [],
     currentFilePointage: { ...result.currentFilePointage, sourceWeeklySheets, manualCorrections: current.manualCorrections || [] } };

@@ -29,7 +29,7 @@ export async function correctDailyPointage(snapshot, employees, { employeeKey, i
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Pointage');
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
   const next = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, null,
-    { breakMinutes: 0, roundingMinutes: 1, closeDays: true, ...current.calculationRules, dateOrder: 'mdy' });
+    { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakMinutes: 24, dateOrder: 'mdy' });
   const correction = { employeeKey, isoDate, fullName: person.fullName, correctedAt: new Date().toISOString(),
     before: { status: day.status, entry: day.entry, exit: day.exit, punches: originalRows },
     after: { entry, exit } };

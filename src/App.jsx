@@ -15,13 +15,14 @@ import {
   replaceEmployeeDirectory,
   saveEmployeeRecord,
 } from './services/employeeStore';
-import { loadPointageSnapshot, replacePointageSnapshot } from './services/pointageSnapshotStore';
+import { loadPointageSnapshot, savePointageSnapshot } from './services/pointageSnapshotStore';
 import { loadBusCapacities, readLocalBusCapacities, saveBusCapacities } from './services/busCapacityStore';
 
 const mycLogoUrl = new URL('../MYC beauty innovation TUNISIA @300x-100.png', import.meta.url).href;
 const rhManagerAvatarUrl = new URL('./assets/rh-manager-avatar.svg', import.meta.url).href;
 const LANGUAGE_STORAGE_KEY = 'rh-dashboard-language';
 const PRODUCTION_MOD_TARGET_STORAGE_KEY = 'rh-dashboard-production-mod-target';
+const POINTAGE_BREAK_MINUTES_STORAGE_KEY = 'rh-dashboard-pointage-break-minutes';
 const DEFAULT_PRODUCTION_MOD_TARGET = 65;
 const LANGUAGE_OPTIONS = [
   { key: 'fr', shortLabel: 'FR', label: 'Francais' },
@@ -1475,6 +1476,18 @@ function getInitialProductionModTarget() {
     window.localStorage.getItem(PRODUCTION_MOD_TARGET_STORAGE_KEY),
     DEFAULT_PRODUCTION_MOD_TARGET,
   );
+}
+
+function getStoredPointageBreakMinutes() {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(POINTAGE_BREAK_MINUTES_STORAGE_KEY);
+  if (raw === null || raw.trim() === '') return null;
+  const stored = Number(raw);
+  return Number.isFinite(stored) && stored >= 0 && stored <= 180 ? stored : null;
+}
+
+function getInitialPointageBreakMinutes() {
+  return getStoredPointageBreakMinutes() ?? 24;
 }
 
 function getProductionServiceLabel(key, translate, fallback) {
@@ -4337,6 +4350,8 @@ export default function App() {
   const [activeEmployeeBaseModal, setActiveEmployeeBaseModal] = useState('');
   const [activeProductionModal, setActiveProductionModal] = useState('');
   const [productionModTarget, setProductionModTarget] = useState(getInitialProductionModTarget);
+  const [pointageBreakMinutes, setPointageBreakMinutes] = useState(getInitialPointageBreakMinutes);
+  const storedPointageBreakMinutes = getStoredPointageBreakMinutes();
   const [kpiSearchValue, setKpiSearchValue] = useState('');
   const [employeeEditorMode, setEmployeeEditorMode] = useState('closed');
   const [employeeDraft, setEmployeeDraft] = useState(null);
@@ -4636,15 +4651,30 @@ export default function App() {
         loadEmployees(),
         loadPointageSnapshot(),
       ]);
-      const normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || []);
+      const savedBreakMinutes = Number(snapshotResult.data?.calculationRules?.breakMinutes ?? snapshotResult.data?.currentFilePointage?.calculationRules?.breakMinutes);
+      const activeBreakMinutes = storedPointageBreakMinutes ?? (Number.isFinite(savedBreakMinutes) && savedBreakMinutes >= 0 && savedBreakMinutes <= 180 ? savedBreakMinutes : pointageBreakMinutes);
+      if (activeBreakMinutes !== pointageBreakMinutes) setPointageBreakMinutes(activeBreakMinutes);
+      let normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || [], activeBreakMinutes);
+      let snapshotRepairMessage = '';
+      if ((Number(snapshotResult.data?.currentFilePointage?.dateNormalizationVersion || 0) < 4
+        && normalizedSnapshot?.currentFilePointage?.dateNormalizationVersion >= 4)
+        || (snapshotResult.data && Number(snapshotResult.data.calculationRules?.breakMinutes ?? snapshotResult.data.currentFilePointage?.calculationRules?.breakMinutes) !== activeBreakMinutes)) {
+        const repairResult = await savePointageSnapshot(normalizedSnapshot);
+        if (repairResult.mode === 'supabase') {
+          normalizedSnapshot = repairResult.data || normalizedSnapshot;
+          snapshotRepairMessage = translate('messages.pointageDatesCorrected', 'Dates du pointage corrigées et sauvegardées dans Supabase.');
+        } else {
+          snapshotRepairMessage = repairResult.message;
+        }
+      }
       if (cancelled) return;
 
       setEmployees(Array.isArray(employeesResult.data) ? employeesResult.data : []);
       setSnapshot(normalizedSnapshot || null);
       setStatusMessage(
-        employeesResult.mode !== 'supabase' && employeesResult.message
+        snapshotRepairMessage || (employeesResult.mode !== 'supabase' && employeesResult.message
           ? employeesResult.message
-          : snapshotResult.message || employeesResult.message || translate('messages.dashboardReady', 'Dashboard RH pret.'),
+          : snapshotResult.message || employeesResult.message || translate('messages.dashboardReady', 'Dashboard RH pret.')),
       );
       setSelectedDate(getDefaultSelectedDate(normalizedSnapshot));
       setIsLoading(false);
@@ -4671,6 +4701,12 @@ export default function App() {
     }
   }, [productionModTarget]);
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(POINTAGE_BREAK_MINUTES_STORAGE_KEY, String(pointageBreakMinutes));
+    }
+  }, [pointageBreakMinutes]);
+
   async function handleImportFile(event) {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -4678,10 +4714,9 @@ export default function App() {
     try {
       setIsImporting(true);
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
-      const nextSnapshot = await prepareDailyPointage(file, employees, null,
-        { dateOrder: 'mdy', breakMinutes: 24, roundingMinutes: 1, closeDays: true });
-      setStatusMessage(translate('messages.replacingBase', 'Remplacement de la base pointage en cours...'));
-      const saveResult = await replacePointageSnapshot(nextSnapshot);
+      const nextSnapshot = await prepareDailyPointage(file, employees, snapshot,
+        { dateOrder: 'dmy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true });
+      const saveResult = await savePointageSnapshot(nextSnapshot);
       if (saveResult.mode !== 'supabase') throw new Error(saveResult.message);
       const savedSnapshot = saveResult.data || nextSnapshot;
       setSnapshot(savedSnapshot);
@@ -5410,7 +5445,7 @@ export default function App() {
         </header>
 
         <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
-          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
+          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
           {isEmployeeSection || isDepartmentSection || isStcSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">

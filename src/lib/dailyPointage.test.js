@@ -278,6 +278,42 @@ test('direct pointage import defaults to source month/day dates', async () => {
   assert.equal(result.rawRows[0].pointageAtDisplay, '10/09/2026 07:42:00');
 });
 
+test('daily import and French display keep October 1 from the source 10/01 date', async () => {
+  const result = await prepareDailyPointage(file([[4, 'Z', '10/01/2026 07:36']]), employees, null, rules);
+  assert.deepEqual(result.importDiagnostics.incomingDates, ['2026-10-01']);
+  assert.equal(result.rawRows[0].pointageAtDisplay, '01/10/2026 07:36:00');
+  assert.equal(formatPointageDate(result.rawRows[0].isoDate), '01 oct 2026');
+});
+
+test('saved dmy snapshot from the bad import is migrated and rebuilt as October 1', async () => {
+  const rawRow = { sourceId: '4', sourceName: 'Z', employeeKey: '4', sheetName: 'Export',
+    isoDate: '2026-01-10', pointageAt: '2026-01-10T07:36:00', pointageAtDisplay: '10/01/2026 07:36:00' };
+  const snapshot = {
+    importId: 'legacy-dmy-import', generatedAt: '2026-10-01T12:00:00.000Z',
+    sourceOnlyVersion: 1, dateNormalizationVersion: 3, rawRows: [rawRow],
+    dayRows: [{ employeeKey: '4', isoDate: '2026-01-10', entry: '10/01/2026 07:36:00',
+      exit: '', punchesDisplay: '10/01/2026 07:36:00' }],
+    dailySummaries: [{ isoDate: '2026-01-10' }], periodStart: '2026-01-10', periodEnd: '2026-01-10',
+    summary: { trackedDays: 1 },
+    currentFilePointage: {
+      ...rules, sourceOnlyVersion: 1, dateNormalizationVersion: 3, fileName: 'source.xlsx',
+      calculationRules: { ...rules, dateOrder: 'dmy' }, rawRows: [rawRow],
+      dayRows: [{ employeeKey: '4', isoDate: '2026-01-10', entry: '10/01/2026 07:36:00',
+        exit: '', punchesDisplay: '10/01/2026 07:36:00' }],
+      sourceWeeklySheets: [{ sheetName: 'S1', dayColumns: [{ isoDate: '2026-01-10' }], rows: [] }],
+      closedDates: ['2026-01-10'], importDiagnostics: { incomingDates: ['2026-01-10'] },
+    },
+    importDiagnostics: { incomingDates: ['2026-01-10'] },
+  };
+
+  const rebuilt = await normalizeSavedPointageSnapshot(snapshot, employees);
+  assert.equal(rebuilt.currentFilePointage.dateNormalizationVersion, 4);
+  assert.deepEqual(rebuilt.importDiagnostics.incomingDates, ['2026-10-01']);
+  assert.deepEqual(rebuilt.dailySummaries.map((day) => day.isoDate), ['2026-10-01']);
+  assert.deepEqual(rebuilt.currentFilePointage.sourceWeeklySheets[0].dayColumns.map((day) => day.isoDate), ['2026-10-01']);
+  assert.equal(formatPointageDate(rebuilt.periodStart), '01 oct 2026');
+});
+
 test('pointage matching follows the ZK matricule before names and alternate employee codes', async () => {
   const matriculeEmployees = [
     { id: '10', zk: '296', fullName: 'MAHFOUDH BALKIS', status: 'Actif' },

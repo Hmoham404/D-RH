@@ -344,7 +344,38 @@
   /* Tables and employee management. */
   .rh-table-tools { @apply flex min-w-0 flex-wrap items-end gap-3; }
   .rh-table-tools > input { @apply min-w-0 flex-1 sm:min-w-48; }
+  .rh-card--table .rh-card__header--table { @apply items-center gap-3; }
+  .rh-card--table .rh-card__header--table > div:first-child { @apply shrink-0; }
+  .rh-card--table .rh-table-tools { @apply items-center; }
   .daily-import__filter { @apply grid gap-1.5 text-[10px] font-semibold text-slate-500; }
+  .daily-break-setting { @apply mb-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50/80 to-white px-4 py-3 shadow-sm; }
+  .daily-break-setting > div:first-child { @apply grid gap-1; }
+  .daily-break-setting > div:first-child strong { @apply text-sm font-bold text-ink; }
+  .daily-break-setting > div:first-child span, .daily-break-setting > small { @apply text-xs text-slate-500; }
+  .daily-break-setting__controls { @apply flex flex-wrap items-center gap-2; }
+  .daily-break-setting__controls > button { @apply min-h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-bold text-slate-600 transition hover:border-brand/40 hover:text-brand disabled:opacity-50; }
+  .daily-break-setting__controls > button.is-selected { @apply border-brand bg-brand text-white shadow-sm; }
+  .daily-break-setting__controls label { @apply flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-500; }
+  .daily-break-setting__controls input { @apply w-12 border-0 p-0 text-center font-bold text-ink outline-none; }
+  .daily-break-setting--inline { @apply mb-0 min-h-10 shrink-0 flex-nowrap gap-2 rounded-lg border-blue-100 bg-blue-50/70 px-2.5 py-1.5 shadow-none; }
+  .daily-break-setting--inline > div:first-child { @apply min-w-24 gap-0; }
+  .daily-break-setting--inline > div:first-child strong { @apply whitespace-nowrap text-[11px]; }
+  .daily-break-setting--inline > div:first-child span { @apply hidden; }
+  .daily-break-setting--inline .daily-break-setting__controls { @apply flex-nowrap gap-1; }
+  .daily-break-setting--inline .daily-break-setting__controls > button { @apply min-h-8 px-2 text-[10px]; }
+  .daily-break-setting--inline .daily-break-setting__controls label { @apply h-8 gap-1 px-1.5 text-[10px]; }
+  .daily-break-setting--inline .daily-break-setting__controls input { @apply w-8; }
+  .daily-break-setting--inline > small { @apply basis-full pl-1 text-[10px]; }
+  .daily-break-setting--inline .daily-break-setting__controls > button,
+  .daily-break-setting--inline .daily-break-setting__controls label { @apply border-blue-100; }
+  .daily-break-setting--inline .daily-break-setting__controls > button.is-selected { @apply border-brand; }
+  @media (max-width: 900px) {
+    .rh-card--table .rh-card__header--table { @apply items-start; }
+    .daily-break-setting--inline { @apply w-full max-w-full flex-wrap; }
+    .daily-break-setting--inline > div:first-child span { @apply inline; }
+    .daily-break-setting--inline .daily-break-setting__controls { @apply flex-wrap; }
+    .daily-break-setting--inline > small { @apply basis-full; }
+  }
   .daily-import__download-button { @apply inline-flex min-h-10 items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50; }
   .daily-import__download-button svg { @apply size-4; }
   .rh-table-wrap, .admin-table-wrap { @apply max-w-full overflow-auto rounded-xl border border-slate-200/80; }

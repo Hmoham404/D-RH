@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
-import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, prepareDailyPointage } from '../lib/dailyPointage.js';
+import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, normalizeSavedPointageSnapshot, prepareDailyPointage } from '../lib/dailyPointage.js';
 import DailyAttendanceOverview from './DailyAttendanceOverview';
-import { clearPointageSnapshot, replacePointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
+import { clearPointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
 import { correctDailyPointage, verifyPointageCorrectionCode } from '../lib/pointageCorrection.js';
 import PointageCorrectionForm from './PointageCorrectionForm';
 import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDates.js';
@@ -18,15 +18,16 @@ function isExcelFile(file) {
   return /\.(xlsx|xls)$/i.test(file?.name || '');
 }
 
-function monthRangeLabel(baseMonthDate, locale) {
-  const start = new Date(baseMonthDate);
-  start.setMonth(start.getMonth() - 3);
-  const startLabel = start.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
-  const endLabel = baseMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
-  return `${startLabel} - ${endLabel}`;
+function monthRangeLabel(anchorIsoDate, locale) {
+  const anchor = anchorIsoDate ? new Date(`${anchorIsoDate}T12:00:00`) : new Date();
+  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 26);
+  if (anchor.getDate() < 26) start.setMonth(start.getMonth() - 1);
+  const end = new Date(start.getFullYear(), start.getMonth() + 1, 25);
+  const format = (date) => date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+  return `${format(start)} - ${format(end)}`;
 }
 
-function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, baseMonthDate, onImport, busy, importDisabled, translate, locale }) {
+function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, onImport, busy, importDisabled, translate, locale }) {
   const [target, setTarget] = useState(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, baseMonth
           {!dates.length && <option value="">{translate('daily.noDays')}</option>}
           {dates.map((date) => <option key={date} value={date}>{formatPointageDate(date, locale)}</option>)}
         </select>
-        <small>{monthRangeLabel(baseMonthDate, locale)}</small>
+        <small>{monthRangeLabel(analysisDate, locale)}</small>
       </label>
       <label className="mod-export-button mod-export-button--topbar">
         <DashboardIcon type="upload" />
@@ -56,8 +57,8 @@ function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, baseMonth
   );
 }
 
-export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange }) {
-  const rules = { dateOrder: 'mdy', breakMinutes: 24, roundingMinutes: 1, closeDays: true };
+export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange, pointageBreakMinutes = 24, onPointageBreakMinutesChange }) {
+  const rules = { dateOrder: 'dmy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true };
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
@@ -73,6 +74,27 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const listDialogRef = useRef(null);
   const dialogRef = useRef(null);
   const data = useMemo(() => getCurrentFilePointage(snapshot), [snapshot]);
+  useEffect(() => {
+    if (!snapshot || loading || Number(snapshot.calculationRules?.breakMinutes ?? snapshot.currentFilePointage?.calculationRules?.breakMinutes) === pointageBreakMinutes) return;
+    let cancelled = false;
+    async function recalculateSavedPointage() {
+      setBusy(true);
+      try {
+        const updated = await normalizeSavedPointageSnapshot(snapshot, employees, pointageBreakMinutes);
+        if (cancelled || !updated) return;
+        const result = await savePointageSnapshot(updated);
+        if (result.mode !== 'supabase') throw new Error(result.message);
+        onSaved(result.data || updated);
+        setMessage(translate('daily.importScreen.breakSaved', 'Pause mise à {minutes} min : le pointage a été recalculé et enregistré.', { minutes: pointageBreakMinutes }));
+      } catch (error) {
+        if (!cancelled) setMessage(error.message || translate('daily.importScreen.breakSaveFailed', 'Impossible d’enregistrer le nouveau calcul de pause.'));
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    }
+    recalculateSavedPointage();
+    return () => { cancelled = true; };
+  }, [pointageBreakMinutes, snapshot, employees, loading]);
   useEffect(() => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
@@ -132,13 +154,13 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Pointage');
     XLSX.writeFile(workbook, `pointage_${analysisDate || today}.xlsx`);
   }
-  const baseMonthDate = useMemo(() => getCurrentMonthDate(), []);
   const attendanceHistory = useMemo(() => buildAttendanceByDay(table), [table]);
+  const baseMonthDate = useMemo(() => getCurrentMonthDate(), []);
   const attendance = useMemo(() => attendanceHistory.filter((day) => day.isoDate === analysisDate), [attendanceHistory, analysisDate]);
   async function saveCorrection(correction) {
     const next = await correctDailyPointage(snapshot, importEmployees, correction);
     const result = await savePointageSnapshot(next);
-    if (result.mode !== 'supabase') throw new Error(translate('daily.saveFailed'));
+    if (result.mode !== 'supabase') throw new Error(result.message || translate('daily.saveFailed'));
     onSaved(result.data);
     setDetail(null);
     setListDetail(null);
@@ -157,7 +179,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       const next = await prepareDailyPointage(file, importEmployees, snapshot, rules);
       const info = next.importDiagnostics;
       setMessage(translate('daily.saving'));
-      const result = await replacePointageSnapshot(next);
+      const result = await savePointageSnapshot(next);
       if (result.mode !== 'supabase') throw new Error(result.message);
       onSaved(result.data);
       setDetail(null);
@@ -175,7 +197,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         rejected: info.rejectedRows,
       }));
     } catch (error) {
-      setMessage(translate('daily.saveFailed'));
+      setMessage(error.message || translate('daily.saveFailed'));
     }
     finally { setBusy(false); }
   }
@@ -207,7 +229,6 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       dates={dates}
       analysisDate={analysisDate}
       onDateChange={setSelectedDay}
-      baseMonthDate={baseMonthDate}
       onImport={importFile}
       busy={busy || correcting}
       importDisabled={loading}
@@ -219,6 +240,17 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       target={productionModTarget} onTargetChange={onProductionModTargetChange} onImport={importFile}
       busy={busy || correcting} importDisabled={loading} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
     <article className="rh-card rh-card--table"><div className="rh-card__header rh-card__header--table"><div><h2>{translate('daily.importScreen.recorded')}</h2></div><div className="rh-table-tools">
+      <section className="daily-break-setting daily-break-setting--inline" aria-label={translate('daily.importScreen.breakSetting', 'Temps de pause')}>
+        <div><strong>{translate('daily.importScreen.breakSetting', 'Temps de pause')}</strong><span>{translate('daily.importScreen.breakDescription', 'Durée déduite des heures calculées')}</span></div>
+        <div className="daily-break-setting__controls">
+          {[24, 30].map((minutes) => <button key={minutes} type="button" className={pointageBreakMinutes === minutes ? 'is-selected' : ''} aria-pressed={pointageBreakMinutes === minutes} onClick={() => onPointageBreakMinutesChange?.(minutes)} disabled={busy || loading}>{minutes} min</button>)}
+          <label><span>{translate('daily.importScreen.customBreak', 'Autre')}</span><input aria-label={translate('daily.importScreen.customBreak', 'Autre durée de pause')} type="number" min="0" max="180" step="1" value={pointageBreakMinutes} onChange={(event) => {
+            const value = Number(event.target.value);
+            if (event.target.value !== '' && Number.isFinite(value) && value >= 0 && value <= 180) onPointageBreakMinutesChange?.(value);
+          }} disabled={busy || loading} /><span>min</span></label>
+        </div>
+        {snapshot && Number(snapshot.calculationRules?.breakMinutes ?? snapshot.currentFilePointage?.calculationRules?.breakMinutes) !== pointageBreakMinutes && <small role="status">{translate('daily.importScreen.recalculatingBreak', 'Recalcul et sauvegarde du pointage en cours…')}</small>}
+      </section>
       <input aria-label={translate('daily.importScreen.search')} placeholder={translate('daily.importScreen.nameOrId')} value={search} onChange={(e) => setSearch(e.target.value)} />
       <label className="daily-import__filter">{translate('daily.importScreen.status')}<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
         <option value="ALL">{translate('daily.importScreen.all')}</option>
@@ -259,7 +291,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         <dl className="daily-import__punches"><div><dt>{translate('daily.importScreen.entry')}</dt><dd>{detail.entry.slice(11) || translate('daily.unavailable')}</dd></div><div><dt>{translate('daily.importScreen.exit')}</dt><dd>{detail.exit.slice(11) || translate('daily.importScreen.missingExit')}</dd></div></dl>
         <p>{translate('daily.importScreen.calculated')} : <strong>{detail.status === 'POINTAGE' ? detail.display : detail.status === 'ABS' ? translate('daily.importScreen.absentStatus') : translate('daily.importScreen.reviewStatus')}</strong></p>
         <p>{translate('daily.importScreen.passages', 'Punches on {date}', { date: dayLabel(detail.isoDate) })} : {detail.detail.split(' | ').map((value) => value.slice(11)).join(' · ') || translate('daily.importScreen.none')}</p>
-        {['POINTAGE', 'AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} translate={translate} />}
+        {['POINTAGE', 'AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} breakMinutes={detail.breakMinutes ?? data?.calculationRules?.breakOverrides?.[`${detail.employeeKey}|${detail.isoDate}`] ?? data?.calculationRules?.breakMinutes ?? pointageBreakMinutes} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} translate={translate} />}
       </div>
     </dialog>}
     {listDetail && <dialog ref={listDialogRef} className="daily-import__dialog daily-import__dialog--list" aria-labelledby="attendance-detail-title" onClose={() => setListDetail(null)} onClick={(event) => { if (event.target === event.currentTarget) listDialogRef.current.close(); }}>

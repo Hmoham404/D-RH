@@ -8,7 +8,7 @@ export async function verifyPointageCorrectionCode(value) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('') === RH_CODE_DIGEST;
 }
 
-export async function correctDailyPointage(snapshot, employees, { employeeKey, isoDate, entry = '', exit = '' }) {
+export async function correctDailyPointage(snapshot, employees, { employeeKey, isoDate, entry = '', exit = '', breakMinutes }) {
   const current = getCurrentFilePointage(snapshot);
   const table = buildDailyTable(current, employees, [isoDate]);
   const person = table.rows.find((row) => row.employeeKey === employeeKey);
@@ -28,11 +28,13 @@ export async function correctDailyPointage(snapshot, employees, { employeeKey, i
   ];
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Pointage');
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+  const breakOverrides = { ...(current.calculationRules?.breakOverrides || {}), [`${employeeKey}|${isoDate}`]: Number(breakMinutes ?? current.calculationRules?.breakMinutes ?? 24) };
   const next = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, null,
-    { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakMinutes: 24, dateOrder: 'mdy' });
+    { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakOverrides, breakMinutes: current.calculationRules?.breakMinutes ?? 24,
+      dateOrder: current.calculationRules?.dateOrder || 'dmy' });
   const correction = { employeeKey, isoDate, fullName: person.fullName, correctedAt: new Date().toISOString(),
-    before: { status: day.status, entry: day.entry, exit: day.exit, punches: originalRows },
-    after: { entry, exit } };
+    before: { status: day.status, entry: day.entry, exit: day.exit, breakMinutes: day.breakMinutes, punches: originalRows },
+    after: { entry, exit, breakMinutes: Number(breakMinutes ?? current.calculationRules?.breakMinutes ?? 24) } };
   const sourceWeeklySheets = current.sourceWeeklySheets || [];
   const manualCorrections = [...(snapshot.manualCorrections || []), correction];
   return { ...snapshot, ...next, sourceWeeklySheets,

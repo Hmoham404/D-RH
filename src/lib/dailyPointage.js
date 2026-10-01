@@ -123,13 +123,30 @@ function shouldNormalizeLegacyDmySnapshotDates(pointage) {
 }
 
 function normalizeLegacyDmySnapshotDates(pointage) {
-  if (pointage?.dateNormalizationVersion >= 3) return pointage;
+  if (pointage?.dateNormalizationVersion >= 4) return pointage;
   const excelCorrections = getExcelDateCorrections(pointage?.fileName, (pointage?.rawRows || []).map((row) => row.isoDate));
   if (pointage?.dateNormalizationVersion === 2 && !excelCorrections.size) return pointage;
   if (!excelCorrections.size && !shouldNormalizeLegacyDmySnapshotDates(pointage)) return pointage;
 
   const normalizeRow = (row) => {
-    if (excelCorrections.size && !excelCorrections.has(row.isoDate)) return row;
+    const correctedIso = excelCorrections.get(row.isoDate);
+    if (correctedIso) {
+      const clock = String(row.pointageAt || '').match(/T(\d{2}:\d{2}:\d{2})/);
+      const [year, month, day] = correctedIso.split('-').map(Number);
+      const correctedDate = new Date(year, month - 1, day, ...(clock ? clock[1].split(':').map(Number) : [0, 0, 0]));
+      const label = formatFrDateTime(correctedDate);
+      const correctedDisplay = (value) => String(value || '').replace(/\d{1,2}\/\d{1,2}\/\d{4}/g, `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}/${year}`);
+      return {
+        ...row,
+        isoDate: correctedIso,
+        pointageAt: `${correctedIso}T${String(correctedDate.getHours()).padStart(2, '0')}:${String(correctedDate.getMinutes()).padStart(2, '0')}:${String(correctedDate.getSeconds()).padStart(2, '0')}`,
+        pointageAtDisplay: row.pointageAtDisplay ? label : row.pointageAtDisplay,
+        entry: correctedDisplay(row.entry),
+        exit: correctedDisplay(row.exit),
+        punchesDisplay: correctedDisplay(row.punchesDisplay),
+      };
+    }
+    if (excelCorrections.size) return row;
     const parsed = parseMdyDateTime(getRowDateText(row));
     if (!parsed) return row;
     return {
@@ -152,17 +169,26 @@ function normalizeLegacyDmySnapshotDates(pointage) {
   const remapDates = (values = []) => [...new Set(values.map((value) => dateMap.get(value) || value).filter(Boolean))].sort();
   const observedDates = [...new Set([...rawRows, ...dayRows].map((row) => row.isoDate).filter(Boolean))].sort();
   const closedDates = pointage.closedDates?.length ? remapDates(pointage.closedDates) : observedDates;
+  const sourceWeeklySheets = (pointage.sourceWeeklySheets || []).map((sheet) => ({
+    ...sheet,
+    dayColumns: (sheet.dayColumns || []).map((day) => ({ ...day, isoDate: dateMap.get(day.isoDate) || day.isoDate })),
+    rows: (sheet.rows || []).map((row) => ({
+      ...row,
+      days: (row.days || []).map((day) => ({ ...day, isoDate: dateMap.get(day.isoDate) || day.isoDate })),
+    })),
+  }));
 
   return {
     ...pointage,
-    dateNormalizationVersion: 3,
+    dateNormalizationVersion: 4,
     rawRows,
     dayRows,
+    sourceWeeklySheets,
     closedDates: pointage.closedDates?.length ? closedDates : pointage.closedDates,
     importDiagnostics: pointage.importDiagnostics
       ? { ...pointage.importDiagnostics, incomingDates: remapDates(pointage.importDiagnostics.incomingDates || closedDates) }
       : pointage.importDiagnostics,
-    calculationRules: { ...pointage.calculationRules, dateOrder: 'mdy' },
+    calculationRules: { ...pointage.calculationRules, dateOrder: pointage.calculationRules?.dateOrder || 'dmy' },
   };
 }
 
@@ -266,7 +292,7 @@ export function buildDailyWeeks(analysis, employees) {
         const sourceTime = !day && ['POINTAGE', 'AVR'].includes(status) && String(display).match(/^(\d+):(\d{2})$/);
         const workedMinutes = day?.roundedMinutes || (sourceTime ? Number(sourceTime[1]) * 60 + Number(sourceTime[2]) : 0);
         if (!day) total += workedMinutes;
-        return { ...column, status, display, raw: display, workedMinutes, detail: day?.punchesDisplay || '', entry: exitOnly ? '' : day?.entry || '', exit: exitOnly ? day.entry : day?.exit || '' };
+        return { ...column, status, display, raw: display, workedMinutes, breakMinutes: day?.breakMinutes, detail: day?.punchesDisplay || '', entry: exitOnly ? '' : day?.entry || '', exit: exitOnly ? day.entry : day?.exit || '' };
       });
       return { ...row, hiredAt: employee.hiredAt || employee.hired_at || employee.Date_Embauche || employee.dateEmbauche || employee.date_embauche || employee.hireDate || '', days: cells, totalHours: clock(total), control: cells.some((day) => day.status === 'AVR') ? 'À vérifier' : '' };
     }).filter((row) => row.days.some((day) => day.status !== 'EMPTY'))
@@ -310,21 +336,126 @@ export function buildDailyTable(analysis, employees, requestedDates) {
   })) };
 }
 
-export async function prepareDailyPointage(file, employees, _previous, rules) {
-  const analysis = await analyzePointageFile(file, employees, {
-    ...rules, allSourceSheets: true, deduplicate: true,
+function keepWeeklySheetDates(sheet, excludedDates) {
+  const dayColumns = (sheet.dayColumns || []).filter((day) => !excludedDates.has(day.isoDate));
+  const allowedDates = new Set(dayColumns.map((day) => day.isoDate));
+  return {
+    ...sheet,
+    dayColumns,
+    rows: (sheet.rows || []).map((row) => ({
+      ...row,
+      days: (row.days || []).filter((day) => allowedDates.has(day.isoDate)),
+    })).filter((row) => row.days.length),
+  };
+}
+
+function getPayrollPeriodKey(isoDate) {
+  const match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return '';
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const start = new Date(Date.UTC(year, month, 26));
+  if (day < 26) start.setUTCMonth(start.getUTCMonth() - 1);
+  return start.toISOString().slice(0, 10);
+}
+
+function mergeDailyPointage(previous, incoming, employees) {
+  const oldPointage = getCurrentFilePointage(previous);
+  if (!oldPointage) return incoming;
+
+  const incomingDates = new Set(incoming.importDiagnostics?.incomingDates || []);
+  const replacedDates = new Set(incomingDates);
+  // Earlier imports may have stored a French DD/MM date as MM/DD. When the
+  // corrected date arrives, remove that swapped copy from the saved snapshot.
+  incomingDates.forEach((date) => {
+    const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return;
+    const [, year, month, day] = match;
+    // Only ambiguous dates could have been accepted in the wrong MM/DD order.
+    if (Number(month) > 12 || Number(day) > 12) return;
+    const swapped = `${year}-${day}-${month}`;
+    const parsed = new Date(`${swapped}T12:00:00Z`);
+    if (Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === swapped) replacedDates.add(swapped);
   });
-  const closedDates = rules.closeDays ? analysis.importDiagnostics.incomingDates : [];
+  const previousDates = [
+    ...(oldPointage.rawRows || []).map((row) => row.isoDate),
+    ...(oldPointage.sourceWeeklySheets || []).flatMap((sheet) => sheet.dayColumns.map((day) => day.isoDate)),
+  ].filter(Boolean).sort();
+  const incomingDateList = [...incomingDates].sort();
+  const previousPeriod = getPayrollPeriodKey(previousDates.at(-1));
+  const incomingPeriod = getPayrollPeriodKey(incomingDateList.at(-1));
+  // A new 26-to-25 payroll cycle starts a fresh current snapshot. The prior
+  // cycle remains in Supabase history because daily saves no longer clear it.
+  if (previousPeriod && incomingPeriod && previousPeriod !== incomingPeriod) return incoming;
+
+  const oldRows = (oldPointage.rawRows || []).filter((row) => !replacedDates.has(row.isoDate));
+  const oldDayRows = (oldPointage.dayRows || []).filter((row) => !replacedDates.has(row.isoDate));
+  const sourceWeeklySheets = [
+    ...(oldPointage.sourceWeeklySheets || []).map((sheet) => keepWeeklySheetDates(sheet, replacedDates)),
+    ...(incoming.sourceWeeklySheets || []),
+  ].filter((sheet) => sheet.dayColumns.length);
+  const dailySummaries = new Map();
+  [...(previous.dailySummaries || []).filter((day) => !replacedDates.has(day.isoDate)), ...(incoming.dailySummaries || [])]
+    .forEach((day) => dailySummaries.set(day.isoDate, day));
+  const dayRows = [...oldDayRows, ...(incoming.dayRows || [])];
+  const rawRows = [...oldRows, ...(incoming.rawRows || [])];
+  const manualCorrections = [
+    ...(oldPointage.manualCorrections || []),
+    ...(incoming.manualCorrections || []),
+  ];
+  const merged = {
+    ...incoming,
+    fileName: incoming.fileName,
+    rawRows,
+    dayRows,
+    sourceWeeklySheets,
+    closedDates: [...new Set([
+      ...(oldPointage.closedDates || []).filter((date) => !replacedDates.has(date)),
+      ...(incoming.closedDates || []),
+    ])].sort(),
+    dailySummaries: [...dailySummaries.values()].sort((a, b) => a.isoDate.localeCompare(b.isoDate)),
+    manualCorrections,
+  };
+  merged.weeklySheets = buildDailyWeeks(merged, employees);
+  const trackedDates = [...new Set([
+    ...rawRows.map((row) => row.isoDate),
+    ...sourceWeeklySheets.flatMap((sheet) => sheet.dayColumns.map((day) => day.isoDate)),
+  ].filter(Boolean))].sort();
+  merged.periodStart = trackedDates[0] || '';
+  merged.periodEnd = trackedDates.at(-1) || '';
+  merged.payrollPeriodStart = incomingPeriod || previousPeriod;
+  merged.summary = { ...incoming.summary, trackedDays: trackedDates.length };
+  merged.currentFilePointage = { ...merged, currentFilePointage: undefined };
+  return merged;
+}
+
+export async function prepareDailyPointage(file, employees, previous, rules) {
+  const savedCorrections = [
+    ...(previous?.manualCorrections || []),
+    ...(previous?.currentFilePointage?.manualCorrections || []),
+  ];
+  const savedBreakOverrides = Object.fromEntries(savedCorrections
+    .filter((item) => item?.after && Number.isFinite(Number(item.after.breakMinutes)))
+    .map((item) => [`${item.employeeKey}|${item.isoDate}`, Number(item.after.breakMinutes)]));
+  const importRules = { ...rules, dateOrder: rules?.dateOrder || 'mdy',
+    breakOverrides: { ...savedBreakOverrides, ...(rules?.breakOverrides || {}) } };
+  const analysis = await analyzePointageFile(file, employees, {
+    ...importRules, allSourceSheets: true, deduplicate: true,
+  });
+  const closedDates = importRules.closeDays ? analysis.importDiagnostics.incomingDates : [];
   const currentFilePointage = {
     sourceOnlyVersion: 1,
-    dateNormalizationVersion: 3,
+    dateNormalizationVersion: 4,
     fileName: file.name, rawRows: analysis.rawRows, dayRows: analysis.dayRows,
     sourceWeeklySheets: analysis.weeklySheets,
-    closedDates, calculationRules: rules,
+    closedDates, calculationRules: importRules,
     importDiagnostics: analysis.importDiagnostics,
   };
-  return { ...analysis, ...currentFilePointage, currentFilePointage,
+  const incoming = { ...analysis, ...currentFilePointage, currentFilePointage,
+    payrollPeriodStart: getPayrollPeriodKey(analysis.importDiagnostics.incomingDates.at(-1)),
     weeklySheets: buildDailyWeeks(currentFilePointage, employees) };
+  return mergeDailyPointage(previous, incoming, employees);
 }
 
 export function getCurrentFilePointage(snapshot) {
@@ -340,12 +471,15 @@ export function getCurrentFilePointage(snapshot) {
     dayRows: (snapshot.dayRows || []).filter((row) => allowed.has(row.isoDate)) });
 }
 
-export async function normalizeSavedPointageSnapshot(snapshot, employees) {
+export async function normalizeSavedPointageSnapshot(snapshot, employees, requestedBreakMinutes) {
   if (!snapshot) return snapshot;
   const current = getCurrentFilePointage(snapshot);
+  const breakMinutes = Number.isFinite(Number(requestedBreakMinutes))
+    ? Number(requestedBreakMinutes)
+    : Number(current?.calculationRules?.breakMinutes ?? 24);
   const original = snapshot.currentFilePointage;
   const datesChanged = original && current?.rawRows?.some((row, index) => row.isoDate !== original.rawRows[index]?.isoDate);
-  if (snapshot.sourceOnlyVersion === 1 && !datesChanged && Number(current.calculationRules?.breakMinutes) === 24) {
+  if (snapshot.sourceOnlyVersion === 1 && !datesChanged && Number(current.calculationRules?.breakMinutes) === breakMinutes) {
     return { ...snapshot, weeklySheets: buildDailyWeeks(snapshot, employees) };
   }
   if (!current?.rawRows?.length) return null;
@@ -360,11 +494,18 @@ export async function normalizeSavedPointageSnapshot(snapshot, employees) {
   });
   sheets.forEach((rows, name) => XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), name));
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
-  const result = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, snapshot,
-    { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakMinutes: 24, dateOrder: 'mdy' });
+  const result = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, datesChanged ? null : snapshot,
+    { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakMinutes,
+      dateOrder: current.calculationRules?.dateOrder || 'dmy' });
   const sourceWeeklySheets = current.sourceWeeklySheets || [];
-  const rebuilt = { ...result, sourceWeeklySheets, manualCorrections: current.manualCorrections || [],
-    currentFilePointage: { ...result.currentFilePointage, sourceWeeklySheets, manualCorrections: current.manualCorrections || [] } };
+  const dateMap = new Map((snapshot.currentFilePointage?.rawRows || [])
+    .map((row, index) => [row.isoDate, current.rawRows?.[index]?.isoDate || row.isoDate]));
+  const manualCorrections = (current.manualCorrections || []).map((item) => ({
+    ...item,
+    isoDate: dateMap.get(item.isoDate) || item.isoDate,
+  }));
+  const rebuilt = { ...result, sourceWeeklySheets, manualCorrections,
+    currentFilePointage: { ...result.currentFilePointage, sourceWeeklySheets, manualCorrections } };
   return { ...rebuilt, importId: snapshot.importId, generatedAt: snapshot.generatedAt,
     weeklySheets: buildDailyWeeks(rebuilt, employees),
     periodStart: result.dailySummaries[0]?.isoDate || '', periodEnd: result.dailySummaries.at(-1)?.isoDate || '',

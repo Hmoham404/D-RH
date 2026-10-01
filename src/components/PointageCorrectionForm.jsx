@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { verifyPointageCorrectionCode } from '../lib/pointageCorrection.js';
 
-export default function PointageCorrectionForm({ detail, onSave, onBusyChange, disabled, translate }) {
+export default function PointageCorrectionForm({ detail, onSave, onBusyChange, disabled, translate, breakMinutes = 24 }) {
   const [entry, setEntry] = useState(detail.entry?.slice(11, 16) || '');
   const [exit, setExit] = useState(detail.exit?.slice(11, 16) || '');
+  const [pause, setPause] = useState(Number(breakMinutes));
   const [accessCode, setAccessCode] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -15,7 +16,7 @@ export default function PointageCorrectionForm({ detail, onSave, onBusyChange, d
     onBusyChange(true);
     try {
       if (!await verifyPointageCorrectionCode(accessCode)) throw new Error(translate('daily.importScreen.incorrectCode'));
-      await onSave({ employeeKey: detail.employeeKey, isoDate: detail.isoDate, entry, exit });
+      await onSave({ employeeKey: detail.employeeKey, isoDate: detail.isoDate, entry, exit, breakMinutes: pause });
     } catch (cause) {
       setError(translate('daily.importScreen.correctionError'));
     } finally {
@@ -32,6 +33,11 @@ export default function PointageCorrectionForm({ detail, onSave, onBusyChange, d
         <label>{translate('daily.importScreen.entry')}<input type="time" required={!exit} value={entry} onChange={(event) => setEntry(event.target.value)} /></label>
         <label>{translate('daily.importScreen.exit')}<input type="time" required={!entry} value={exit} onChange={(event) => setExit(event.target.value)} /></label>
       </div>
+      <label>{translate('daily.importScreen.breakCorrectionLabel', 'Pause déduite (min)')}<input aria-label={translate('daily.importScreen.breakCorrectionLabel', 'Pause déduite (min)')} type="number" min="0" max="180" step="1" required value={pause} onChange={(event) => {
+        const value = Number(event.target.value);
+        if (event.target.value !== '' && Number.isFinite(value) && value >= 0 && value <= 180) setPause(value);
+      }} /></label>
+      <small>{translate('daily.importScreen.breakCorrectionHelp', 'Cette durée s’applique à cette personne et à cette journée uniquement.')}</small>
       <small>{translate('daily.importScreen.singlePunch')}</small>
       <label>{translate('daily.importScreen.code')}<input type="password" required autoComplete="off" autoCapitalize="none" spellCheck={false} value={accessCode} onChange={(event) => setAccessCode(event.target.value)} aria-describedby="rh-code-help" /></label>
       <small id="rh-code-help">{translate('daily.importScreen.codeHelp')}</small>

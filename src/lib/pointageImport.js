@@ -413,16 +413,21 @@ function findSourcePointageLayout(rows) {
       continue;
     }
 
-    const idIndex = findHeaderIndex(headers, ['IDEMP', (value) => value.startsWith('IDEMP')]);
+    const idIndex = findHeaderIndex(headers, [
+      'IDEMP', (value) => value.startsWith('IDEMP'), 'EMPLOYEEID', 'USERID',
+      'BADGENUMBER', 'BADGENO', 'ENROLLNUMBER', 'MATRICULE', 'NO', 'ID',
+    ]);
     const nameIndex = findHeaderIndex(headers, [
       'NOM',
       (value) => value.startsWith('NOM'),
       (value) => value.includes('NOM'),
+      'NAME', 'USERNAME', 'FULLNAME', 'EMPLOYEENAME',
     ]);
     const timeIndex = findHeaderIndex(headers, [
       'TEMPSDUPTG',
       (value) => value.startsWith('TEMPSDUPTG'),
       (value) => value.includes('TEMPS') && value.includes('PTG'),
+      'CHECKTIME', 'PUNCHTIME', 'DATETIME', 'DATEHEURE', 'TIMESTAMP', 'TIME',
     ]);
 
     if (idIndex < 0 || nameIndex < 0 || timeIndex < 0) {
@@ -443,9 +448,12 @@ function findSourcePointageLayout(rows) {
       pointageStateIndex: findHeaderIndex(headers, [
         'ETATDUPTG',
         (value) => value.startsWith('ETAT') && value.includes('PTG'),
-        'CHECKSTATUS',
+        'CHECKSTATUS', 'CHECKSTAT', 'CHECKSTATE',
       ]),
-      terminalIndex: findHeaderIndex(headers, ['TERMINAL', (value) => value.startsWith('TERMINAL')]),
+      terminalIndex: findHeaderIndex(headers, [
+        'TERMINAL', (value) => value.startsWith('TERMINAL'),
+        'DEVICE', 'DEVICENAME', 'MACHINE', 'MACHINENAME', 'LOCATION',
+      ]),
       pointageTypeIndex: findHeaderIndex(headers, [
         'TYPEDUPTG',
         (value) => value.startsWith('TYPE') && value.includes('PTG'),
@@ -461,7 +469,7 @@ function findSourcePointageSheet(workbook) {
     (sheetName) => normalizeLooseText(sheetName) === 'SOURCEPOINTAGE',
   );
 
-  if (exactMatch) {
+  if (exactMatch && findSourcePointageLayout(getSheetRows(workbook.Sheets[exactMatch]))) {
     return exactMatch;
   }
 
@@ -789,7 +797,7 @@ export async function analyzePointageFile(file, employees, options = {}) {
     const sourceName = cleanText(getRowCell(row, sourceLayout.nameIndex));
     const pointageDate = parseExcelDate(getRowCell(row, sourceLayout.timeIndex), options.dateOrder);
 
-    if (pointageDate && rowIndex < incomingRows.length && typeof getRowCell(row, sourceLayout.timeIndex) === 'number') {
+    if (pointageDate && rowIndex < incomingRows.length) {
       const corrected = excelDateCorrections.get(formatIsoDate(pointageDate));
       if (corrected) {
         const [year, month, day] = corrected.split('-').map(Number);
@@ -929,7 +937,11 @@ export async function analyzePointageFile(file, employees, options = {}) {
       const firstPunch = sortedPunches[0];
       const lastPunch = sortedPunches[sortedPunches.length - 1];
       const bruteMinutes = isOdd ? 0 : Math.max(0, Math.round((lastPunch - firstPunch) / 60000));
-      const breakMinutes = getBreakMinutes(dayRow, options.breakMinutes ?? 30);
+      const breakOverrides = options.breakOverrides || {};
+      const breakKey = `${dayRow.employeeKey}|${dayRow.isoDate}`;
+      const breakMinutes = Object.prototype.hasOwnProperty.call(breakOverrides, breakKey)
+        ? Math.max(0, Math.min(180, Number(breakOverrides[breakKey]) || 0))
+        : getBreakMinutes(dayRow, options.breakMinutes ?? 30);
       const afterBreakMinutes = isOdd ? 0 : Math.max(0, bruteMinutes - breakMinutes);
       const rounding = options.roundingMinutes ?? 30;
       const roundedMinutes = isOdd ? 0 : Math.floor(afterBreakMinutes / Math.max(1, rounding)) * Math.max(1, rounding);

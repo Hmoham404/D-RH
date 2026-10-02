@@ -58,7 +58,7 @@ function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, onImport,
 }
 
 export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange, pointageBreakMinutes = 24, onPointageBreakMinutesChange }) {
-  const rules = { dateOrder: 'dmy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true };
+  const rules = { dateOrder: 'mdy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true };
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');

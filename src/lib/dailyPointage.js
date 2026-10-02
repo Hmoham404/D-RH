@@ -110,23 +110,37 @@ function getRowDateText(row) {
 }
 
 function shouldNormalizeLegacyDmySnapshotDates(pointage) {
-  if (pointage?.calculationRules?.dateOrder === 'dmy') return true;
+  if (pointage?.calculationRules?.dateOrder === 'mdy') return false;
   const rows = [...(pointage?.rawRows || []), ...(pointage?.dayRows || [])];
   return rows.some((row) => {
     const text = getRowDateText(row);
-    const dmy = parseDmyDateTime(text);
     const mdy = parseMdyDateTime(text);
-    if (!dmy || !mdy) return false;
-    if (pointage?.calculationRules?.dateOrder === 'mdy' && row?.isoDate === localIso(dmy)) return false;
-    return row?.isoDate !== localIso(mdy);
+    return Boolean(mdy) && row?.isoDate !== localIso(mdy);
   });
 }
 
+function hasKnownOctoberImportInversion(pointage) {
+  const rows = [...(pointage?.rawRows || []), ...(pointage?.dayRows || [])];
+  const storedDates = new Set(rows.map((row) => row.isoDate).filter(Boolean));
+  const displayedMdyDates = new Set(rows.map((row) => {
+    const parsed = parseMdyDateTime(getRowDateText(row));
+    return parsed ? localIso(parsed) : '';
+  }).filter(Boolean));
+  return [...storedDates].some((date) => {
+    const [year, month, day] = date.split('-').map(Number);
+    return day === 10 && (month === 1 || month === 2)
+      && displayedMdyDates.has(`${year}-10-0${month}`);
+  }) && [...storedDates].some((date) => date.endsWith('-01-10'))
+    && [...storedDates].some((date) => date.endsWith('-02-10'));
+}
+
 function normalizeLegacyDmySnapshotDates(pointage) {
-  if (pointage?.dateNormalizationVersion >= 4) return pointage;
+  const knownOctoberInversion = hasKnownOctoberImportInversion(pointage);
+  if (pointage?.dateNormalizationVersion >= 6) return pointage;
+  if (pointage?.dateNormalizationVersion >= 5 && pointage?.calculationRules?.dateOrder === 'mdy' && !knownOctoberInversion) return pointage;
+  if (pointage?.dateNormalizationVersion >= 4 && pointage?.calculationRules?.dateOrder !== 'dmy' && !knownOctoberInversion) return pointage;
   const excelCorrections = getExcelDateCorrections(pointage?.fileName, (pointage?.rawRows || []).map((row) => row.isoDate));
-  if (pointage?.dateNormalizationVersion === 2 && !excelCorrections.size) return pointage;
-  if (!excelCorrections.size && !shouldNormalizeLegacyDmySnapshotDates(pointage)) return pointage;
+  if (!excelCorrections.size && !knownOctoberInversion && !shouldNormalizeLegacyDmySnapshotDates(pointage)) return pointage;
 
   const normalizeRow = (row) => {
     const correctedIso = excelCorrections.get(row.isoDate);
@@ -146,7 +160,7 @@ function normalizeLegacyDmySnapshotDates(pointage) {
         punchesDisplay: correctedDisplay(row.punchesDisplay),
       };
     }
-    if (excelCorrections.size) return row;
+    if (excelCorrections.size && !knownOctoberInversion) return row;
     const parsed = parseMdyDateTime(getRowDateText(row));
     if (!parsed) return row;
     return {
@@ -180,7 +194,7 @@ function normalizeLegacyDmySnapshotDates(pointage) {
 
   return {
     ...pointage,
-    dateNormalizationVersion: 4,
+    dateNormalizationVersion: 6,
     rawRows,
     dayRows,
     sourceWeeklySheets,
@@ -188,7 +202,7 @@ function normalizeLegacyDmySnapshotDates(pointage) {
     importDiagnostics: pointage.importDiagnostics
       ? { ...pointage.importDiagnostics, incomingDates: remapDates(pointage.importDiagnostics.incomingDates || closedDates) }
       : pointage.importDiagnostics,
-    calculationRules: { ...pointage.calculationRules, dateOrder: pointage.calculationRules?.dateOrder || 'dmy' },
+    calculationRules: { ...pointage.calculationRules, dateOrder: 'mdy' },
   };
 }
 
@@ -438,7 +452,7 @@ export async function prepareDailyPointage(file, employees, previous, rules) {
   const savedBreakOverrides = Object.fromEntries(savedCorrections
     .filter((item) => item?.after && Number.isFinite(Number(item.after.breakMinutes)))
     .map((item) => [`${item.employeeKey}|${item.isoDate}`, Number(item.after.breakMinutes)]));
-  const importRules = { ...rules, dateOrder: rules?.dateOrder || 'mdy',
+  const importRules = { ...rules, dateOrder: 'mdy',
     breakOverrides: { ...savedBreakOverrides, ...(rules?.breakOverrides || {}) } };
   const analysis = await analyzePointageFile(file, employees, {
     ...importRules, allSourceSheets: true, deduplicate: true,
@@ -446,7 +460,7 @@ export async function prepareDailyPointage(file, employees, previous, rules) {
   const closedDates = importRules.closeDays ? analysis.importDiagnostics.incomingDates : [];
   const currentFilePointage = {
     sourceOnlyVersion: 1,
-    dateNormalizationVersion: 4,
+    dateNormalizationVersion: 6,
     fileName: file.name, rawRows: analysis.rawRows, dayRows: analysis.dayRows,
     sourceWeeklySheets: analysis.weeklySheets,
     closedDates, calculationRules: importRules,
@@ -459,7 +473,11 @@ export async function prepareDailyPointage(file, employees, previous, rules) {
 }
 
 export function getCurrentFilePointage(snapshot) {
-  if (snapshot?.currentFilePointage) return normalizeLegacyDmySnapshotDates(snapshot.currentFilePointage);
+  if (snapshot?.currentFilePointage) return normalizeLegacyDmySnapshotDates({
+    ...snapshot.currentFilePointage,
+    dateNormalizationVersion: snapshot.currentFilePointage.dateNormalizationVersion || snapshot.dateNormalizationVersion,
+    calculationRules: snapshot.currentFilePointage.calculationRules || snapshot.calculationRules,
+  });
   const dates = snapshot?.importDiagnostics?.incomingDates;
   if (!snapshot) return null;
   if (!dates) return normalizeLegacyDmySnapshotDates({ ...snapshot,
@@ -478,8 +496,13 @@ export async function normalizeSavedPointageSnapshot(snapshot, employees, reques
     ? Number(requestedBreakMinutes)
     : Number(current?.calculationRules?.breakMinutes ?? 24);
   const original = snapshot.currentFilePointage;
-  const datesChanged = original && current?.rawRows?.some((row, index) => row.isoDate !== original.rawRows[index]?.isoDate);
-  if (snapshot.sourceOnlyVersion === 1 && !datesChanged && Number(current.calculationRules?.breakMinutes) === breakMinutes) {
+  const originalRows = original?.rawRows || snapshot.rawRows || [];
+  const datesChanged = current?.rawRows?.some((row, index) => row.isoDate !== originalRows[index]?.isoDate);
+  const needsDateRepair = Number(current?.dateNormalizationVersion || 0) < 6
+    || current?.calculationRules?.dateOrder !== 'mdy'
+    || datesChanged;
+  if (snapshot.sourceOnlyVersion === 1 && !needsDateRepair
+    && Number(current.calculationRules?.breakMinutes) === breakMinutes) {
     return { ...snapshot, weeklySheets: buildDailyWeeks(snapshot, employees) };
   }
   if (!current?.rawRows?.length) return null;
@@ -496,7 +519,7 @@ export async function normalizeSavedPointageSnapshot(snapshot, employees, reques
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
   const result = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, datesChanged ? null : snapshot,
     { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakMinutes,
-      dateOrder: current.calculationRules?.dateOrder || 'dmy' });
+      dateOrder: 'mdy' });
   const sourceWeeklySheets = current.sourceWeeklySheets || [];
   const dateMap = new Map((snapshot.currentFilePointage?.rawRows || [])
     .map((row, index) => [row.isoDate, current.rawRows?.[index]?.isoDate || row.isoDate]));

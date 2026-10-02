@@ -4361,11 +4361,14 @@ export default function App() {
   const [isEmployeeSaving, setIsEmployeeSaving] = useState(false);
   const [isEmployeeDeleting, setIsEmployeeDeleting] = useState(false);
   const locale = LANGUAGE_LOCALES[language] || LANGUAGE_LOCALES.fr;
-  const currentMonthKey = getTodayIsoDate().slice(0, 7);
+  const todayIsoDate = getTodayIsoDate();
+  const currentDate = useMemo(() => {
+    const [year, month, day] = todayIsoDate.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }, [todayIsoDate]);
   const currentMonthDate = useMemo(() => {
-    const [year, month] = currentMonthKey.split('-').map(Number);
-    return new Date(year, month - 1, 1);
-  }, [currentMonthKey]);
+    return new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+  }, [currentDate]);
   const currentMonthLabel = currentMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
   const languageDirection = language === 'ar' ? 'rtl' : 'ltr';
   const translate = (path, fallback = path, values = {}) => {
@@ -4656,8 +4659,10 @@ export default function App() {
       if (activeBreakMinutes !== pointageBreakMinutes) setPointageBreakMinutes(activeBreakMinutes);
       let normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || [], activeBreakMinutes);
       let snapshotRepairMessage = '';
-      if ((Number(snapshotResult.data?.currentFilePointage?.dateNormalizationVersion || 0) < 4
-        && normalizedSnapshot?.currentFilePointage?.dateNormalizationVersion >= 4)
+      if ((Number(snapshotResult.data?.currentFilePointage?.dateNormalizationVersion || 0) < 6
+        && normalizedSnapshot?.currentFilePointage?.dateNormalizationVersion >= 6)
+        || (snapshotResult.data?.currentFilePointage?.calculationRules?.dateOrder === 'dmy'
+          && normalizedSnapshot?.currentFilePointage?.calculationRules?.dateOrder === 'mdy')
         || (snapshotResult.data && Number(snapshotResult.data.calculationRules?.breakMinutes ?? snapshotResult.data.currentFilePointage?.calculationRules?.breakMinutes) !== activeBreakMinutes)) {
         const repairResult = await savePointageSnapshot(normalizedSnapshot);
         if (repairResult.mode === 'supabase') {
@@ -4715,7 +4720,7 @@ export default function App() {
       setIsImporting(true);
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
       const nextSnapshot = await prepareDailyPointage(file, employees, snapshot,
-        { dateOrder: 'dmy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true });
+        { dateOrder: 'mdy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true });
       const saveResult = await savePointageSnapshot(nextSnapshot);
       if (saveResult.mode !== 'supabase') throw new Error(saveResult.message);
       const savedSnapshot = saveResult.data || nextSnapshot;
@@ -4854,24 +4859,24 @@ export default function App() {
     [employees],
   );
   const stcEmployees = useMemo(
-    () => employees.filter((employee) => isEmployeeStcInMonth(employee, currentMonthDate)),
-    [employees, currentMonthDate],
+    () => employees.filter((employee) => isEmployeeStcInMonth(employee, currentDate)),
+    [employees, currentDate],
   );
   const monthlyActiveEmployees = useMemo(
-    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate)),
-    [employees, currentMonthDate],
+    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate)),
+    [employees, currentDate],
   );
   const monthlyBaseEmployees = useMemo(
-    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate) || isEmployeeStcInMonth(employee, currentMonthDate)),
-    [employees, currentMonthDate],
+    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate) || isEmployeeStcInMonth(employee, currentDate)),
+    [employees, currentDate],
   );
   const busPointageRows = useMemo(
     () => buildBusPointageRows(monthlyActiveEmployees, dayRoster),
     [dayRoster, monthlyActiveEmployees],
   );
   const monthlyDepartmentRows = useMemo(
-    () => buildDepartmentBaseRows(monthlyBaseEmployees, currentMonthDate),
-    [monthlyBaseEmployees, currentMonthDate],
+    () => buildDepartmentBaseRows(monthlyBaseEmployees, currentDate),
+    [monthlyBaseEmployees, currentDate],
   );
   const selectedTableEmployees = useMemo(
     () => buildPeriodEmployees(snapshot, activePeriodStart, activePeriodEnd, employees),
@@ -4995,8 +5000,8 @@ export default function App() {
       );
   }, [employees, searchValue, selectedWeek]);
   const departmentBaseRows = useMemo(
-    () => buildDepartmentBaseRows(employees, currentMonthDate),
-    [employees, currentMonthDate],
+    () => buildDepartmentBaseRows(employees, currentDate),
+    [employees, currentDate],
   );
   const filteredEmployeeBaseRows = useMemo(
     () =>
@@ -5261,8 +5266,8 @@ export default function App() {
   }
 
   function buildEmployeeImportSummary(importResult, importedEmployees) {
-    const activeCount = importedEmployees.filter((employee) => isEmployeeActiveInMonth(employee, currentMonthDate)).length;
-    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInMonth(employee, currentMonthDate)).length;
+    const activeCount = importedEmployees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate)).length;
+    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInMonth(employee, currentDate)).length;
     const modCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOD').length;
     const moiCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOI').length;
     const busCount = new Set(importedEmployees.map((employee) => String(employee.bus || '').trim()).filter(Boolean)).size;

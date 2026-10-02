@@ -16,10 +16,10 @@ const MONTH_NAMES = [
 function parseExitMonth(value) {
   const text = String(value ?? '').trim().normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  let match = text.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?$/);
+  let match = text.match(/^(\d{4})-(\d{1,2})(?:-(\d{1,2}))?(?:[t\s].*)?$/);
   if (match) return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3] || 1) };
 
-  match = text.match(/^(?:(\d{1,2})[/-])?(\d{1,2})[/-](\d{4})$/);
+  match = text.match(/^(?:(\d{1,2})[/-])?(\d{1,2})[/-](\d{4})(?:[t\s].*)?$/);
   if (match) return { year: Number(match[3]), month: Number(match[2]), day: Number(match[1] || 1) };
 
   match = text.match(/^([a-z]+)\.?(?:[\s/-]+(\d{4}))?$/);
@@ -34,15 +34,25 @@ function parseExitMonth(value) {
   return null;
 }
 
-// Month-only Excel values belong to the current personnel snapshot.
-// Older STC records remain inactive, but are not exits of the current month.
+// Dated STC records appear only from their effective date through the rest of
+// that month. A future date in the same month must not appear early.
 export function isEmployeeStcInMonth(employee, referenceDate = new Date()) {
-  if (String(employee.status ?? '').trim().toLowerCase() !== 'stc') return false;
-  const exit = parseExitMonth(employee.inactiveFrom ?? employee.inactive_from);
+  const rawExit = employee.inactiveFrom ?? employee.inactive_from;
+  const exit = parseExitMonth(rawExit);
   if (!exit || Number.isNaN(referenceDate.getTime())) return false;
+  // A dated departure is authoritative even when the source spreadsheet still
+  // says "Actif". Month-only legacy values continue to require an STC status.
+  const hasDepartureDate = /^(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})(?:[t\s].*)?$/i.test(String(rawExit ?? '').trim());
+  if (String(employee.status ?? '').trim().toLowerCase() !== 'stc' && !hasDepartureDate) return false;
   const year = exit.year ?? referenceDate.getFullYear();
   if (exit.month < 1 || exit.month > 12 || exit.day < 1
     || exit.day > new Date(year, exit.month, 0).getDate()) return false;
+  if (exit.month !== referenceDate.getMonth() + 1 || year !== referenceDate.getFullYear()) return false;
+  if (hasDepartureDate) {
+    const stcFrom = new Date(year, exit.month - 1, exit.day);
+    const asOfDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+    return stcFrom <= asOfDate;
+  }
   return exit.month === referenceDate.getMonth() + 1 && year === referenceDate.getFullYear();
 }
 
@@ -60,6 +70,18 @@ export function isEmployeeHiredInMonth(employee, referenceDate = new Date()) {
 
 export function isEmployeeActiveInMonth(employee, referenceDate = new Date()) {
   if (String(employee.status ?? '').trim().toLowerCase() !== 'actif' || Number.isNaN(referenceDate.getTime())) return false;
+  const rawExit = String(employee.inactiveFrom ?? employee.inactive_from ?? '').trim();
+  const datedExit = /^(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/-]\d{1,2}[/-]\d{4})(?:[t\s].*)?$/i.test(rawExit)
+    ? parseExitMonth(rawExit)
+    : null;
+  if (datedExit) {
+    const exitYear = datedExit.year;
+    if (datedExit.month < 1 || datedExit.month > 12 || datedExit.day < 1
+      || datedExit.day > new Date(exitYear, datedExit.month, 0).getDate()) return false;
+    const exitDate = new Date(exitYear, datedExit.month - 1, datedExit.day);
+    const asOfDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+    if (exitDate <= asOfDate) return false;
+  }
   const text = String(employee.hiredAt ?? employee.hired_at ?? '').trim();
   if (!text || text === '0') return true;
   const iso = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
@@ -69,5 +91,5 @@ export function isEmployeeActiveInMonth(employee, referenceDate = new Date()) {
     ? [Number(iso[1]), Number(iso[2]), Number(iso[3])]
     : [Number(french[3]), Number(french[2]), Number(french[1])];
   if (month < 1 || month > 12 || day < 1 || day > new Date(year, month, 0).getDate()) return false;
-  return new Date(year, month - 1, day) <= new Date(referenceDate.getFullYear(), referenceDate.getMonth() + 1, 0);
+  return new Date(year, month - 1, day) <= new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
 }

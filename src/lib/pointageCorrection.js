@@ -31,7 +31,7 @@ export async function correctDailyPointage(snapshot, employees, { employeeKey, i
   const breakOverrides = { ...(current.calculationRules?.breakOverrides || {}), [`${employeeKey}|${isoDate}`]: Number(breakMinutes ?? current.calculationRules?.breakMinutes ?? 24) };
   const next = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, null,
     { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakOverrides, breakMinutes: current.calculationRules?.breakMinutes ?? 24,
-      dateOrder: current.calculationRules?.dateOrder || 'dmy' });
+      dateOrder: 'mdy' });
   const correction = { employeeKey, isoDate, fullName: person.fullName, correctedAt: new Date().toISOString(),
     before: { status: day.status, entry: day.entry, exit: day.exit, breakMinutes: day.breakMinutes, punches: originalRows },
     after: { entry, exit, breakMinutes: Number(breakMinutes ?? current.calculationRules?.breakMinutes ?? 24) } };

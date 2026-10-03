@@ -285,6 +285,42 @@ test('daily import and French display keep October 1 from the source 10/01 date'
   assert.equal(formatPointageDate(result.rawRows[0].isoDate), '01 oct 2026');
 });
 
+test('version 6 snapshot repairs October 2 that was stored as February 10', () => {
+  const row = (isoDate, display) => ({ employeeKey: '4', isoDate, pointageAt: `${isoDate}T07:36:00`,
+    pointageAtDisplay: `${display} 07:36:00` });
+  const current = getCurrentFilePointage({ currentFilePointage: {
+    dateNormalizationVersion: 6,
+    calculationRules: { dateOrder: 'mdy' },
+    closedDates: ['2026-01-10', '2026-02-10'],
+    importDiagnostics: { incomingDates: ['2026-01-10', '2026-02-10'] },
+    rawRows: [row('2026-01-10', '10/01/2026'), row('2026-02-10', '10/02/2026')],
+    dayRows: [
+      { employeeKey: '4', isoDate: '2026-01-10', entry: '10/01/2026 07:36:00' },
+      { employeeKey: '4', isoDate: '2026-02-10', entry: '10/02/2026 07:36:00' },
+    ],
+  } });
+
+  assert.deepEqual(current.importDiagnostics.incomingDates, ['2026-10-01', '2026-10-02']);
+  assert.equal(current.rawRows[1].isoDate, '2026-10-02');
+  assert.equal(current.rawRows[1].pointageAtDisplay, '02/10/2026 07:36:00');
+});
+
+test('version 6 snapshot with legacy dmy rules repairs from the imported mdy date label', () => {
+  const current = getCurrentFilePointage({ currentFilePointage: {
+    dateNormalizationVersion: 6,
+    calculationRules: { dateOrder: 'dmy' },
+    closedDates: ['2026-02-10'],
+    importDiagnostics: { incomingDates: ['2026-02-10'] },
+    rawRows: [{ employeeKey: '4', isoDate: '2026-02-10', pointageAt: '2026-02-10T07:36:00',
+      pointageAtDisplay: '10/02/2026 07:36:00' }],
+    dayRows: [{ employeeKey: '4', isoDate: '2026-02-10', entry: '10/02/2026 07:36:00' }],
+  } });
+
+  assert.deepEqual(current.importDiagnostics.incomingDates, ['2026-10-02']);
+  assert.equal(current.dateNormalizationVersion, 7);
+  assert.equal(current.rawRows[0].pointageAtDisplay, '02/10/2026 07:36:00');
+});
+
 test('saved dmy snapshot from the bad import is migrated and rebuilt as October 1', async () => {
   const rawRow = { sourceId: '4', sourceName: 'Z', employeeKey: '4', sheetName: 'Export',
     isoDate: '2026-01-10', pointageAt: '2026-01-10T07:36:00', pointageAtDisplay: '10/01/2026 07:36:00' };

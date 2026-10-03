@@ -136,7 +136,9 @@ function hasKnownOctoberImportInversion(pointage) {
 
 function normalizeLegacyDmySnapshotDates(pointage) {
   const knownOctoberInversion = hasKnownOctoberImportInversion(pointage);
-  if (pointage?.dateNormalizationVersion >= 6) return pointage;
+  if (pointage?.dateNormalizationVersion >= 7) return pointage;
+  if (pointage?.dateNormalizationVersion >= 6
+    && pointage?.calculationRules?.dateOrder !== 'dmy' && !knownOctoberInversion) return pointage;
   if (pointage?.dateNormalizationVersion >= 5 && pointage?.calculationRules?.dateOrder === 'mdy' && !knownOctoberInversion) return pointage;
   if (pointage?.dateNormalizationVersion >= 4 && pointage?.calculationRules?.dateOrder !== 'dmy' && !knownOctoberInversion) return pointage;
   const excelCorrections = getExcelDateCorrections(pointage?.fileName, (pointage?.rawRows || []).map((row) => row.isoDate));
@@ -194,7 +196,7 @@ function normalizeLegacyDmySnapshotDates(pointage) {
 
   return {
     ...pointage,
-    dateNormalizationVersion: 6,
+    dateNormalizationVersion: knownOctoberInversion || excelCorrections.size || pointage?.dateNormalizationVersion >= 6 ? 7 : 4,
     rawRows,
     dayRows,
     sourceWeeklySheets,

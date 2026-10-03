@@ -4659,8 +4659,8 @@ export default function App() {
       if (activeBreakMinutes !== pointageBreakMinutes) setPointageBreakMinutes(activeBreakMinutes);
       let normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || [], activeBreakMinutes);
       let snapshotRepairMessage = '';
-      if ((Number(snapshotResult.data?.currentFilePointage?.dateNormalizationVersion || 0) < 6
-        && normalizedSnapshot?.currentFilePointage?.dateNormalizationVersion >= 6)
+      if ((Number(snapshotResult.data?.currentFilePointage?.dateNormalizationVersion || 0) < 7
+        && normalizedSnapshot?.currentFilePointage?.dateNormalizationVersion >= 7)
         || (snapshotResult.data?.currentFilePointage?.calculationRules?.dateOrder === 'dmy'
           && normalizedSnapshot?.currentFilePointage?.calculationRules?.dateOrder === 'mdy')
         || (snapshotResult.data && Number(snapshotResult.data.calculationRules?.breakMinutes ?? snapshotResult.data.currentFilePointage?.calculationRules?.breakMinutes) !== activeBreakMinutes)) {

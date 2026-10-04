@@ -25,7 +25,9 @@ function headerMatchesAlias(header, alias) {
     return false;
   }
 
-  return header === alias || (alias.length >= 5 && header.includes(alias));
+  // Match whole header words: "actif" must never match the departure column
+  // "inactif a partir du ..." and prevent its dates from being imported.
+  return header === alias || (alias.length >= 5 && ` ${header} `.includes(` ${alias} `));
 }
 
 const FIRST_NAME_ALIASES = ['prenom', 'first name', 'given name'];
@@ -60,7 +62,7 @@ const FIELD_ALIASES = {
   departureReason: ['raison de depart', 'raison depart', 'motif depart', 'motif de depart', 'departure reason', 'reason for leaving'],
   payType: ['type paie', 'type paye', 'mode paie', 'paie', 'pay type'],
   signed: ['contrat signe', 'signe', 'signature', 'signed'],
-  status: ['statut', 'status', 'situation', 'etat', 'actif inactif'],
+  status: ['statut', 'status', 'situation', 'etat', 'actif inactif', 'actif inac', 'actif inactive', 'actif', 'active inactive'],
   inactiveFrom: ['inactif depuis', 'inactif a partir', 'inactif a part', 'inactive from', 'sortie', 'mois sortie', 'date sortie'],
 };
 
@@ -106,7 +108,8 @@ function buildHeaderMapping(row) {
 
   headers.forEach((header, index) => {
     const field = resolveFieldFromHeader(header, hasFirstNameColumn);
-    if (field && (!mapping.has(field) || (field === 'kind' && header === 'moi mod'))) {
+    const preferredStatusColumn = field === 'status' && /^actif(?:\s+inac|$)/.test(header);
+    if (field && (!mapping.has(field) || (field === 'kind' && header === 'moi mod') || preferredStatusColumn)) {
       mapping.set(field, index);
     }
   });
@@ -177,7 +180,7 @@ function getMappedValue(row, mapping, field) {
   return columnIndex === undefined ? '' : cleanText(row[columnIndex]);
 }
 
-function normalizeStatus(value, inactiveFrom) {
+export function normalizeEmployeeStatus(value, inactiveFrom) {
   const normalized = normalizeHeader(value);
 
   if (!normalized) {
@@ -204,6 +207,35 @@ function normalizeStatus(value, inactiveFrom) {
   }
 
   return cleanText(value);
+}
+
+// Personnel dates use day/month/year. They are independent of the clock
+// timestamp contract and Excel number formats never swap their calendar date.
+export function normalizeEmployeeRhDate(value, { date1904 = false, allowMonthOnly = false } = {}) {
+  const text = cleanText(value);
+  if (!text || /^0+(?:\.0+)?$/.test(text)) return '';
+  if (allowMonthOnly && /^\d{1,2}$/.test(text) && Number(text) >= 1 && Number(text) <= 12) return text;
+  let parts;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    parts = { y: value.getFullYear(), m: value.getMonth() + 1, d: value.getDate() };
+  } else if (typeof value === 'number' || /^\d{5,}(?:\.\d+)?$/.test(text)) {
+    parts = Number(value) > 0 ? XLSX.SSF.parse_date_code(Number(value), { date1904 }) : null;
+    if (!parts) return '';
+  } else {
+    const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[T\s].*)?$/);
+    const dmy = text.match(/^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}|\d{4})(?:\s.*)?$/);
+    if (!iso && !dmy) return text;
+    const year = Number(iso ? iso[1] : dmy[3]);
+    let month = Number(iso ? iso[2] : dmy[2]);
+    let day = Number(iso ? iso[3] : dmy[1]);
+    // Repair only unambiguous US formatted legacy values, e.g. 9/29/26.
+    // Ambiguous textual RH values always keep the French day/month contract.
+    if (dmy && month > 12 && day >= 1 && day <= 12) [day, month] = [month, day];
+    parts = { y: year < 100 ? 2000 + year : year, m: month, d: day };
+  }
+  if (parts.m < 1 || parts.m > 12 || parts.d < 1
+    || parts.d > new Date(parts.y, parts.m, 0).getDate()) return '';
+  return `${String(parts.d).padStart(2, '0')}/${String(parts.m).padStart(2, '0')}/${parts.y}`;
 }
 
 function buildEmployeeFromRow(row, mapping) {
@@ -237,7 +269,7 @@ function buildEmployeeFromRow(row, mapping) {
     departureReason: getMappedValue(row, mapping, 'departureReason'),
     payType: getMappedValue(row, mapping, 'payType'),
     signed: getMappedValue(row, mapping, 'signed'),
-    status: normalizeStatus(getMappedValue(row, mapping, 'status'), inactiveFrom),
+    status: normalizeEmployeeStatus(getMappedValue(row, mapping, 'status'), inactiveFrom),
     inactiveFrom,
   };
 }
@@ -261,20 +293,20 @@ export async function analyzeEmployeeBaseFile(file) {
   const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[selectedSheet.sheetName], {
     header: 1, defval: '', raw: true,
   });
-  const hiredAtColumn = selectedSheet.mapping.get('hiredAt');
+  const rhDateFields = ['hiredAt', 'inactiveFrom'];
   const employees = selectedSheet.rows.slice(selectedSheet.rowIndex + 1)
     .map((row, index) => {
       const employee = buildEmployeeFromRow(row, selectedSheet.mapping);
-      const rawHireDate = rawRows[selectedSheet.rowIndex + 1 + index]?.[hiredAtColumn];
-      // Excel stores dates as serial numbers; ignore the cell's display format.
-      if (typeof rawHireDate === 'number') {
-        const date = rawHireDate > 0 ? XLSX.SSF.parse_date_code(rawHireDate, {
-          date1904: Boolean(workbook.Workbook?.WBProps?.date1904),
-        }) : null;
-        employee.hiredAt = date
-          ? `${String(date.d).padStart(2, '0')}/${String(date.m).padStart(2, '0')}/${date.y}`
-          : '';
-      }
+      rhDateFields.forEach((field) => {
+        const column = selectedSheet.mapping.get(field);
+        if (column === undefined) return;
+        const rawDate = rawRows[selectedSheet.rowIndex + 1 + index]?.[column];
+        employee[field] = normalizeEmployeeRhDate(rawDate ?? employee[field], {
+          date1904: Boolean(workbook.Workbook?.WBProps?.date1904), allowMonthOnly: field === 'inactiveFrom',
+        });
+      });
+      employee.inactiveFrom = cleanInactiveFrom(employee.inactiveFrom);
+      employee.status = normalizeEmployeeStatus(getMappedValue(row, selectedSheet.mapping, 'status'), employee.inactiveFrom);
       return employee;
     })
     .filter(hasMeaningfulEmployeeData);

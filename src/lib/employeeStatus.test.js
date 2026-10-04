@@ -16,7 +16,7 @@ test('September personnel includes current active staff and September exits only
     { id: 'october-stc', ...stc('OCTOBRE') },
   ];
   const filtered = employees.filter((employee) => isEmployeeActiveInMonth(employee, september) || isEmployeeStcInMonth(employee, september));
-  assert.deepEqual(filtered.map((employee) => employee.id), ['older-active', 'september-active', 'undated-active', 'september-stc']);
+  assert.deepEqual(filtered.map((employee) => employee.id), ['older-active', 'undated-active', 'september-stc']);
   assert.equal(isEmployeeActiveInMonth({ status: 'Actif', hiredAt: '31/02/2026' }, september), false);
 });
 
@@ -53,10 +53,11 @@ test('September STC excludes earlier exits without making them active', () => {
 });
 
 test('recognizes September names, abbreviations and dates', () => {
-  for (const value of ['SEPT', ' sep. ', 'Septembre', 'SEPT 2026', 'septembre-2026', '09', '2026-09', '2026-09-15', '15/09/2026', '09/2026']) {
+  for (const value of ['SEPT', ' sep. ', 'Septembre', 'SEPT 2026', 'septembre-2026', '09', '2026-09', '2026-09-09', '09/09/2026', '09/2026']) {
     assert.equal(isEmployeeStcInMonth(stc(value), september), true, value);
   }
   assert.equal(isEmployeeStcInMonth({ status: ' stc ', inactive_from: 'SEPT' }, september), true);
+  assert.equal(isEmployeeStcInMonth(stc('15/09/2026'), september), false);
 });
 
 test('does not count previous years, future months, missing months or invalid dates', () => {

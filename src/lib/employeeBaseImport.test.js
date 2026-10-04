@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as XLSX from 'xlsx';
-import { analyzeEmployeeBaseFile } from './employeeBaseImport.js';
+import { analyzeEmployeeBaseFile, normalizeEmployeeRhDate, normalizeEmployeeStatus } from './employeeBaseImport.js';
 import { hasMeaningfulEmployeeData } from './employeeValidation.js';
 import { isEmployeeHiredInMonth } from './employeeStatus.js';
 
@@ -73,6 +73,67 @@ test('recognizes exported columns and gives MOI/MOD priority over Categories', a
   assert.equal(employees[0].signed, 'Oui');
   assert.equal(employees[0].status, 'STC');
   assert.equal(employees[0].inactiveFrom, 'SEPT');
+});
+
+test('RH exit dates decode native Excel serials as calendar dates despite US and General display formats', async () => {
+  const serial = (year, month, day) => (Date.UTC(year, month - 1, day) - Date.UTC(1899, 11, 30)) / 86400000;
+  const { employees } = await importRows([
+    ['Code', 'Nom complet', 'Departement', 'Actif/Inactif', 'Inactif A PARTIR'],
+    ['001', 'SORTIE SEPTEMBRE', 'PRODUCTION', 'STC', { t: 'n', v: serial(2026, 9, 29), z: 'm/d/yy h:mm' }],
+    ['002', 'SORTIE OCTOBRE', 'PRODUCTION', 'STC', { t: 'n', v: serial(2026, 10, 1), z: 'm/d/yy' }],
+    ['003', 'SORTIE OCTOBRE GENERAL', 'PRODUCTION', 'STC', serial(2026, 10, 1)],
+    ['004', 'ACTIF ZERO', 'PRODUCTION', 'Actif', 0],
+  ]);
+  assert.deepEqual(employees.map((employee) => employee.inactiveFrom), ['29/09/2026', '01/10/2026', '01/10/2026', '']);
+  assert.deepEqual(employees.map((employee) => employee.status), ['STC', 'STC', 'STC', 'Actif']);
+});
+
+test('explicit Actif/Inactif source column wins over generic status and shortened exported header is recognized', async () => {
+  const { employees } = await importRows([
+    ['Code', 'Nom complet', 'Departement', 'Statut', 'Actif Inac...', 'Inactif A PARTIR'],
+    ['001', 'SORTIE SEPTEMBRE', 'PRODUCTION', 'Actif', 'STC', '29/09/2026'],
+    ['002', 'SORTIE OCTOBRE', 'PRODUCTION', 'Actif', 'Inactif', '01/10/2026'],
+  ]);
+  assert.deepEqual(employees.map((employee) => employee.status), ['STC', 'STC']);
+  assert.deepEqual(employees.map((employee) => employee.inactiveFrom), ['29/09/2026', '01/10/2026']);
+});
+
+test('RH date normalization retains French textual dates through SQL-shaped JSON roundtrips', () => {
+  for (const [input, expected] of [['01/10/2026', '01/10/2026'], ['10/01/2026', '10/01/2026'],
+    ['2026-10-01', '01/10/2026'], ['01/10/26', '01/10/2026'], ['9/29/26', '29/09/2026']]) {
+    const row = JSON.parse(JSON.stringify({ inactive_from: normalizeEmployeeRhDate(input, { allowMonthOnly: true }), status: 'Inactif' }));
+    assert.equal(row.inactive_from, expected);
+    assert.equal(normalizeEmployeeRhDate(row.inactive_from, { allowMonthOnly: true }), expected);
+    assert.equal(normalizeEmployeeStatus(row.status, row.inactive_from), 'STC');
+  }
+  assert.equal(normalizeEmployeeRhDate(0, { allowMonthOnly: true }), '');
+  assert.equal(normalizeEmployeeRhDate('SEPT', { allowMonthOnly: true }), 'SEPT');
+  assert.equal(normalizeEmployeeRhDate(9, { allowMonthOnly: true }), '9');
+  assert.equal(normalizeEmployeeRhDate('31/02/2026'), '');
+});
+
+test('extended departure headers cannot be mistaken for the Actif status column', async () => {
+  for (const header of ['Inactif A PARTIR DU', 'Inactif à partir de', 'Date sortie effective']) {
+    const { employees } = await importRows([
+      ['Code', 'Nom complet', 'Departement', 'Actif/Inactif', header],
+      ['21', 'DEPART SEPT29', 'PRODUCTION', 'STC', '29/09/2026'],
+      ['22', 'DEPART OCT1', 'PRODUCTION', 'STC', '01/10/2026'],
+    ]);
+    assert.deepEqual(employees.map((employee) => employee.inactiveFrom), ['29/09/2026', '01/10/2026'], header);
+    assert.deepEqual(employees.map((employee) => employee.status), ['STC', 'STC'], header);
+  }
+});
+
+test('RH native departure dates retain their calendar day in the Excel 1904 date system', async () => {
+  const workbook = XLSX.utils.book_new();
+  workbook.Workbook = { WBProps: { date1904: true } };
+  const serial = (Date.UTC(2026, 9, 1) - Date.UTC(1904, 0, 1)) / 86400000;
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([
+    ['Code', 'Nom', 'Departement', 'Actif/Inactif', 'Inactif A PARTIR DU'],
+    ['22', 'DEPART OCT1', 'PRODUCTION', 'STC', { t: 'n', v: serial, z: 'm/d/yy h:mm' }],
+  ]), 'Personnel');
+  const result = await analyzeEmployeeBaseFile({ name: 'personnel-1904.xlsx', arrayBuffer: async () => XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) });
+  assert.equal(result.employees[0].inactiveFrom, '01/10/2026');
 });
 
 test('rejects placeholder identities from Excel, browser cache and database shapes', () => {

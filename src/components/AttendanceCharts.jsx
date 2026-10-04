@@ -94,7 +94,7 @@ export default function AttendanceCharts({ history = [], analysisDate, absent, l
         {[0, 1, 2, 3, 4].map((tick) => <g key={tick}><line x1="40" x2="550" y1={112 - tick * 22} y2={112 - tick * 22} stroke="#e9eff6" /><text x="30" y={116 - tick * 22} textAnchor="end">{Math.round(maximum * tick / 4)}</text></g>)}
         {events.map((event, index) => { const height = event.value / maximum * 88; return <g key={event.label}><rect x={80 + index * 168} y={112 - height} width="84" height={height} rx="3" fill={event.color} /><text className="attendance-chart__value" x={122 + index * 168} y={104 - height} textAnchor="middle">{event.value}</text><text x={122 + index * 168} y="132" textAnchor="middle">{event.label}</text></g>; })}
       </svg>
-      <small>{t('daily.eventsPeriod', 'Absences et retards : journée sélectionnée · STC : mois courant')}</small>
+      <small>{t('daily.eventsPeriod', 'Absences et retards : journée sélectionnée · STC : période du 26 au 25, jusqu’à la date sélectionnée')}</small>
     </article>
   </>;
 }

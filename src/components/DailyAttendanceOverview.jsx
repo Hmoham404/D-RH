@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatPointageDate } from '../lib/dailyPointage.js';
-import { isEmployeeHiredInMonth, isEmployeeStcInMonth } from '../lib/employeeStatus.js';
+import { getEmployeeStcPeriod, isEmployeeHiredInMonth, isEmployeeStcInPeriod } from '../lib/employeeStatus.js';
 import { KpiCard, ProductionFocusSection } from './AttendanceDashboard';
 import AttendanceCharts from './AttendanceCharts';
 import DashboardIcon from './DashboardIcon';
@@ -291,10 +291,12 @@ export default function DailyAttendanceOverview({ day, history, analysisDate,
   const modPresent = present.filter((person) => isProduction(person) && isMod(person));
   const modAbsent = productionAbsent.filter(isMod);
   const recruits = baseEmployees.filter((employee) => isEmployeeHiredInMonth(employee, baseMonthDate)).map(toPerson);
-  const stc = baseEmployees.filter((employee) => isEmployeeStcInMonth(employee, baseMonthDate)).map(toPerson);
+  const stc = baseEmployees.filter((employee) => isEmployeeStcInPeriod(employee, baseMonthDate)).map(toPerson);
   const productionRecruits = recruits.filter(isProduction);
   const productionStc = stc.filter(isProduction);
   const monthLabel = baseMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const stcPeriod = getEmployeeStcPeriod(baseMonthDate);
+  const stcPeriodLabel = `${stcPeriod.startDate.toLocaleDateString(locale)} – ${stcPeriod.endDate.toLocaleDateString(locale)}`;
   const lists = {
     'production-total': { title: t('kpi.productionWorkforce'), people: production },
     'production-present': { title: t('daily.productionPresent'), people: productionPresent },
@@ -382,7 +384,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate,
           <KpiCard tone="orange" label={t('kpi.absents')} value={number(absent.length)} note={formatPercent(absent.length, workforce.length)} onClick={() => open(t('kpi.absents'), absent)} />
           <KpiCard tone="red" label={t('kpi.late')} value={number(late.length)} note={formatPercent(late.length, present.length)} onClick={() => open(t('kpi.late'), late)} />
           <KpiCard tone="slate" label={t('kpi.recruitments')} value={number(recruits.length)} note={monthLabel} onClick={() => open(t('kpi.recruitments'), recruits)} />
-          <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={formatPercent(stc.length, workforce.length)} onClick={() => open(t('kpi.stcMonth'), stc)} />
+          <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={stcPeriodLabel} onClick={() => open(t('kpi.stcMonth'), stc)} />
         </section>
         <ProductionFocusSection
           dashboardCharts={<AttendanceCharts history={history} analysisDate={analysisDate} absent={absent.length} late={late.length} stc={stc.length} locale={locale} translate={t} />}

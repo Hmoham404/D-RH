@@ -1,5 +1,6 @@
 import employeesDirectory from '../employees.json';
 import { cleanInactiveFrom, hasMeaningfulEmployeeData } from '../lib/employeeValidation.js';
+import { normalizeEmployeeRhDate, normalizeEmployeeStatus } from '../lib/employeeBaseImport.js';
 import {
   formatSupabaseError,
   getSupabaseConfigIssue,
@@ -14,7 +15,7 @@ const LOCAL_EMPLOYEES_KEY = 'rh_employee_records_local';
 const LOCAL_DELETED_EMPLOYEES_KEY = 'rh_employee_deleted_records_local';
 
 function cleanText(value) {
-  return typeof value === 'string' ? value.trim() : '';
+  return String(value ?? '').trim();
 }
 
 function slugify(value) {
@@ -84,6 +85,7 @@ export function normalizeEmployee(employee, index = 0) {
   const fullName =
     cleanText(employee.fullName || employee.full_name) ||
     `${lastName} ${firstName}`.trim();
+  const inactiveFrom = cleanInactiveFrom(normalizeEmployeeRhDate(employee.inactiveFrom || employee.inactive_from, { allowMonthOnly: true }));
 
   return {
     recordId: buildEmployeeRecordId(employee, index),
@@ -100,14 +102,14 @@ export function normalizeEmployee(employee, index = 0) {
     department: cleanText(employee.department),
     service: cleanText(employee.service),
     job: cleanText(employee.job),
-    hiredAt: cleanText(employee.hiredAt || employee.hired_at),
+    hiredAt: normalizeEmployeeRhDate(employee.hiredAt || employee.hired_at),
     address: cleanText(employee.address),
     bus: cleanText(employee.bus),
     departureReason: cleanText(employee.departureReason || employee.departure_reason),
     payType: cleanText(employee.payType || employee.pay_type),
     signed: cleanText(employee.signed),
-    status: cleanText(employee.status),
-    inactiveFrom: cleanInactiveFrom(employee.inactiveFrom || employee.inactive_from),
+    status: normalizeEmployeeStatus(employee.status, inactiveFrom),
+    inactiveFrom,
     userLevel: cleanText(employee.userLevel || employee.user_level),
   };
 }

@@ -9,11 +9,6 @@ import PointageCorrectionForm from './PointageCorrectionForm';
 import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDates.js';
 import DashboardIcon from './DashboardIcon';
 
-function getCurrentMonthDate() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1);
-}
-
 function isExcelFile(file) {
   return /\.(xlsx|xls)$/i.test(file?.name || '');
 }
@@ -57,7 +52,7 @@ function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, onImport,
   );
 }
 
-export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange, pointageBreakMinutes = 24, onPointageBreakMinutesChange }) {
+export default function DailyPointageImport({ employees, importEmployees = employees, baseEmployees = importEmployees, selectedDate = '', onDateChange, snapshot, onSaved, loading, translate, locale, productionLabels, productionModTarget, onProductionModTargetChange, pointageBreakMinutes = 24, onPointageBreakMinutesChange }) {
   const rules = { dateOrder: 'mdy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true };
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -74,13 +69,17 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const listDialogRef = useRef(null);
   const dialogRef = useRef(null);
   const data = useMemo(() => getCurrentFilePointage(snapshot), [snapshot]);
+  function changeAnalysisDate(value) {
+    setSelectedDay(value);
+    onDateChange?.(value);
+  }
   useEffect(() => {
     if (!snapshot || loading || Number(snapshot.calculationRules?.breakMinutes ?? snapshot.currentFilePointage?.calculationRules?.breakMinutes) === pointageBreakMinutes) return;
     let cancelled = false;
     async function recalculateSavedPointage() {
       setBusy(true);
       try {
-        const updated = await normalizeSavedPointageSnapshot(snapshot, employees, pointageBreakMinutes);
+        const updated = await normalizeSavedPointageSnapshot(snapshot, importEmployees, pointageBreakMinutes);
         if (cancelled || !updated) return;
         const result = await savePointageSnapshot(updated, { expectedUpdatedAt: snapshot.storageRevision });
         if (cancelled) return;
@@ -95,13 +94,13 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     }
     recalculateSavedPointage();
     return () => { cancelled = true; };
-  }, [pointageBreakMinutes, snapshot, employees, loading]);
+  }, [pointageBreakMinutes, snapshot, importEmployees, loading]);
   useEffect(() => {
     const now = new Date();
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     const timer = setTimeout(() => {
       setToday(getLocalPointageDate());
-      setSelectedDay('');
+      changeAnalysisDate('');
     }, tomorrow - now + 1000);
     return () => clearTimeout(timer);
   }, [today]);
@@ -117,7 +116,8 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   ].filter(Boolean))].sort(), [data]);
   const table = useMemo(() => buildDailyTable(data, importEmployees, dates), [data, importEmployees, dates]);
   const dayLabel = formatPointageDate;
-  const analysisDate = selectedDay && dates.includes(selectedDay) ? selectedDay : getDefaultPointageDate(dates, today);
+  const requestedDate = selectedDate || selectedDay;
+  const analysisDate = requestedDate && dates.includes(requestedDate) ? requestedDate : getDefaultPointageDate(dates, today);
   const filteredRows = table.rows.filter((row) =>
     `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase())
     && (statusFilter === 'ALL' || row.days.some((day) => day.isoDate === analysisDate && day.status === statusFilter)));
@@ -156,7 +156,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     XLSX.writeFile(workbook, `pointage_${analysisDate || today}.xlsx`);
   }
   const attendanceHistory = useMemo(() => buildAttendanceByDay(table), [table]);
-  const baseMonthDate = useMemo(() => getCurrentMonthDate(), []);
+  const baseMonthDate = useMemo(() => new Date(`${analysisDate || today}T12:00:00`), [analysisDate, today]);
   const attendance = useMemo(() => attendanceHistory.filter((day) => day.isoDate === analysisDate), [attendanceHistory, analysisDate]);
   async function saveCorrection(correction) {
     const next = await correctDailyPointage(snapshot, importEmployees, correction);
@@ -182,7 +182,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       setMessage(translate('daily.saving'));
       const result = await savePointageSnapshot(next);
       if (result.mode !== 'supabase') throw new Error(result.message);
-      onSaved(result.data);
+      onSaved(result.data, { resetSelectedDate: true });
       setDetail(null);
       setListDetail(null);
       setSelectedDay('');
@@ -229,14 +229,14 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     <DailyPointageTopbarTools
       dates={dates}
       analysisDate={analysisDate}
-      onDateChange={setSelectedDay}
+      onDateChange={changeAnalysisDate}
       onImport={importFile}
       busy={busy || correcting}
       importDisabled={loading}
       translate={translate}
       locale={locale}
     />
-    <DailyAttendanceOverview day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={setSelectedDay}
+    <DailyAttendanceOverview day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={changeAnalysisDate}
       baseEmployees={baseEmployees} baseMonthDate={baseMonthDate} onOpen={setListDetail}
       target={productionModTarget} onTargetChange={onProductionModTargetChange} onImport={importFile}
       busy={busy || correcting} importDisabled={loading} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
@@ -264,7 +264,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       <button type="button" className="daily-import__download-button" onClick={downloadAttendanceExcel} disabled={!table.dayColumns.length}>
         <DashboardIcon type="download" />{translate('daily.importScreen.downloadExcel', 'Télécharger Excel')}
       </button>
-      {statusFilter !== 'ALL' && <label className="daily-import__filter">{translate('daily.importScreen.forDate')}<select value={analysisDate} onChange={(event) => setSelectedDay(event.target.value)} disabled={!dates.length}>
+      {statusFilter !== 'ALL' && <label className="daily-import__filter">{translate('daily.importScreen.forDate')}<select value={analysisDate} onChange={(event) => changeAnalysisDate(event.target.value)} disabled={!dates.length}>
         {dates.map((date) => <option key={date} value={date}>{dayLabel(date)}</option>)}
       </select></label>}
     </div></div>
@@ -272,7 +272,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         const dayRows = table.rows.map((row) => row.days.find((day) => day.isoDate === d.isoDate)).filter(Boolean);
         const presentCount = dayRows.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
         const absentCount = dayRows.filter((day) => day.status === 'ABS').length;
-        return <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => setSelectedDay(d.isoDate)}><span>{dayLabel(d.isoDate)}</span><small>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</small></button></th>;
+        return <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => changeAnalysisDate(d.isoDate)}><span>{dayLabel(d.isoDate)}</span><small>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</small></button></th>;
       })}</tr></thead><tbody>{table.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + table.dayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? translate('daily.importScreen.createData') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
     </article>
     <form className="delete-zone" onSubmit={clearPointage}>

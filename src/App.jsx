@@ -4,7 +4,7 @@ import DailyPointageImport from './components/DailyPointageImport';
 import DashboardIcon from './components/DashboardIcon';
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './components/AttendanceDashboard';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
-import { isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInMonth } from './lib/employeeStatus.js';
+import { getEmployeeStcPeriod, isEmployeeActiveInMonth, isEmployeeHiredInMonth, isEmployeeStcInPeriod } from './lib/employeeStatus.js';
 import { buildDailyWeeks, normalizeSavedPointageSnapshot, prepareDailyPointage } from './lib/dailyPointage.js';
 import { dailyPointageTranslations } from './lib/dailyPointageTranslations.js';
 import {
@@ -106,11 +106,11 @@ const BUS_DASHBOARD_TRANSLATIONS = {
   },
 };
 const STC_DASHBOARD_TRANSLATIONS = {
-  fr: { cards: { month: 'STC du mois', reasons: 'Raisons renseignees', missing: 'sans raison', main: 'Raison principale', people: 'personne(s)' }, chart: { title: 'Courbe des raisons de depart', subtitle: 'Repartition des STC selon la cause de depart', empty: 'Aucun STC pour ce mois.' }, reasons: { title: 'Raisons de depart', rank: 'Classement par volume', search: 'Rechercher STC, raison, service...', empty: 'Aucune raison de depart.', unknown: 'Non renseigne', noData: 'Aucune donnee', count: (count) => `${count} fiche(s) visible(s)` }, table: { title: 'Liste STC', code: 'Code', name: 'Nom', department: 'Departement', service: 'Service', reason: 'Raison de depart', exitMonth: 'Mois sortie', action: 'Action', edit: 'Modifier', empty: 'Aucun STC trouve.' } },
-  en: { cards: { month: 'STC this month', reasons: 'Reasons provided', missing: 'without a reason', main: 'Main reason', people: 'people' }, chart: { title: 'Departure reasons', subtitle: 'STC records by departure reason', empty: 'No STC records this month.' }, reasons: { title: 'Departure reasons', rank: 'Ranked by count', search: 'Search STC, reason, service...', empty: 'No departure reasons.', unknown: 'Not provided', noData: 'No data', count: (count) => `${count} visible record(s)` }, table: { title: 'STC list', code: 'Code', name: 'Name', department: 'Department', service: 'Service', reason: 'Departure reason', exitMonth: 'Exit month', action: 'Action', edit: 'Edit', empty: 'No STC records found.' } },
-  it: { cards: { month: 'STC del mese', reasons: 'Motivi indicati', missing: 'senza motivo', main: 'Motivo principale', people: 'persone' }, chart: { title: 'Motivi di uscita', subtitle: 'Distribuzione STC per motivo di uscita', empty: 'Nessun STC questo mese.' }, reasons: { title: 'Motivi di uscita', rank: 'Ordine per quantità', search: 'Cerca STC, motivo, servizio...', empty: 'Nessun motivo di uscita.', unknown: 'Non indicato', noData: 'Nessun dato', count: (count) => `${count} schede visibili` }, table: { title: 'Elenco STC', code: 'Codice', name: 'Nome', department: 'Reparto', service: 'Servizio', reason: 'Motivo di uscita', exitMonth: 'Mese di uscita', action: 'Azione', edit: 'Modifica', empty: 'Nessun STC trovato.' } },
-  ar: { cards: { month: 'STC هذا الشهر', reasons: 'الأسباب المحددة', missing: 'دون سبب', main: 'السبب الرئيسي', people: 'أشخاص' }, chart: { title: 'أسباب المغادرة', subtitle: 'توزيع حالات STC حسب سبب المغادرة', empty: 'لا توجد حالات STC هذا الشهر.' }, reasons: { title: 'أسباب المغادرة', rank: 'ترتيب حسب العدد', search: 'ابحث عن STC أو سبب أو خدمة...', empty: 'لا توجد أسباب مغادرة.', unknown: 'غير محدد', noData: 'لا توجد بيانات', count: (count) => `${count} سجل ظاهر` }, table: { title: 'قائمة STC', code: 'الرمز', name: 'الاسم', department: 'القسم', service: 'الخدمة', reason: 'سبب المغادرة', exitMonth: 'شهر المغادرة', action: 'الإجراء', edit: 'تعديل', empty: 'لم يتم العثور على STC.' } },
-  zh: { cards: { month: '本月STC', reasons: '已填写原因', missing: '未填写原因', main: '主要原因', people: '人' }, chart: { title: '离职原因趋势', subtitle: '按离职原因统计STC', empty: '本月没有STC记录。' }, reasons: { title: '离职原因', rank: '按数量排序', search: '搜索STC、原因或服务...', empty: '没有离职原因。', unknown: '未填写', noData: '无数据', count: (count) => `${count} 条记录` }, table: { title: 'STC名单', code: '编号', name: '姓名', department: '部门', service: '服务', reason: '离职原因', exitMonth: '离职月份', action: '操作', edit: '编辑', empty: '没有找到STC记录。' } },
+  fr: { cards: { month: 'STC de la période', reasons: 'Raisons renseignees', missing: 'sans raison', main: 'Raison principale', people: 'personne(s)' }, chart: { title: 'Courbe des raisons de depart', subtitle: 'Repartition des STC selon la cause de depart', empty: 'Aucun STC pour cette période.' }, reasons: { title: 'Raisons de depart', rank: 'Classement par volume', search: 'Rechercher STC, raison, service...', empty: 'Aucune raison de depart.', unknown: 'Non renseigne', noData: 'Aucune donnee', count: (count) => `${count} fiche(s) visible(s)` }, table: { title: 'Liste STC', code: 'Code', name: 'Nom', department: 'Departement', service: 'Service', reason: 'Raison de depart', exitMonth: 'Date de sortie', action: 'Action', edit: 'Modifier', empty: 'Aucun STC trouve.' } },
+  en: { cards: { month: 'STC this period', reasons: 'Reasons provided', missing: 'without a reason', main: 'Main reason', people: 'people' }, chart: { title: 'Departure reasons', subtitle: 'STC records by departure reason', empty: 'No STC records this period.' }, reasons: { title: 'Departure reasons', rank: 'Ranked by count', search: 'Search STC, reason, service...', empty: 'No departure reasons.', unknown: 'Not provided', noData: 'No data', count: (count) => `${count} visible record(s)` }, table: { title: 'STC list', code: 'Code', name: 'Name', department: 'Department', service: 'Service', reason: 'Departure reason', exitMonth: 'Exit date', action: 'Action', edit: 'Edit', empty: 'No STC records found.' } },
+  it: { cards: { month: 'STC del periodo', reasons: 'Motivi indicati', missing: 'senza motivo', main: 'Motivo principale', people: 'persone' }, chart: { title: 'Motivi di uscita', subtitle: 'Distribuzione STC per motivo di uscita', empty: 'Nessun STC in questo periodo.' }, reasons: { title: 'Motivi di uscita', rank: 'Ordine per quantità', search: 'Cerca STC, motivo, servizio...', empty: 'Nessun motivo di uscita.', unknown: 'Non indicato', noData: 'Nessun dato', count: (count) => `${count} schede visibili` }, table: { title: 'Elenco STC', code: 'Codice', name: 'Nome', department: 'Reparto', service: 'Servizio', reason: 'Motivo di uscita', exitMonth: 'Data di uscita', action: 'Azione', edit: 'Modifica', empty: 'Nessun STC trovato.' } },
+  ar: { cards: { month: 'STC هذه الفترة', reasons: 'الأسباب المحددة', missing: 'دون سبب', main: 'السبب الرئيسي', people: 'أشخاص' }, chart: { title: 'أسباب المغادرة', subtitle: 'توزيع حالات STC حسب سبب المغادرة', empty: 'لا توجد حالات STC هذه الفترة.' }, reasons: { title: 'أسباب المغادرة', rank: 'ترتيب حسب العدد', search: 'ابحث عن STC أو سبب أو خدمة...', empty: 'لا توجد أسباب مغادرة.', unknown: 'غير محدد', noData: 'لا توجد بيانات', count: (count) => `${count} سجل ظاهر` }, table: { title: 'قائمة STC', code: 'الرمز', name: 'الاسم', department: 'القسم', service: 'الخدمة', reason: 'سبب المغادرة', exitMonth: 'تاريخ المغادرة', action: 'الإجراء', edit: 'تعديل', empty: 'لم يتم العثور على STC.' } },
+  zh: { cards: { month: '本期STC', reasons: '已填写原因', missing: '未填写原因', main: '主要原因', people: '人' }, chart: { title: '离职原因趋势', subtitle: '按离职原因统计STC', empty: '本期没有STC记录。' }, reasons: { title: '离职原因', rank: '按数量排序', search: '搜索STC、原因或服务...', empty: '没有离职原因。', unknown: '未填写', noData: '无数据', count: (count) => `${count} 条记录` }, table: { title: 'STC名单', code: '编号', name: '姓名', department: '部门', service: '服务', reason: '离职原因', exitMonth: '离职日期', action: '操作', edit: '编辑', empty: '没有找到STC记录。' } },
 };
 const UI_TRANSLATIONS = {
   fr: {
@@ -134,7 +134,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'Pointage quotidien', note: 'Liste des presents' },
         employees: { label: 'Employes', note: 'Etat du personnel' },
         departments: { label: 'Bus', note: 'Suivi transport' },
-        reports: { label: 'STC', note: 'Sorties du mois' },
+        reports: { label: 'STC', note: 'Sorties de la période' },
         absences: { label: 'Absences & Conges', note: 'ABS, CM, conges' },
         settings: { label: 'ZK Dashboard', note: 'Import et pointage' },
       },
@@ -154,7 +154,7 @@ const UI_TRANSLATIONS = {
       absents: 'Absents',
       late: 'Retards',
       recruitments: 'Nombre de recrutements',
-      stcMonth: 'STC du mois',
+      stcMonth: 'STC de la période',
       productionWorkforce: 'Effectif de production',
     },
     production: {
@@ -231,7 +231,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'الحضور اليومي', note: 'قائمة الحاضرين' },
         employees: { label: 'الموظفون', note: 'حالة الموظفين' },
         departments: { label: 'الأقسام', note: 'التوزيع النشط' },
-        reports: { label: 'STC', note: 'خروج الشهر' },
+        reports: { label: 'STC', note: 'خروج الفترة' },
         absences: { label: 'الغيابات والإجازات', note: 'غياب ومرض وإجازات' },
         settings: { label: 'ZK Dashboard', note: 'الاستيراد والقاعدة' },
       },
@@ -251,7 +251,7 @@ const UI_TRANSLATIONS = {
       absents: 'الغائبون',
       late: 'المتأخرون',
       recruitments: 'عدد الانتدابات',
-      stcMonth: 'مغادرة هذا الشهر',
+      stcMonth: 'مغادرة الفترة',
       productionWorkforce: 'عدد عمال الإنتاج',
     },
     production: {
@@ -326,7 +326,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'Daily attendance', note: 'Present employees list' },
         employees: { label: 'Employees', note: 'Staff status' },
         departments: { label: 'Bus', note: 'Transport tracking' },
-        reports: { label: 'STC', note: 'Monthly exits' },
+        reports: { label: 'STC', note: 'Period exits' },
         absences: { label: 'Absences & leave', note: 'ABS, sick leave, leave' },
         settings: { label: 'ZK Dashboard', note: 'Import and attendance' },
       },
@@ -346,7 +346,7 @@ const UI_TRANSLATIONS = {
       absents: 'Absent',
       late: 'Late arrivals',
       recruitments: 'Recruitments',
-      stcMonth: 'Monthly STC',
+      stcMonth: 'Period STC',
       productionWorkforce: 'Production workforce',
     },
     production: {
@@ -421,7 +421,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: 'Presenze giornaliere', note: 'Elenco presenti' },
         employees: { label: 'Dipendenti', note: 'Stato del personale' },
         departments: { label: 'Reparti', note: 'Ripartizione attiva' },
-        reports: { label: 'STC', note: 'Uscite del mese' },
+        reports: { label: 'STC', note: 'Uscite del periodo' },
         absences: { label: 'Assenze e congedi', note: 'ABS, malattia, congedi' },
         settings: { label: 'ZK Dashboard', note: 'Import e base' },
       },
@@ -441,7 +441,7 @@ const UI_TRANSLATIONS = {
       absents: 'Assenti',
       late: 'Ritardi',
       recruitments: 'Numero assunzioni',
-      stcMonth: 'STC del mese',
+      stcMonth: 'STC del periodo',
       productionWorkforce: 'Organico produzione',
     },
     production: {
@@ -516,7 +516,7 @@ const UI_TRANSLATIONS = {
         pointage: { label: '每日考勤', note: '出勤人员列表' },
         employees: { label: '员工', note: '员工状态' },
         departments: { label: '部门', note: '在岗分布' },
-        reports: { label: 'STC', note: '本月离职' },
+        reports: { label: 'STC', note: '本期离职' },
         absences: { label: '缺勤与休假', note: '缺勤、病假、休假' },
         settings: { label: 'ZK Dashboard', note: '导入与基础库' },
       },
@@ -535,7 +535,7 @@ const UI_TRANSLATIONS = {
       absents: '缺勤',
       late: '迟到',
       recruitments: '招聘人数',
-      stcMonth: '本月 STC',
+      stcMonth: '本期 STC',
       productionWorkforce: '生产人数',
     },
     production: {
@@ -982,7 +982,7 @@ const SIDEBAR_ITEMS = [
   {
     key: 'reports',
     label: 'STC',
-    note: 'Sorties du mois',
+    note: 'Sorties de la période',
   },
   {
     key: 'absences',
@@ -2281,7 +2281,7 @@ function buildDepartmentBaseRows(employees, referenceDate) {
       current.active += 1;
     }
 
-    if (isEmployeeStcInMonth(employee, referenceDate)) {
+    if (isEmployeeStcInPeriod(employee, referenceDate)) {
       current.stc += 1;
     }
 
@@ -2407,7 +2407,7 @@ function exportEmployeeBaseWorkbook(employees, departmentRows) {
     Departement: department.label,
     Total: department.total,
     Actifs: department.active,
-    STC_du_mois: department.stc,
+    STC_de_la_periode: department.stc,
     MOI: department.moi,
     MOD: department.mod,
     Services: department.serviceCount,
@@ -4363,13 +4363,15 @@ export default function App() {
   const locale = LANGUAGE_LOCALES[language] || LANGUAGE_LOCALES.fr;
   const todayIsoDate = getTodayIsoDate();
   const currentDate = useMemo(() => {
-    const [year, month, day] = todayIsoDate.split('-').map(Number);
+    const [year, month, day] = (selectedDate || todayIsoDate).split('-').map(Number);
     return new Date(year, month - 1, day);
-  }, [todayIsoDate]);
+  }, [selectedDate, todayIsoDate]);
   const currentMonthDate = useMemo(() => {
     return new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
   }, [currentDate]);
   const currentMonthLabel = currentMonthDate.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+  const stcPeriod = getEmployeeStcPeriod(currentDate);
+  const stcPeriodLabel = `${stcPeriod.startDate.toLocaleDateString(locale)} – ${stcPeriod.endDate.toLocaleDateString(locale)}`;
   const languageDirection = language === 'ar' ? 'rtl' : 'ltr';
   const translate = (path, fallback = path, values = {}) => {
     const value = getTranslationValue(language, path);
@@ -4407,7 +4409,7 @@ export default function App() {
       presents: translate('kpi.presents', 'Presents'),
       absents: translate('kpi.absents', 'Absents'),
       recruitments: translate('kpi.recruitments', 'Nombre de recrutements'),
-      stcMonth: translate('kpi.stcMonth', 'STC du mois'),
+      stcMonth: translate('kpi.stcMonth', 'STC de la période'),
       productionTypes: translate('production.productionTypes', 'Types de production'),
       kindPresence: translate('production.kindPresence', 'Presence MOI / MOD'),
       kindAbsence: translate('production.kindAbsence', 'ABS MOI / MOD'),
@@ -4489,7 +4491,7 @@ export default function App() {
       cards: {
         records: `${translate('employeeBase.cards.records', 'Fiches RH')} · ${currentMonthLabel}`,
         active: `${translate('employeeBase.cards.active', 'Actifs')} · ${currentMonthLabel}`,
-        stc: `${translate('kpi.stcMonth', 'STC du mois')} · ${currentMonthLabel}`,
+        stc: `${translate('kpi.stcMonth', 'STC de la période')} · ${stcPeriodLabel}`,
       },
       baseTitle: translate('employeeBase.baseTitle', 'Base du personnel'),
       baseSubtitle: translateFn('employeeBase.baseSubtitle', (count) => `${count} departement(s) relies a cette base.`),
@@ -4512,7 +4514,7 @@ export default function App() {
       edit: translate('employeeBase.edit', 'Modifier'),
       empty: translate('employeeBase.empty', 'Aucun employe trouve pour cette recherche.'),
     }),
-    [language, currentMonthLabel],
+    [language, currentMonthLabel, stcPeriodLabel],
   );
   const busPointageLabels = useMemo(
     () => {
@@ -4572,7 +4574,7 @@ export default function App() {
         departments: translate('departmentBase.metrics.departments', 'Departements'),
         services: translate('departmentBase.metrics.services', 'Services'),
         active: translate('departmentBase.metrics.active', 'Actifs'),
-        stc: `${translate('kpi.stcMonth', 'STC du mois')} · ${currentMonthLabel}`,
+        stc: `${translate('kpi.stcMonth', 'STC de la période')} · ${stcPeriodLabel}`,
       },
       columns: {
         department: translate('departmentBase.columns.department', 'Departement'),
@@ -4583,7 +4585,7 @@ export default function App() {
       },
       empty: translate('departmentBase.empty', 'Aucun departement trouve pour cette recherche.'),
     }),
-    [language, currentMonthLabel],
+    [language, currentMonthLabel, stcPeriodLabel],
   );
   const absenceLabels = useMemo(
     () => ({
@@ -4610,23 +4612,23 @@ export default function App() {
       lateSubtitle: (date, count) => `${count} ${translate('kpi.late', 'Retards').toLowerCase()} | ${date}`,
       newTitle: translate('kpi.newListTitle', 'Liste des nouveaux'),
       newSubtitle: (date, count) => `${count} | ${date}`,
-      stcTitle: translate('kpi.stcListTitle', 'Liste STC du mois'),
-      stcSubtitle: (count, periodLabel) => `${count} ${translate('kpi.stcMonth', 'STC du mois')} | ${periodLabel}`,
+      stcTitle: translate('kpi.stcListTitle', 'Liste STC de la période'),
+      stcSubtitle: (count) => `${count} ${translate('kpi.stcMonth', 'STC de la période')} | ${stcPeriodLabel}`,
       totalTitle: translate('kpi.workforceGlobal', 'Effectif global'),
       totalSubtitle: (count, periodLabel) => `${count} | ${periodLabel}`,
     }),
-    [language],
+    [language, stcPeriodLabel],
   );
   const employeeBaseDetailLabels = useMemo(
     () => ({
       activeTitle: translate('employeeBase.activeListTitle', 'Liste des employes actifs'),
       activeSubtitle: (count) => `${count} ${translate('employeeBase.cards.active', 'Actifs').toLowerCase()}`,
-      stcTitle: translate('kpi.stcListTitle', 'Liste STC du mois'),
-      stcSubtitle: (count) => `${count} STC | ${currentMonthLabel}`,
+      stcTitle: translate('kpi.stcListTitle', 'Liste STC de la période'),
+      stcSubtitle: (count) => `${count} STC | ${stcPeriodLabel}`,
       allTitle: translate('employeeBase.allListTitle', 'Liste complete base RH'),
       allSubtitle: (count) => `${count} ${translate('employeeBase.cards.records', 'Fiches RH').toLowerCase()}`,
     }),
-    [language, currentMonthLabel],
+    [language, currentMonthLabel, stcPeriodLabel],
   );
   const productionDetailLabels = useMemo(
     () => ({
@@ -4638,12 +4640,12 @@ export default function App() {
       absentSubtitle: (count, date) => `${count} ${translate('kpi.absents', 'Absents').toLowerCase()} | ${date}`,
       newTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.recruitments', 'Nombre de recrutements')}`,
       newSubtitle: (count, date) => `${count} | ${date}`,
-      stcTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.stcMonth', 'STC du mois')}`,
-      stcSubtitle: (count) => `${count} STC | ${currentMonthLabel}`,
+      stcTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.stcMonth', 'STC de la période')}`,
+      stcSubtitle: (count) => `${count} STC | ${stcPeriodLabel}`,
       totalTitle: `${translate('production.prefix', 'Production -')} ${translate('kpi.productionWorkforce', 'Effectif de production')}`,
       totalSubtitle: (count) => `${count} ${translate('production.title', 'Production').toLowerCase()} | ${currentMonthLabel}`,
     }),
-    [language, currentMonthLabel],
+    [language, currentMonthLabel, stcPeriodLabel],
   );
 
   useEffect(() => {
@@ -4867,7 +4869,7 @@ export default function App() {
     [employees],
   );
   const stcEmployees = useMemo(
-    () => employees.filter((employee) => isEmployeeStcInMonth(employee, currentDate)),
+    () => employees.filter((employee) => isEmployeeStcInPeriod(employee, currentDate)),
     [employees, currentDate],
   );
   const monthlyActiveEmployees = useMemo(
@@ -4875,7 +4877,7 @@ export default function App() {
     [employees, currentDate],
   );
   const monthlyBaseEmployees = useMemo(
-    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate) || isEmployeeStcInMonth(employee, currentDate)),
+    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate) || isEmployeeStcInPeriod(employee, currentDate)),
     [employees, currentDate],
   );
   const busPointageRows = useMemo(
@@ -5275,7 +5277,7 @@ export default function App() {
 
   function buildEmployeeImportSummary(importResult, importedEmployees) {
     const activeCount = importedEmployees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate)).length;
-    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInMonth(employee, currentDate)).length;
+    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInPeriod(employee, currentDate)).length;
     const modCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOD').length;
     const moiCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOI').length;
     const busCount = new Set(importedEmployees.map((employee) => String(employee.bus || '').trim()).filter(Boolean)).size;
@@ -5458,7 +5460,7 @@ export default function App() {
         </header>
 
         <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
-          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next) => { setSnapshot(next); setSelectedDate(getDefaultSelectedDate(next)); }} />}
+          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} selectedDate={selectedDate} onDateChange={setSelectedDate} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next, { resetSelectedDate = false } = {}) => { setSnapshot(next); setSelectedDate((previous) => !resetSelectedDate && getAvailableDates(next).includes(previous) ? previous : getDefaultSelectedDate(next)); }} />}
           {isEmployeeSection || isDepartmentSection || isStcSection || isSettingsSection ? null : (
             <>
               <div className="rh-hero">
@@ -5548,7 +5550,7 @@ export default function App() {
             />
             <KpiCard
               tone="blue"
-              label={translate('kpi.stcMonth', 'STC du mois')}
+              label={translate('kpi.stcMonth', 'STC de la période')}
               value={stcCount}
               note={formatPercent(totalEmployees ? (stcCount / totalEmployees) * 100 : 0)}
               isActive={activeKpiModal === 'stc'}
@@ -5607,7 +5609,7 @@ export default function App() {
                   { key: 'present', label: translate('kpi.presents', 'Presents'), value: presentEmployees, tone: 'green' },
                   { key: 'absent', label: translate('kpi.absents', 'Absents'), value: absentEmployees, tone: 'red' },
                   { key: 'new', label: translate('kpi.recruitments', 'Nombre de recrutements'), value: newEmployees, tone: 'slate' },
-                  { key: 'stc', label: translate('kpi.stcMonth', 'STC du mois'), value: stcCount, tone: 'blue' },
+                  { key: 'stc', label: translate('kpi.stcMonth', 'STC de la période'), value: stcCount, tone: 'blue' },
                 ].map((item) => (
                   <button
                     className={`rh-bars__item${activeKpiModal === item.key ? ' is-active' : ''}`}
@@ -5697,7 +5699,7 @@ export default function App() {
                 onSearchChange={setSearchValue}
                 onEdit={handleOpenEditEmployee}
                 locale={locale}
-                currentMonthLabel={currentMonthLabel}
+                currentMonthLabel={stcPeriodLabel}
                 labels={STC_DASHBOARD_TRANSLATIONS[language] || STC_DASHBOARD_TRANSLATIONS.fr}
               />
             ) : isAbsenceSection ? (

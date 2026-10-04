@@ -1,3 +1,36 @@
+import { normalizeEmployeeRhDate } from './employeeBaseImport.js';
+
+const pad = (value) => String(value).padStart(2, '0');
+const isoDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+function getDatedDeparture(employee) {
+  const raw = [employee?.inactiveFrom, employee?.inactive_from]
+    .find((value) => value !== null && value !== undefined && String(value).trim() && !/^0+(?:\.0+)?$/.test(String(value).trim()));
+  const normalized = normalizeEmployeeRhDate(raw);
+  const match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return null;
+  const [, day, month, year] = match.map(Number);
+  return new Date(year, month - 1, day);
+}
+
+export function getEmployeeStcPeriod(referenceDate = new Date()) {
+  if (!(referenceDate instanceof Date) || Number.isNaN(referenceDate.getTime())) return null;
+  const startDate = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 26);
+  if (referenceDate.getDate() < 26) startDate.setMonth(startDate.getMonth() - 1);
+  const endDate = new Date(startDate.getFullYear(), startDate.getMonth() + 1, 25);
+  return { startDate, endDate, periodStart: isoDate(startDate), periodEnd: isoDate(endDate) };
+}
+
+// Count only dated departures in the selected 26-to-25 payroll period that
+// have already taken effect on the selected calendar day.
+export function isEmployeeStcInPeriod(employee, referenceDate = new Date()) {
+  const period = getEmployeeStcPeriod(referenceDate);
+  const departure = getDatedDeparture(employee);
+  if (!period || !departure) return false;
+  const selectedDay = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  return departure >= period.startDate && departure <= period.endDate && departure <= selectedDay;
+}
+
 const MONTH_NAMES = [
   ['jan', 'janv', 'janvier'],
   ['fev', 'fevr', 'fevrier'],

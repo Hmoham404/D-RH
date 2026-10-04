@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { getExcelDateCorrections } from './pointageDates.js';
+import { getPointageSourceEncoding, parsePointageSourceDate, POINTAGE_DATE_VERSION, POINTAGE_SOURCE_DATE_CONTRACT } from './pointageDateSource.js';
 
 function cleanText(value) {
   return typeof value === 'string' ? value.trim() : String(value ?? '').trim();
@@ -81,60 +81,11 @@ function buildEmployeeIndex(employees) {
   return { byCode, byCodeField, byName };
 }
 
-function excelSerialToDate(value) {
-  const epoch = Date.UTC(1899, 11, 30);
-  const wholeDays = Math.floor(value);
-  const dayMilliseconds = 24 * 60 * 60 * 1000;
-  const dayFraction = value - wholeDays;
-  const date = new Date(epoch + wholeDays * dayMilliseconds + Math.round(dayFraction * dayMilliseconds));
-  return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds());
-}
-
-function parseExcelDate(value, dateOrder = 'mdy') {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? null : value;
-  }
-
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const parsed = excelSerialToDate(value);
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const raw = cleanText(value);
-  if (!raw) return null;
-
-  if (/^\d+(\.\d+)?$/.test(raw)) {
-    const parsed = excelSerialToDate(Number(raw));
-    return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }
-
-  const normalized = raw.replace(/\./g, '/').replace(/-/g, '/').replace('T', ' ');
-  const isoMatch = normalized.match(
-    /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
-  );
-  const numericMatch = normalized.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
-  );
-
-  if (isoMatch || numericMatch) {
-    const match = isoMatch || numericMatch;
-    const year = Number(isoMatch ? match[1] : match[3]);
-    const month = Number(isoMatch ? match[2] : match[dateOrder === 'dmy' ? 2 : 1]) - 1;
-    const day = Number(isoMatch ? match[3] : match[dateOrder === 'dmy' ? 1 : 2]);
-    const hours = Number(match[4] || 0);
-    const minutes = Number(match[5] || 0);
-    const seconds = Number(match[6] || 0);
-    const parsed = new Date(year, month, day, hours, minutes, seconds);
-    return parsed.getFullYear() === year && parsed.getMonth() === month && parsed.getDate() === day
-      && hours < 24 && minutes < 60 && seconds < 60 ? parsed : null;
-  }
-
-  if (/^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(raw)) {
-    return null;
-  }
-
-  const fallback = new Date(raw);
-  return Number.isNaN(fallback.getTime()) ? null : fallback;
+function parseExcelDate(value, sourceCell = {}) {
+  return parsePointageSourceDate(value, {
+    text: sourceCell.w || '', format: sourceCell.z || '',
+    encoding: sourceCell.encoding || '', canonicalIso: sourceCell.canonicalIso || '',
+  });
 }
 
 function formatIsoDate(date) {
@@ -293,11 +244,20 @@ function findHeaderIndex(headers, matchers) {
 }
 
 function getSheetRows(sheet) {
-  return XLSX.utils.sheet_to_json(sheet, {
+  const rows = XLSX.utils.sheet_to_json(sheet, {
     header: 1,
     raw: true,
     defval: '',
   });
+  if (!sheet['!ref']) return rows;
+  const range = XLSX.utils.decode_range(sheet['!ref']);
+  rows.forEach((row, rowIndex) => {
+    const sourceCells = row.map((_, columnIndex) => sheet[XLSX.utils.encode_cell({
+      r: range.s.r + rowIndex, c: range.s.c + columnIndex,
+    })]);
+    Object.defineProperty(row, 'sourceCells', { value: sourceCells });
+  });
+  return rows;
 }
 
 function parseWeeklySheets(workbook, dateOrder = 'mdy') {
@@ -711,8 +671,8 @@ function buildExportRows(analysis) {
 
 export async function analyzePointageFile(file, employees, options = {}) {
   const arrayBuffer = await file.arrayBuffer();
-  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false });
-  const weeklySheets = parseWeeklySheets(workbook, options.dateOrder);
+  const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: false, cellNF: true, cellText: true });
+  const weeklySheets = parseWeeklySheets(workbook, 'mdy');
   const monthlySheet = findMonthlyTotalsSheet(workbook);
   const weeklyDates = buildWeeklyDateList(weeklySheets);
 
@@ -769,15 +729,13 @@ export async function analyzePointageFile(file, employees, options = {}) {
         });
         row.sourceSheetName = name;
         row.sourceRowNumber = layout.rowIndex + index + 2;
+        row.sourceTimeCell = sourceRow.sourceCells?.[layout.timeIndex];
         incomingRows.push(row);
       });
       sheetStatsMap.set(name, { sheetName: name, totalRows: rows.length - layout.rowIndex - 1,
         usableRows: 0, employeeKeys: new Set(), isoDates: new Set(), punchCount: 0 });
     });
   }
-  const sourceDates = incomingRows.map((row) => parseExcelDate(getRowCell(row, sourceLayout.timeIndex), options.dateOrder))
-    .filter(Boolean).map(formatIsoDate);
-  const excelDateCorrections = getExcelDateCorrections(file.name, sourceDates);
   const previousRows = (options.previousRows || []).map((item) => {
     const row = [];
     row[sourceLayout.idIndex] = item.sourceId;
@@ -785,6 +743,7 @@ export async function analyzePointageFile(file, employees, options = {}) {
     row[sourceLayout.timeIndex] = item.pointageAt;
     row[sourceLayout.terminalIndex] = item.terminal;
     row[sourceLayout.pointageTypeIndex] = item.pointageType;
+    row.previousPointageRow = item;
     return row;
   });
   const seenPunches = new Set();
@@ -795,15 +754,8 @@ export async function analyzePointageFile(file, employees, options = {}) {
   [...incomingRows, ...previousRows].forEach((row, rowIndex) => {
     const sourceId = cleanText(getRowCell(row, sourceLayout.idIndex));
     const sourceName = cleanText(getRowCell(row, sourceLayout.nameIndex));
-    const pointageDate = parseExcelDate(getRowCell(row, sourceLayout.timeIndex), options.dateOrder);
-
-    if (pointageDate && rowIndex < incomingRows.length) {
-      const corrected = excelDateCorrections.get(formatIsoDate(pointageDate));
-      if (corrected) {
-        const [year, month, day] = corrected.split('-').map(Number);
-        pointageDate.setFullYear(year, month - 1, day);
-      }
-    }
+    const sourceCell = row.sourceTimeCell || row.sourceCells?.[sourceLayout.timeIndex] || {};
+    const pointageDate = parseExcelDate(getRowCell(row, sourceLayout.timeIndex), sourceCell);
 
     if (!pointageDate || (!sourceId && !sourceName)) {
       if (rowIndex < incomingRows.length && row.some((cell) => cleanText(cell))) rejectedRows += 1;
@@ -838,6 +790,14 @@ export async function analyzePointageFile(file, employees, options = {}) {
       sourceId,
       sourceName: safeSourceName,
       matchedName,
+      // Keep the workbook's original value beside the normalized ISO date so
+      // a saved SQL snapshot can be audited without guessing from French UI text.
+      sourceDateValue: row.previousPointageRow?.sourceDateValue ?? getRowCell(row, sourceLayout.timeIndex),
+      sourceDateText: row.previousPointageRow?.sourceDateText ?? sourceCell.w ?? cleanText(getRowCell(row, sourceLayout.timeIndex)),
+      sourceDateFormat: row.previousPointageRow?.sourceDateFormat ?? sourceCell.z ?? '',
+      sourceDateEncoding: row.previousPointageRow?.sourceDateEncoding
+        || getPointageSourceEncoding(getRowCell(row, sourceLayout.timeIndex), { format: sourceCell.z }),
+      sourceDateIso: row.previousPointageRow?.sourceDateIso || formatIsoDateTime(pointageDate),
       pointageAt: formatIsoDateTime(pointageDate),
       pointageAtDisplay: formatFrDateTime(pointageDate),
       isoDate,
@@ -960,6 +920,7 @@ export async function analyzePointageFile(file, employees, options = {}) {
         ...dayRow,
         sheetNames: [...dayRow.sheetNames].sort(),
         sheetCount: dayRow.sheetNames.size,
+        punches: sortedPunches.map(formatIsoDateTime),
         punchesDisplay: sortedPunches.map((date) => formatFrDateTime(date)).join(' | '),
         entry: firstPunch ? formatFrDateTime(firstPunch) : '',
         exit: !isOdd && lastPunch ? formatFrDateTime(lastPunch) : '',
@@ -978,17 +939,23 @@ export async function analyzePointageFile(file, employees, options = {}) {
     });
 
   const employeeRows = [...employeeRowsMap.values()]
-    .map((row) => ({
-      ...row,
-      sheetNames: [...row.sheets].sort(),
-      sheetCount: row.sheets.size,
-      daysCount: row.dayKeys.size,
-      punchCount: row.punches.length,
-      totalRoundedClock: formatMinutesAsClock(row.totalRoundedMinutes),
-      firstSeenDate: formatIsoDate(row.firstSeenAt),
-      lastSeenDate: formatIsoDate(row.lastSeenAt),
-      isActive: cleanText(row.employeeStatus).toLowerCase() === 'actif',
-    }))
+    .map((row) => {
+      const { sheets, dayKeys, punches, firstSeenAt, lastSeenAt, ...person } = row;
+      return {
+        ...person,
+        sheetNames: [...sheets].sort(),
+        sheetCount: sheets.size,
+        daysCount: dayKeys.size,
+        punches: [...punches].sort((left, right) => left - right).map(formatIsoDateTime),
+        punchCount: punches.length,
+        totalRoundedClock: formatMinutesAsClock(row.totalRoundedMinutes),
+        firstSeenDate: formatIsoDate(firstSeenAt),
+        lastSeenDate: formatIsoDate(lastSeenAt),
+        firstSeenAt: formatIsoDateTime(firstSeenAt),
+        lastSeenAt: formatIsoDateTime(lastSeenAt),
+        isActive: cleanText(row.employeeStatus).toLowerCase() === 'actif',
+      };
+    })
     .sort((left, right) => {
       const departmentSort = cleanText(left.department).localeCompare(cleanText(right.department));
       if (departmentSort !== 0) return departmentSort;
@@ -1074,7 +1041,8 @@ export async function analyzePointageFile(file, employees, options = {}) {
 
   return {
     fileName: file.name,
-    dateNormalizationVersion: 3,
+    dateNormalizationVersion: POINTAGE_DATE_VERSION,
+    sourceDateContract: POINTAGE_SOURCE_DATE_CONTRACT,
     importDiagnostics: { rejectedRows, duplicateRows, incomingUsable, incomingDates: [...incomingDates].sort() },
     sheetCount: relevantSheetNames.length,
     sheetNames: relevantSheetNames,

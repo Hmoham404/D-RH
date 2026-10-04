@@ -15,7 +15,7 @@ import {
   replaceEmployeeDirectory,
   saveEmployeeRecord,
 } from './services/employeeStore';
-import { loadPointageSnapshot, savePointageSnapshot } from './services/pointageSnapshotStore';
+import { hasPointageDateChanges, loadPointageSnapshot, savePointageSnapshot } from './services/pointageSnapshotStore';
 import { loadBusCapacities, readLocalBusCapacities, saveBusCapacities } from './services/busCapacityStore';
 
 const mycLogoUrl = new URL('../MYC beauty innovation TUNISIA @300x-100.png', import.meta.url).href;
@@ -4654,22 +4654,30 @@ export default function App() {
         loadEmployees(),
         loadPointageSnapshot(),
       ]);
+      if (cancelled) return;
       const savedBreakMinutes = Number(snapshotResult.data?.calculationRules?.breakMinutes ?? snapshotResult.data?.currentFilePointage?.calculationRules?.breakMinutes);
       const activeBreakMinutes = storedPointageBreakMinutes ?? (Number.isFinite(savedBreakMinutes) && savedBreakMinutes >= 0 && savedBreakMinutes <= 180 ? savedBreakMinutes : pointageBreakMinutes);
       if (activeBreakMinutes !== pointageBreakMinutes) setPointageBreakMinutes(activeBreakMinutes);
       let normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || [], activeBreakMinutes);
+      if (cancelled) return;
       let snapshotRepairMessage = '';
-      if ((Number(snapshotResult.data?.currentFilePointage?.dateNormalizationVersion || 0) < 7
-        && normalizedSnapshot?.currentFilePointage?.dateNormalizationVersion >= 7)
-        || (snapshotResult.data?.currentFilePointage?.calculationRules?.dateOrder === 'dmy'
-          && normalizedSnapshot?.currentFilePointage?.calculationRules?.dateOrder === 'mdy')
-        || (snapshotResult.data && Number(snapshotResult.data.calculationRules?.breakMinutes ?? snapshotResult.data.currentFilePointage?.calculationRules?.breakMinutes) !== activeBreakMinutes)) {
-        const repairResult = await savePointageSnapshot(normalizedSnapshot);
+      if (normalizedSnapshot && (snapshotResult.data?.storageNeedsDateRepair
+        || hasPointageDateChanges(snapshotResult.data, normalizedSnapshot)
+        || (snapshotResult.data && Number(snapshotResult.data.calculationRules?.breakMinutes ?? snapshotResult.data.currentFilePointage?.calculationRules?.breakMinutes) !== activeBreakMinutes))) {
+        const repairResult = await savePointageSnapshot(normalizedSnapshot, {
+          expectedUpdatedAt: snapshotResult.data.storageRevision,
+        });
+        if (cancelled) return;
         if (repairResult.mode === 'supabase') {
           normalizedSnapshot = repairResult.data || normalizedSnapshot;
           snapshotRepairMessage = translate('messages.pointageDatesCorrected', 'Dates du pointage corrigées et sauvegardées dans Supabase.');
         } else {
           snapshotRepairMessage = repairResult.message;
+          if (repairResult.mode === 'conflict') {
+            const latestResult = await loadPointageSnapshot();
+            if (cancelled) return;
+            normalizedSnapshot = await normalizeSavedPointageSnapshot(latestResult.data, employeesResult.data || [], activeBreakMinutes);
+          }
         }
       }
       if (cancelled) return;

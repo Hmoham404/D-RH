@@ -4,11 +4,15 @@ import {
   hasSupabaseEnv,
   supabase,
 } from '../lib/supabase';
+import { canonicalizePointageSnapshotDates } from '../lib/pointageSnapshotDates.js';
 
 const TABLE_NAME = 'hr_dashboard_store';
 const CURRENT_RECORD_ID = 'rh-pointage-analysis';
 const HISTORY_RECORD_PREFIX = 'rh-pointage-history-';
 function getSnapshotDates(snapshot) {
+  const rawDates = Array.isArray(snapshot?.rawRows)
+    ? snapshot.rawRows.map((row) => row.isoDate).filter(Boolean)
+    : [];
   const weeklyDates = Array.isArray(snapshot?.weeklySheets)
     ? snapshot.weeklySheets
         .flatMap((sheet) => sheet.dayColumns?.map((day) => day.isoDate) || [])
@@ -18,7 +22,58 @@ function getSnapshotDates(snapshot) {
     ? snapshot.dailySummaries.map((item) => item.isoDate).filter(Boolean)
     : [];
 
-  return [...new Set([...weeklyDates, ...summaryDates])].sort();
+  return [...new Set([...rawDates, ...weeklyDates, ...summaryDates])].sort();
+}
+
+// Compare the dates actually stored on the server, before any read-time repair.
+// JSONB may reorder object keys, while array order and cell values stay intact.
+function stableJson(value) {
+  if (value && typeof value.toJSON === 'function') return stableJson(value.toJSON());
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+function snapshotDates(pointage) {
+  if (!pointage) return null;
+  return {
+    version: pointage.dateNormalizationVersion,
+    contract: pointage.sourceDateContract,
+    encoding: pointage.dateEncoding,
+    dateRebuildRequired: Boolean(pointage.dateRebuildRequired),
+    calculationRules: pointage.calculationRules,
+    periodStart: pointage.periodStart,
+    periodEnd: pointage.periodEnd,
+    rawRows: pointage.rawRows || [],
+    dayRows: pointage.dayRows || [],
+    closedDates: pointage.closedDates,
+    incomingDates: pointage.importDiagnostics?.incomingDates,
+    dailySummaries: (pointage.dailySummaries || []).map((day) => day.isoDate),
+    sourceWeeklySheets: (pointage.sourceWeeklySheets || []).map((sheet) => ({
+      dayColumns: (sheet.dayColumns || []).map((day) => day.isoDate),
+      rows: (sheet.rows || []).map((row) => (row.days || []).map((day) => day.isoDate)),
+    })),
+    weeklySheets: (pointage.weeklySheets || []).map((sheet) => ({
+      dayColumns: (sheet.dayColumns || []).map((day) => day.isoDate),
+    })),
+    current: pointage.currentFilePointage ? snapshotDates(pointage.currentFilePointage) : null,
+  };
+}
+
+function withStorageMetadata(snapshot, record) {
+  if (!snapshot) return null;
+  return {
+    ...snapshot,
+    storageRevision: record.updated_at || '',
+    storageNeedsDateRepair: stableJson(snapshotDates(record.payload)) !== stableJson(snapshotDates(snapshot)),
+  };
+}
+
+export function hasPointageDateChanges(previous, next) {
+  return stableJson(snapshotDates(previous)) !== stableJson(snapshotDates(next));
 }
 
 function buildImportId(snapshot) {
@@ -35,18 +90,24 @@ function normalizeSnapshot(snapshot) {
     return null;
   }
 
+  snapshot = canonicalizePointageSnapshotDates(snapshot);
   const trackedDates = getSnapshotDates(snapshot);
   const periodStart = trackedDates[0] || '';
   const periodEnd = trackedDates[trackedDates.length - 1] || '';
   const generatedAt = snapshot.generatedAt || new Date().toISOString();
   const importId = buildImportId({ ...snapshot, generatedAt });
 
-  return {
+  const { storageRevision, storageNeedsDateRepair, ...persistedSnapshot } = snapshot;
+  const normalized = {
+    ...persistedSnapshot,
     importId,
     fileName: snapshot.fileName || '',
     sourceOnlyVersion: snapshot.sourceOnlyVersion || null,
     sourceWeeklySheets: Array.isArray(snapshot.sourceWeeklySheets) ? snapshot.sourceWeeklySheets : [],
     dateNormalizationVersion: snapshot.dateNormalizationVersion || null,
+    sourceDateContract: snapshot.sourceDateContract || null,
+    dateEncoding: snapshot.dateEncoding || null,
+    payrollPeriodStart: snapshot.payrollPeriodStart || '',
     sheetCount: Number(snapshot.sheetCount || 0),
     sheetNames: Array.isArray(snapshot.sheetNames) ? snapshot.sheetNames : [],
     generatedAt,
@@ -67,6 +128,9 @@ function normalizeSnapshot(snapshot) {
     kindCoverage: Array.isArray(snapshot.kindCoverage) ? snapshot.kindCoverage : [],
     departmentCoverage: Array.isArray(snapshot.departmentCoverage) ? snapshot.departmentCoverage : [],
   };
+  // Compare and return the same JSON representation that PostgREST stores,
+  // including Date punches, undefined fields and nonfinite numeric cells.
+  return JSON.parse(JSON.stringify(normalized));
 }
 
 function toHistoryEntry(snapshot, updatedAt = '') {
@@ -136,7 +200,7 @@ async function clearStoredPointageRecords(filter) {
   }
 }
 
-async function persistSnapshotRows(normalized, resetBeforeSave = false) {
+async function persistSnapshotRows(normalized, resetBeforeSave = false, options = {}) {
   writeLocalSnapshot(normalized);
   upsertLocalHistoryEntry(normalized);
   const configIssue = getSupabaseConfigIssue();
@@ -167,7 +231,31 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false) {
       },
     ];
 
-    const { error } = await supabase.from(TABLE_NAME).upsert(rows, { onConflict: 'id' });
+    let error;
+    if (Object.prototype.hasOwnProperty.call(options, 'expectedUpdatedAt')) {
+      if (!options.expectedUpdatedAt) {
+        throw new Error('Recalcul annule : la revision du pointage sauvegarde est inconnue. Recharge la page.');
+      }
+      const result = await supabase.from(TABLE_NAME)
+        .update({ payload: normalized, updated_at: updatedAt })
+        .eq('id', CURRENT_RECORD_ID)
+        .eq('updated_at', options.expectedUpdatedAt)
+        .select('payload, updated_at');
+      error = result.error;
+      if (!error && !result.data?.length) {
+        return {
+          data: null,
+          mode: 'conflict',
+          message: 'Le pointage a change sur le serveur. Le recalcul ancien a ete annule. Recharge la page.',
+        };
+      }
+      if (!error) {
+        const historyResult = await supabase.from(TABLE_NAME).upsert(rows[1], { onConflict: 'id' });
+        error = historyResult.error;
+      }
+    } else {
+      ({ error } = await supabase.from(TABLE_NAME).upsert(rows, { onConflict: 'id' }));
+    }
 
     if (error) {
       return {
@@ -176,6 +264,19 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false) {
         message: formatSupabaseError(error, 'Publication pointage'),
       };
     }
+    const { data: stored, error: readError } = await supabase.from(TABLE_NAME)
+      .select('payload, updated_at').eq('id', CURRENT_RECORD_ID).maybeSingle();
+    if (readError) throw readError;
+    if (!stored?.payload || stored.payload.importId !== normalized.importId
+      || stored.payload.generatedAt !== normalized.generatedAt
+      || stableJson(snapshotDates(stored.payload)) !== stableJson(snapshotDates(normalized))) {
+      return {
+        data: null,
+        mode: 'conflict',
+        message: 'La verification de la sauvegarde a echoue : les dates relues depuis Supabase different du fichier. Recharge la page.',
+      };
+    }
+    normalized = withStorageMetadata(normalizeSnapshot(stored.payload), stored);
     // Publish the replacement before removing history, keeping the old data if publication fails.
     if (resetBeforeSave) {
       try {
@@ -241,7 +342,7 @@ export async function loadPointageSnapshot() {
       };
     }
 
-    const normalized = normalizeSnapshot(data.payload);
+    const normalized = withStorageMetadata(normalizeSnapshot(data.payload), data);
     writeLocalSnapshot(normalized);
     upsertLocalHistoryEntry(normalized);
 
@@ -314,13 +415,13 @@ export async function loadPointageHistory(limit = 15) {
   }
 }
 
-export async function savePointageSnapshot(snapshot) {
+export async function savePointageSnapshot(snapshot, options = {}) {
   const normalized = normalizeSnapshot(snapshot);
   if (!normalized) {
     throw new Error('Snapshot pointage invalide.');
   }
 
-  return persistSnapshotRows(normalized, false);
+  return persistSnapshotRows(normalized, false, options);
 }
 
 export async function replacePointageSnapshot(snapshot) {

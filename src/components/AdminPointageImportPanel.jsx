@@ -247,6 +247,7 @@ export default function AdminPointageImportPanel({ employees, isLoading }) {
       setImportError('');
       const nextAnalysis = await analyzePointageFile(file, employees, { dateOrder: 'mdy' });
       const saveResult = await savePointageSnapshot(nextAnalysis);
+      if (saveResult.mode !== 'supabase') throw new Error(saveResult.message || 'Sauvegarde du pointage impossible.');
       const historyResult = await loadPointageHistory();
       setAnalysis(saveResult.data);
       setSelectedDate(getLatestTrackedDate(saveResult.data));

@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { buildDailyTable, buildDailyWeeks, getCurrentFilePointage, prepareDailyPointage } from './dailyPointage.js';
+import { preservePointageSourceMetadata } from './pointageSnapshotDates.js';
 
 // UI confirmation only. Database authorization remains the responsibility of Supabase policies.
 const RH_CODE_DIGEST = '39b095412ce8c4376ac1855e63444e4b0cf42a3d6af8ca22bf25337765033c35';
@@ -29,9 +30,10 @@ export async function correctDailyPointage(snapshot, employees, { employeeKey, i
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Pointage');
   const buffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
   const breakOverrides = { ...(current.calculationRules?.breakOverrides || {}), [`${employeeKey}|${isoDate}`]: Number(breakMinutes ?? current.calculationRules?.breakMinutes ?? 24) };
-  const next = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, null,
+  const calculated = await prepareDailyPointage({ name: current.fileName || snapshot.fileName, arrayBuffer: async () => buffer }, employees, null,
     { roundingMinutes: 1, closeDays: true, ...current.calculationRules, breakOverrides, breakMinutes: current.calculationRules?.breakMinutes ?? 24,
       dateOrder: 'mdy' });
+  const next = preservePointageSourceMetadata(calculated, sourceRows);
   const correction = { employeeKey, isoDate, fullName: person.fullName, correctedAt: new Date().toISOString(),
     before: { status: day.status, entry: day.entry, exit: day.exit, breakMinutes: day.breakMinutes, punches: originalRows },
     after: { entry, exit, breakMinutes: Number(breakMinutes ?? current.calculationRules?.breakMinutes ?? 24) } };

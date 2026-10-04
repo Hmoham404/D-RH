@@ -82,7 +82,8 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       try {
         const updated = await normalizeSavedPointageSnapshot(snapshot, employees, pointageBreakMinutes);
         if (cancelled || !updated) return;
-        const result = await savePointageSnapshot(updated);
+        const result = await savePointageSnapshot(updated, { expectedUpdatedAt: snapshot.storageRevision });
+        if (cancelled) return;
         if (result.mode !== 'supabase') throw new Error(result.message);
         onSaved(result.data || updated);
         setMessage(translate('daily.importScreen.breakSaved', 'Pause mise à {minutes} min : le pointage a été recalculé et enregistré.', { minutes: pointageBreakMinutes }));
@@ -159,7 +160,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const attendance = useMemo(() => attendanceHistory.filter((day) => day.isoDate === analysisDate), [attendanceHistory, analysisDate]);
   async function saveCorrection(correction) {
     const next = await correctDailyPointage(snapshot, importEmployees, correction);
-    const result = await savePointageSnapshot(next);
+    const result = await savePointageSnapshot(next, { expectedUpdatedAt: snapshot.storageRevision });
     if (result.mode !== 'supabase') throw new Error(result.message || translate('daily.saveFailed'));
     onSaved(result.data);
     setDetail(null);

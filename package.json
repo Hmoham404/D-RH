@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "node --test src/lib/*.test.js",
     "test:ui": "playwright test",
+    "test:sql": "node --test tests/sql/*.test.js",
     "pointeuses:diagnostic": "node scripts/check-pointeuses.mjs",
     "pointage:generate": "powershell -ExecutionPolicy Bypass -File scripts/generate-classeur1-pointage.ps1"
   },
@@ -20,6 +21,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^4.3.2",

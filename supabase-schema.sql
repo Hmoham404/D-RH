@@ -4,6 +4,9 @@ create table if not exists public.hr_dashboard_store (
   updated_at timestamptz default now()
 );
 
+-- Après déploiement du client pointage version 9, exécuter aussi
+-- sql/pointage-date-guard.sql pour valider les sources et bloquer les anciens clients.
+
 create table if not exists public.hr_staff_directory (
   record_id text primary key,
   id text default '',

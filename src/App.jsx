@@ -2260,7 +2260,7 @@ function sortEmployeeRecords(items) {
   });
 }
 
-function buildDepartmentBaseRows(employees, referenceDate) {
+function buildDepartmentBaseRows(employees, referenceDate, activeReferenceDate = referenceDate) {
   const counts = new Map();
 
   employees.forEach((employee) => {
@@ -2277,7 +2277,7 @@ function buildDepartmentBaseRows(employees, referenceDate) {
 
     current.total += 1;
 
-    if (String(employee.status || '').toLowerCase() === 'actif') {
+    if (isEmployeeActiveInMonth(employee, activeReferenceDate)) {
       current.active += 1;
     }
 
@@ -4489,7 +4489,7 @@ export default function App() {
         'Vider toute la base RH actuelle ? Cette action supprimera les fiches visibles avant un nouvel import.',
       ),
       cards: {
-        records: `${translate('employeeBase.cards.records', 'Fiches RH')} · ${currentMonthLabel}`,
+        records: translate('employeeBase.cards.records', 'Fiches RH'),
         active: `${translate('employeeBase.cards.active', 'Actifs')} · ${currentMonthLabel}`,
         stc: `${translate('kpi.stcMonth', 'STC de la période')} · ${stcPeriodLabel}`,
       },
@@ -4869,8 +4869,8 @@ export default function App() {
     [employees],
   );
   const stcEmployees = useMemo(
-    () => employees.filter((employee) => isEmployeeStcInPeriod(employee, currentDate)),
-    [employees, currentDate],
+    () => employees.filter((employee) => isEmployeeStcInPeriod(employee, stcPeriod.endDate)),
+    [employees, stcPeriod.periodEnd],
   );
   const monthlyActiveEmployees = useMemo(
     () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate)),
@@ -4880,13 +4880,32 @@ export default function App() {
     () => employees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate) || isEmployeeStcInPeriod(employee, currentDate)),
     [employees, currentDate],
   );
+  const employeeBaseActiveDate = useMemo(
+    () => new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0),
+    [currentDate],
+  );
+  const employeeBaseActiveEmployees = useMemo(
+    () => employees.filter((employee) => isEmployeeActiveInMonth(employee, employeeBaseActiveDate)),
+    [employees, employeeBaseActiveDate],
+  );
+  const employeeBaseStcEmployees = useMemo(
+    () => stcEmployees,
+    [stcEmployees],
+  );
+  const employeeBaseEmployees = useMemo(() => {
+    const records = new Map();
+    [...employeeBaseActiveEmployees, ...employeeBaseStcEmployees].forEach((employee) => {
+      records.set(employee.recordId || employee.finalCode || employee.id || employee.fullName, employee);
+    });
+    return [...records.values()];
+  }, [employeeBaseActiveEmployees, employeeBaseStcEmployees]);
   const busPointageRows = useMemo(
     () => buildBusPointageRows(monthlyActiveEmployees, dayRoster),
     [dayRoster, monthlyActiveEmployees],
   );
   const monthlyDepartmentRows = useMemo(
-    () => buildDepartmentBaseRows(monthlyBaseEmployees, currentDate),
-    [monthlyBaseEmployees, currentDate],
+    () => buildDepartmentBaseRows(employeeBaseEmployees, stcPeriod.endDate, employeeBaseActiveDate),
+    [employeeBaseEmployees, employeeBaseActiveDate, stcPeriod.periodEnd],
   );
   const selectedTableEmployees = useMemo(
     () => buildPeriodEmployees(snapshot, activePeriodStart, activePeriodEnd, employees),
@@ -5015,7 +5034,7 @@ export default function App() {
   );
   const filteredEmployeeBaseRows = useMemo(
     () =>
-      monthlyBaseEmployees.filter((employee) =>
+      employeeBaseEmployees.filter((employee) =>
         matchesSearch(
           [
             employee.finalCode,
@@ -5034,7 +5053,7 @@ export default function App() {
           searchValue,
         ),
       ),
-    [monthlyBaseEmployees, searchValue],
+    [employeeBaseEmployees, searchValue],
   );
   const filteredDepartmentBaseRows = useMemo(
     () =>
@@ -5190,14 +5209,14 @@ export default function App() {
     () =>
       activeEmployeeBaseModal
         ? buildEmployeeBaseDetailConfig(activeEmployeeBaseModal, {
-            employees: monthlyBaseEmployees,
-            activeEmployees: monthlyActiveEmployees,
-            stcEmployees,
+            employees,
+            activeEmployees: employeeBaseActiveEmployees,
+            stcEmployees: employeeBaseStcEmployees,
             labels: employeeBaseDetailLabels,
             translate,
           })
         : null,
-    [activeEmployeeBaseModal, monthlyActiveEmployees, employeeBaseDetailLabels, monthlyBaseEmployees, language, stcEmployees],
+    [activeEmployeeBaseModal, employees, employeeBaseActiveEmployees, employeeBaseDetailLabels, language, employeeBaseStcEmployees],
   );
   const productionDetailConfig = useMemo(
     () =>
@@ -5271,13 +5290,14 @@ export default function App() {
       : translate('table.search', 'Rechercher...');
 
   function handleExportEmployeeBase() {
-    exportEmployeeBaseWorkbook(monthlyBaseEmployees, monthlyDepartmentRows);
+    exportEmployeeBaseWorkbook(employeeBaseEmployees, monthlyDepartmentRows);
     setStatusMessage(`Export Excel de la base RH genere le ${new Date().toLocaleDateString(locale)}.`);
   }
 
   function buildEmployeeImportSummary(importResult, importedEmployees) {
-    const activeCount = importedEmployees.filter((employee) => isEmployeeActiveInMonth(employee, currentDate)).length;
-    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInPeriod(employee, currentDate)).length;
+    const monthEndDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    const activeCount = importedEmployees.filter((employee) => isEmployeeActiveInMonth(employee, monthEndDate)).length;
+    const stcCount = importedEmployees.filter((employee) => isEmployeeStcInPeriod(employee, stcPeriod.endDate)).length;
     const modCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOD').length;
     const moiCount = importedEmployees.filter((employee) => normalizeKindLabel(employee.kind) === 'MOI').length;
     const busCount = new Set(importedEmployees.map((employee) => String(employee.bus || '').trim()).filter(Boolean)).size;
@@ -5660,7 +5680,7 @@ export default function App() {
           {isSettingsSection ? null : isEmployeeSection || isDepartmentSection || isStcSection || isAbsenceSection ? (
             isEmployeeSection ? (
               <EmployeeBaseSurface
-                employees={monthlyBaseEmployees}
+                employees={employees}
                 filteredEmployees={filteredEmployeeBaseRows}
                 departmentRows={monthlyDepartmentRows}
                 searchValue={searchValue}
@@ -5674,8 +5694,8 @@ export default function App() {
                 onOpenActive={() => handleOpenEmployeeBaseModal('active')}
                 onOpenStc={() => handleOpenEmployeeBaseModal('stc')}
                 onOpenBusPointage={handleOpenBusPointage}
-                activeEmployeesCount={monthlyActiveEmployees.length}
-                stcEmployeesCount={stcEmployees.length}
+                activeEmployeesCount={employeeBaseActiveEmployees.length}
+                stcEmployeesCount={employeeBaseStcEmployees.length}
                 busPointageRowsCount={busPointageRows.length}
                 departmentCount={monthlyDepartmentRows.length}
                 isImporting={isEmployeeImporting}

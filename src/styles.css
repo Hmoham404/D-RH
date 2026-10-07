@@ -347,6 +347,9 @@
   .rh-card--table .rh-card__header--table { @apply items-center gap-3; }
   .rh-card--table .rh-card__header--table > div:first-child { @apply shrink-0; }
   .rh-card--table .rh-table-tools { @apply items-center; }
+  .daily-import__week-bar { @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3; }
+  .daily-import__week-bar > strong { @apply text-sm font-bold text-ink; }
+  .daily-import__week-bar .daily-import__filter { @apply min-w-40; }
   .daily-import__filter { @apply grid gap-1.5 text-[10px] font-semibold text-slate-500; }
   .daily-break-setting { @apply mb-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50/80 to-white px-4 py-3 shadow-sm; }
   .daily-break-setting > div:first-child { @apply grid gap-1; }

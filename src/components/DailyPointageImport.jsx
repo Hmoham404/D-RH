@@ -22,6 +22,22 @@ function monthRangeLabel(anchorIsoDate, locale) {
   return `${format(start)} - ${format(end)}`;
 }
 
+function getWeekStart(isoDate) {
+  if (!isoDate) return '';
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return '';
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  return date.toISOString().slice(0, 10);
+}
+
+function weekRangeLabel(weekStart, locale) {
+  const start = new Date(`${weekStart}T12:00:00Z`);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 6);
+  const format = (date) => date.toLocaleDateString(locale, { day: '2-digit', month: 'short', timeZone: 'UTC' });
+  return `${format(start)} – ${format(end)}`;
+}
+
 function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, onImport, busy, importDisabled, translate, locale }) {
   const [target, setTarget] = useState(null);
 
@@ -118,6 +134,18 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const dayLabel = formatPointageDate;
   const requestedDate = selectedDate || selectedDay;
   const analysisDate = requestedDate && dates.includes(requestedDate) ? requestedDate : getDefaultPointageDate(dates, today);
+  const weeks = useMemo(() => {
+    const grouped = new Map();
+    table.dayColumns.forEach((day) => {
+      const start = getWeekStart(day.isoDate);
+      if (!grouped.has(start)) grouped.set(start, []);
+      grouped.get(start).push(day);
+    });
+    return [...grouped.entries()].map(([start, days]) => ({ start, days }));
+  }, [table.dayColumns]);
+  const activeWeek = weeks.find((week) => week.start === getWeekStart(analysisDate)) || weeks.at(-1);
+  const visibleDayColumns = activeWeek?.days || table.dayColumns;
+  const visibleDates = useMemo(() => new Set(visibleDayColumns.map((day) => day.isoDate)), [visibleDayColumns]);
   const filteredRows = table.rows.filter((row) =>
     `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase())
     && (statusFilter === 'ALL' || row.days.some((day) => day.isoDate === analysisDate && day.status === statusFilter)));
@@ -268,12 +296,21 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         {dates.map((date) => <option key={date} value={date}>{dayLabel(date)}</option>)}
       </select></label>}
     </div></div>
-      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{table.dayColumns.map((d) => {
+      <div className="daily-import__week-bar">
+        <strong>{activeWeek ? `${translate('daily.week', 'Semaine')} · ${weekRangeLabel(activeWeek.start, locale)}` : translate('daily.noDays')}</strong>
+        <label className="daily-import__filter">{translate('daily.week', 'Semaine')}<select value={activeWeek?.start || ''} onChange={(event) => {
+          const week = weeks.find((item) => item.start === event.target.value);
+          if (week?.days[0]) changeAnalysisDate(week.days[0].isoDate);
+        }} disabled={!weeks.length}>
+          {weeks.map((week) => <option key={week.start} value={week.start}>{weekRangeLabel(week.start, locale)}</option>)}
+        </select></label>
+      </div>
+      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{visibleDayColumns.map((d) => {
         const dayRows = table.rows.map((row) => row.days.find((day) => day.isoDate === d.isoDate)).filter(Boolean);
         const presentCount = dayRows.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
         const absentCount = dayRows.filter((day) => day.status === 'ABS').length;
         return <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => changeAnalysisDate(d.isoDate)}><span>{dayLabel(d.isoDate)}</span><small>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</small></button></th>;
-      })}</tr></thead><tbody>{table.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + table.dayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? translate('daily.importScreen.createData') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
+       })}</tr></thead><tbody>{visibleDayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.filter((day) => visibleDates.has(day.isoDate)).map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + visibleDayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? translate('daily.importScreen.createData') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
     </article>
     <form className="delete-zone" onSubmit={clearPointage}>
       <div className="delete-zone__copy">

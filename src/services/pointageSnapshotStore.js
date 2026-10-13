@@ -5,6 +5,9 @@ import {
   supabase,
 } from '../lib/supabase';
 import { canonicalizePointageSnapshotDates } from '../lib/pointageSnapshotDates.js';
+import { compactPointageStorage, expandPointageStorage } from '../lib/pointageStorage.js';
+import { PAYROLL_RETENTION, emptyPayrollSnapshot } from '../lib/payrollPointage.js';
+import { getPayrollPeriod } from '../lib/pointagePeriod.js';
 
 const TABLE_NAME = 'hr_dashboard_store';
 const CURRENT_RECORD_ID = 'rh-pointage-analysis';
@@ -39,6 +42,7 @@ function stableJson(value) {
 
 function snapshotDates(pointage) {
   if (!pointage) return null;
+  pointage = expandPointageStorage(pointage);
   return {
     version: pointage.dateNormalizationVersion,
     contract: pointage.sourceDateContract,
@@ -201,6 +205,9 @@ async function clearStoredPointageRecords(filter) {
 }
 
 async function persistSnapshotRows(normalized, resetBeforeSave = false, options = {}) {
+  if (normalized.retentionPolicy === PAYROLL_RETENTION && normalized.payrollPeriodStart !== getPayrollPeriod().start) {
+    return { data: null, mode: 'conflict', message: 'Le mois de paie a changé. Rechargez la page avant de sauvegarder.' };
+  }
   writeLocalSnapshot(normalized);
   upsertLocalHistoryEntry(normalized);
   const configIssue = getSupabaseConfigIssue();
@@ -215,32 +222,44 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false, options 
 
   const updatedAt = new Date().toISOString();
   let historyResetError = '';
+  let historySaveError = '';
 
   try {
 
+    const payload = compactPointageStorage(normalized);
     const rows = [
       {
         id: CURRENT_RECORD_ID,
-        payload: normalized,
+        payload,
         updated_at: updatedAt,
       },
       {
         id: `${HISTORY_RECORD_PREFIX}${normalized.importId}`,
-        payload: normalized,
+        payload,
         updated_at: updatedAt,
       },
     ];
 
+    // Do not upsert two full snapshots in one statement. PostgreSQL runs both
+    // INSERT and UPDATE guards on an upsert conflict, multiplying validation
+    // and JSON processing, increasing the risk of statement_timeout.
+    let revision = options.expectedUpdatedAt;
+    if (!Object.prototype.hasOwnProperty.call(options, 'expectedUpdatedAt')) {
+      const current = await supabase.from(TABLE_NAME).select('updated_at')
+        .eq('id', CURRENT_RECORD_ID).maybeSingle();
+      if (current.error) throw current.error;
+      revision = current.data?.updated_at || null;
+    } else if (revision === undefined || revision === '') {
+      throw new Error('Recalcul annule : la revision du pointage sauvegarde est inconnue. Recharge la page.');
+    }
+
     let error;
-    if (Object.prototype.hasOwnProperty.call(options, 'expectedUpdatedAt')) {
-      if (!options.expectedUpdatedAt) {
-        throw new Error('Recalcul annule : la revision du pointage sauvegarde est inconnue. Recharge la page.');
-      }
+    if (revision) {
       const result = await supabase.from(TABLE_NAME)
-        .update({ payload: normalized, updated_at: updatedAt })
+        .update({ payload, updated_at: updatedAt })
         .eq('id', CURRENT_RECORD_ID)
-        .eq('updated_at', options.expectedUpdatedAt)
-        .select('payload, updated_at');
+        .eq('updated_at', revision)
+        .select('updated_at');
       error = result.error;
       if (!error && !result.data?.length) {
         return {
@@ -249,12 +268,12 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false, options 
           message: 'Le pointage a change sur le serveur. Le recalcul ancien a ete annule. Recharge la page.',
         };
       }
-      if (!error) {
-        const historyResult = await supabase.from(TABLE_NAME).upsert(rows[1], { onConflict: 'id' });
-        error = historyResult.error;
-      }
     } else {
-      ({ error } = await supabase.from(TABLE_NAME).upsert(rows, { onConflict: 'id' }));
+      ({ error } = await supabase.from(TABLE_NAME).insert(rows[0]));
+      if (error?.code === '23505') {
+        return { data: null, mode: 'conflict',
+          message: 'Le pointage a change sur le serveur. Recharge la page avant de reimporter le fichier.' };
+      }
     }
 
     if (error) {
@@ -277,8 +296,24 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false, options 
       };
     }
     normalized = withStorageMetadata(normalizeSnapshot(stored.payload), stored);
+    // The current snapshot is already saved and verified. An archive timeout
+    // must not report that the import itself was lost or erase older history.
+    try {
+      if (normalized.retentionPolicy !== PAYROLL_RETENTION) {
+      let historyResult = await supabase.from(TABLE_NAME)
+        .update({ payload: rows[1].payload, updated_at: updatedAt })
+        .eq('id', rows[1].id).select('id');
+      if (historyResult.error) throw historyResult.error;
+      if (!historyResult.data?.length) {
+        historyResult = await supabase.from(TABLE_NAME).insert(rows[1]);
+        if (historyResult.error) throw historyResult.error;
+      }
+      }
+    } catch (error) {
+      historySaveError = formatSupabaseError(error, 'Copie historique');
+    }
     // Publish the replacement before removing history, keeping the old data if publication fails.
-    if (resetBeforeSave) {
+    if (resetBeforeSave && !historySaveError && normalized.retentionPolicy !== PAYROLL_RETENTION) {
       try {
         await clearStoredPointageRecords((query) => query
           .like('id', `${HISTORY_RECORD_PREFIX}%`)
@@ -298,8 +333,11 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false, options 
   return {
     data: normalized,
     mode: 'supabase',
+    historySaveFailed: Boolean(historySaveError),
     historyResetFailed: Boolean(historyResetError),
-    message: resetBeforeSave
+    message: historySaveError
+      ? `Pointage sauvegarde et verifie dans Supabase. ${historySaveError}. L ancien historique est conserve.`
+      : resetBeforeSave
       ? historyResetError
         ? `Nouveau pointage enregistre. ${historyResetError}`
         : 'Le nouveau fichier remplace le pointage precedent. Ancien historique supprime.'
@@ -342,6 +380,13 @@ export async function loadPointageSnapshot() {
       };
     }
 
+    if (data.payload.retentionPolicy === PAYROLL_RETENTION
+      && data.payload.payrollPeriodStart !== getPayrollPeriod().start) {
+      const empty = emptyPayrollSnapshot(undefined, data.payload.calculationRules);
+      const result = await savePointageSnapshot(empty, { expectedUpdatedAt: data.updated_at });
+      if (result.mode !== 'supabase') return result;
+      return { ...result, message: 'Nouveau mois de paie : le pointage précédent a été vidé.' };
+    }
     const normalized = withStorageMetadata(normalizeSnapshot(data.payload), data);
     writeLocalSnapshot(normalized);
     upsertLocalHistoryEntry(normalized);

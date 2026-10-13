@@ -226,7 +226,7 @@ function getPayrollPeriodKey(isoDate) {
   return start.toISOString().slice(0, 10);
 }
 
-function mergeDailyPointage(previous, incoming, employees) {
+export function mergeDailyPointage(previous, incoming, employees) {
   const oldPointage = getCurrentFilePointage(previous);
   if (!oldPointage) return incoming;
 
@@ -357,9 +357,13 @@ export async function normalizeSavedPointageSnapshot(snapshot, employees, reques
   const sourceWeeklySheets = current.sourceWeeklySheets || [];
   const manualCorrections = current.manualCorrections || canonical.manualCorrections || [];
   const rebuilt = { ...result, sourceWeeklySheets, manualCorrections, dateRebuildRequired: false,
+    ...(canonical.retentionPolicy ? { retentionPolicy: canonical.retentionPolicy, payrollPeriodStart: canonical.payrollPeriodStart,
+      closedDates: current.closedDates || [] } : {}),
     importId: canonical.importId, generatedAt: canonical.generatedAt,
     storageRevision: canonical.storageRevision, storageNeedsDateRepair: canonical.storageNeedsDateRepair,
-    currentFilePointage: { ...result.currentFilePointage, sourceWeeklySheets, manualCorrections, dateRebuildRequired: false } };
+    currentFilePointage: { ...result.currentFilePointage, sourceWeeklySheets, manualCorrections, dateRebuildRequired: false,
+      ...(canonical.retentionPolicy ? { retentionPolicy: canonical.retentionPolicy, payrollPeriodStart: canonical.payrollPeriodStart,
+        closedDates: current.closedDates || [] } : {}) } };
   rebuilt.weeklySheets = buildDailyWeeks(rebuilt, employees);
   return canonicalizePointageSnapshotDates(rebuilt);
 }

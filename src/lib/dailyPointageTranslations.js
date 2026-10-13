@@ -1,5 +1,7 @@
 export const dailyPointageTranslations = {
   fr: {
+    payrollChartHint: 'Un point par journée importée. Les jours sans données restent vides.',
+    currentPayrollMonth: 'Mois de paie en cours', importedDayCount: '{count} / {total} jours importés', notImported: 'Non importé', noCurrentMonthData: 'Aucun pointage importé pour le mois de paie en cours.',
     overview: {
       accidentTitle: 'Jours sans accident de travail', eachDay: 'chaque jour', accidentFree: 'sans accident',
       staffCount: 'Totale de MOD Actif', totalMod: 'Effectif total MOD', presentMod: 'Présents MOD', onSite: 'Actuellement sur site',
@@ -46,6 +48,8 @@ export const dailyPointageTranslations = {
     departments: { administration: 'Administration', production: 'Production', maintenance: 'Maintenance', guarding: 'Gardiennage', cleaning: 'Nettoyage', project: 'Projet', unknown: 'Non renseigné', unknownService: 'Service non renseigné' },
   },
   en: {
+    payrollChartHint: 'One point per imported day. Days without data remain blank.',
+    currentPayrollMonth: 'Current payroll month', importedDayCount: '{count} / {total} days imported', notImported: 'Not imported', noCurrentMonthData: 'No attendance imported for the current payroll month.',
     overview: {
       accidentTitle: 'Days without a workplace accident', eachDay: 'every day', accidentFree: 'without an accident',
       staffCount: 'Staff count', totalMod: 'Total MOD workforce', presentMod: 'MOD present', onSite: 'Currently on site',
@@ -92,6 +96,8 @@ export const dailyPointageTranslations = {
     departments: { administration: 'Administration', production: 'Production', maintenance: 'Maintenance', guarding: 'Security', cleaning: 'Cleaning', project: 'Project', unknown: 'Unspecified', unknownService: 'Unspecified service' },
   },
   ar: {
+    payrollChartHint: 'نقطة واحدة لكل يوم مستورد. تبقى الأيام دون بيانات فارغة.',
+    currentPayrollMonth: 'شهر الأجور الحالي', importedDayCount: '{count} / {total} يوم مستورد', notImported: 'غير مستورد', noCurrentMonthData: 'لا توجد بيانات حضور مستوردة لشهر الأجور الحالي.',
     overview: {
       accidentTitle: 'أيام دون حوادث عمل', eachDay: 'كل يوم', accidentFree: 'دون حادث',
       staffCount: 'عدد الموظفين', totalMod: 'إجمالي موظفي MOD', presentMod: 'موظفو MOD الحاضرون', onSite: 'متواجدون في الموقع',
@@ -137,6 +143,8 @@ export const dailyPointageTranslations = {
     departments: { administration: 'الإدارة', production: 'الإنتاج', maintenance: 'الصيانة', guarding: 'الحراسة', cleaning: 'النظافة', project: 'المشروع', unknown: 'غير محدد', unknownService: 'مصلحة غير محددة' },
   },
   it: {
+    payrollChartHint: 'Un punto per ogni giorno importato. I giorni senza dati rimangono vuoti.',
+    currentPayrollMonth: 'Mese paga corrente', importedDayCount: '{count} / {total} giorni importati', notImported: 'Non importato', noCurrentMonthData: 'Nessuna presenza importata per il mese paga corrente.',
     overview: {
       accidentTitle: 'Giorni senza infortuni sul lavoro', eachDay: 'ogni giorno', accidentFree: 'senza infortuni',
       staffCount: 'Numero dipendenti', totalMod: 'Totale personale MOD', presentMod: 'MOD presenti', onSite: 'Attualmente sul posto',
@@ -182,6 +190,8 @@ export const dailyPointageTranslations = {
     departments: { administration: 'Amministrazione', production: 'Produzione', maintenance: 'Manutenzione', guarding: 'Vigilanza', cleaning: 'Pulizie', project: 'Progetto', unknown: 'Non specificato', unknownService: 'Servizio non specificato' },
   },
   zh: {
+    payrollChartHint: '每个已导入日期对应一个点。无数据的日期保持空白。',
+    currentPayrollMonth: '当前工资月', importedDayCount: '已导入 {count} / {total} 天', notImported: '未导入', noCurrentMonthData: '当前工资月尚无导入的考勤数据。',
     overview: {
       accidentTitle: '连续无工伤天数', eachDay: '每天', accidentFree: '无事故',
       staffCount: '员工人数', totalMod: 'MOD员工总数', presentMod: 'MOD出勤人数', onSite: '目前在岗',

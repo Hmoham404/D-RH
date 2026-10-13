@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
 import { parsePointageSourceDate } from '../../src/lib/pointageDateSource.js';
+import { compactPointageStorage, expandPointageStorage } from '../../src/lib/pointageStorage.js';
 
 const migration = await readFile(new URL('../../sql/pointage-date-guard.sql', import.meta.url), 'utf8');
 let db;
@@ -149,6 +150,17 @@ test('nested currentFilePointage is validated together with the top-level snapsh
   payload.currentFilePointage.rawRows[0].pointageAt = '2026-01-10T07:36:00';
   payload.currentFilePointage.rawRows[0].sourceDateIso = '2026-01-10T07:36:00';
   await assert.rejects(insert(payload), /Date du pointage differente de la source MDY/);
+});
+
+test('deduplicated snapshots keep source validation and reconstruct the complete nested view', async () => {
+  const original = snapshot();
+  original.currentFilePointage = structuredClone(original);
+  const packed = compactPointageStorage(original);
+  assert.equal(packed.currentFilePointage, null);
+  const result = await insert(packed);
+  assert.deepEqual(expandPointageStorage(result.rows[0].payload), original);
+  packed.rawRows[0].sourceDateValue = '10/02/2026 07:36';
+  await assert.rejects(insert(packed), /Date du pointage differente de la source MDY/);
 });
 
 test('old versions 6 and 8 cannot insert or overwrite current or history pointage', async () => {

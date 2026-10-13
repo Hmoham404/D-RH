@@ -18,7 +18,7 @@ function snapshot() {
 }
 
 async function storageHarness(page) {
-  const state = { current: null, history: [], writes: [], corruptRead: false };
+  const state = { current: null, history: [], writes: [], corruptRead: false, historyTimeout: false, currentTimeout: false, raceOnUpdate: false };
   await page.route('**/store-test', (route) => route.fulfill({
     contentType: 'text/html', body: '<!doctype html><title>Pointage persistence test</title>',
   }));
@@ -29,6 +29,10 @@ async function storageHarness(page) {
       const body = request.postDataJSON();
       const rows = Array.isArray(body) ? body : [body];
       state.writes.push({ method: 'POST', rows });
+      if (state.historyTimeout && rows.some((row) => row.id.startsWith('rh-pointage-history-'))) {
+        await route.fulfill({ status: 500, json: { code: '57014', message: 'canceling statement due to statement timeout' } });
+        return;
+      }
       for (const row of rows) {
         if (row.id === 'rh-pointage-analysis') state.current = structuredClone(row);
         else state.history.push(structuredClone(row));
@@ -39,8 +43,23 @@ async function storageHarness(page) {
     if (request.method() === 'PATCH') {
       const body = request.postDataJSON();
       state.writes.push({ method: 'PATCH', rows: [body] });
+      const id = url.searchParams.get('id')?.slice(3);
+      if (id?.startsWith('rh-pointage-history-')) {
+        if (state.historyTimeout) {
+          await route.fulfill({ status: 500, json: { code: '57014', message: 'canceling statement due to statement timeout' } });
+          return;
+        }
+        const existing = state.history.find((row) => row.id === id);
+        if (existing) Object.assign(existing, structuredClone(body));
+        await route.fulfill({ json: existing ? [{ id }] : [] });
+        return;
+      }
+      if (state.currentTimeout) {
+        await route.fulfill({ status: 500, json: { code: '57014', message: 'canceling statement due to statement timeout' } });
+        return;
+      }
       const expected = url.searchParams.get('updated_at')?.slice(3);
-      if (!state.current || expected !== state.current.updated_at) {
+      if (!state.current || expected !== state.current.updated_at || state.raceOnUpdate) {
         await route.fulfill({ json: [] });
         return;
       }
@@ -113,8 +132,88 @@ test('recalculation updates only the revision that was loaded and verifies SQL r
   expect(result.data.calculationRules.breakMinutes).toBe(30);
   expect(result.data.storageRevision).toBe(state.current.updated_at);
   expect(result.data.rawRows[0].sourceDateValue).toBe('10/01/2026 07:36');
-  expect(state.writes.map((write) => write.method)).toEqual(['POST', 'PATCH', 'POST']);
+  expect(state.writes.map((write) => write.method)).toEqual(['POST', 'PATCH', 'POST', 'PATCH', 'PATCH']);
   expect(state.current.payload).not.toHaveProperty('storageRevision');
+});
+
+test('daily import updates the current row separately and returns only its revision', async ({ page }) => {
+  const state = await storageHarness(page);
+  state.current = { id: 'rh-pointage-analysis', payload: snapshot(), updated_at: '2026-10-04T11:59:00.000Z' };
+  const updates = [];
+  page.on('request', (request) => {
+    if (request.method() === 'PATCH') updates.push(new URL(request.url()).searchParams.get('select'));
+  });
+  const result = await page.evaluate(async (input) => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    return store.savePointageSnapshot(input);
+  }, snapshot());
+  expect(result.mode).toBe('supabase');
+  expect(state.writes.map((write) => write.method)).toEqual(['PATCH', 'PATCH', 'POST']);
+  expect(state.writes.every((write) => write.rows.length === 1)).toBe(true);
+  expect(updates).toEqual(['updated_at', 'id']);
+});
+
+test('history timeout reports the verified saved import and preserves old history on replacement', async ({ page }) => {
+  const state = await storageHarness(page);
+  state.historyTimeout = true;
+  const result = await page.evaluate(async (input) => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    return store.replacePointageSnapshot(input);
+  }, snapshot());
+  expect(result.mode).toBe('supabase');
+  expect(result.historySaveFailed).toBe(true);
+  expect(result.data.storageRevision).toBe(state.current.updated_at);
+  expect(result.message).toContain('Pointage sauvegarde et verifie');
+  expect(state.writes.map((write) => write.method)).toEqual(['POST', 'PATCH']);
+});
+
+test('current timeout does not write history or report success', async ({ page }) => {
+  const state = await storageHarness(page);
+  state.current = { id: 'rh-pointage-analysis', payload: snapshot(), updated_at: '2026-10-04T11:59:00.000Z' };
+  const before = structuredClone(state.current);
+  state.currentTimeout = true;
+  const result = await page.evaluate(async (input) => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    return store.savePointageSnapshot(input);
+  }, snapshot());
+  expect(result.mode).not.toBe('supabase');
+  expect(state.current).toEqual(before);
+  expect(state.history).toEqual([]);
+});
+
+test('an import detects a concurrent save before it writes history', async ({ page }) => {
+  const state = await storageHarness(page);
+  state.current = { id: 'rh-pointage-analysis', payload: snapshot(), updated_at: '2026-10-04T11:59:00.000Z' };
+  const before = structuredClone(state.current);
+  state.raceOnUpdate = true;
+  const result = await page.evaluate(async (input) => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    return store.savePointageSnapshot(input);
+  }, snapshot());
+  expect(result.mode).toBe('conflict');
+  expect(state.current).toEqual(before);
+  expect(state.history).toEqual([]);
+});
+
+test('full accumulated pointage is stored once and both views survive save and reload', async ({ page }) => {
+  const state = await storageHarness(page);
+  const input = snapshot();
+  input.currentFilePointage = structuredClone(input);
+  const result = await page.evaluate(async (input) => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    const saved = await store.savePointageSnapshot(input);
+    const loaded = await store.loadPointageSnapshot();
+    return { saved, loaded };
+  }, input);
+  expect(result.saved.mode).toBe('supabase');
+  expect(result.saved.historySaveFailed).toBe(false);
+  expect(state.current.payload.currentFilePointage).toBeNull();
+  expect(state.current.payload.currentFilePointageParentFields).toContain('rawRows');
+  expect(state.history[0].payload.currentFilePointage).toBeNull();
+  expect(result.loaded.data.currentFilePointage.rawRows).toEqual(result.loaded.data.rawRows);
+  expect(result.loaded.data.currentFilePointage.rawRows).toHaveLength(3);
+  expect(result.loaded.data.storageNeedsDateRepair).toBe(false);
+  expect(result.loaded.data).not.toHaveProperty('currentFilePointageParentFields');
 });
 
 test('reading an old SQL snapshot repairs preserved source dates and marks it for CAS publication', async ({ page }) => {

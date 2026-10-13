@@ -4731,7 +4731,7 @@ export default function App() {
       setStatusMessage(translate('messages.analyzingFile', 'Analyse du fichier Excel en cours...'));
       const nextSnapshot = await prepareDailyPointage(file, employees, snapshot,
         { dateOrder: 'mdy', breakMinutes: pointageBreakMinutes, roundingMinutes: 1, closeDays: true });
-      const saveResult = await savePointageSnapshot(nextSnapshot);
+      const saveResult = await savePointageSnapshot(nextSnapshot, { expectedUpdatedAt: snapshot?.storageRevision ?? null });
       if (saveResult.mode !== 'supabase') throw new Error(saveResult.message);
       const savedSnapshot = saveResult.data || nextSnapshot;
       setSnapshot(savedSnapshot);

@@ -1,4 +1,5 @@
 import { parsePointageSourceDate, getPointageSourceEncoding, POINTAGE_DATE_VERSION, POINTAGE_SOURCE_DATE_CONTRACT } from './pointageDateSource.js';
+import { expandPointageStorage } from './pointageStorage.js';
 
 export { POINTAGE_DATE_VERSION } from './pointageDateSource.js';
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
@@ -109,6 +110,7 @@ function canonicalizePart(part, fallbackRules) {
 // SQL stores ISO calendar dates. Date labels and filenames never override them.
 // Original workbook values, when preserved, are the authority for a repair.
 export function canonicalizePointageSnapshotDates(snapshot) {
+  snapshot = expandPointageStorage(snapshot);
   return canonicalizePart(snapshot, snapshot?.currentFilePointage?.calculationRules);
 }
 

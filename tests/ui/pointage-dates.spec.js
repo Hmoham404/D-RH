@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import * as XLSX from 'xlsx';
+import { expandPointageStorage } from '../../src/lib/pointageStorage.js';
 
 const CURRENT_ID = 'rh-pointage-analysis';
 const EXPECTED_DATES = ['2026-10-01', '2026-10-02', '2026-10-03'];
@@ -47,7 +48,12 @@ function dateUpload(kind) {
 }
 
 async function mockDatabase(page) {
-  const records = new Map();
+  const protectedRecords = [
+    { id: 'rh-homepage', payload: {}, updated_at: '2026-01-01T00:00:00Z' },
+    { id: 'rh-bus-capacities', payload: { capacities: { 'OTHER BUS': 12 } }, updated_at: '2026-01-01T00:00:00Z' },
+    { id: 'other-project-data', payload: { untouched: true }, updated_at: '2026-01-01T00:00:00Z' },
+  ];
+  const records = new Map(protectedRecords.map((record) => [record.id, clone(record)]));
   const writes = [];
   await page.route('**/rest/v1/**', async (route) => {
     const request = route.request();
@@ -96,10 +102,119 @@ async function mockDatabase(page) {
     await route.fulfill({ json: singular ? changed[0] || null : changed });
   });
   return {
-    get snapshot() { return records.get(CURRENT_ID)?.payload; },
+    get snapshot() { return expandPointageStorage(records.get(CURRENT_ID)?.payload); },
+    get protectedRecords() { return protectedRecords.map((record) => records.get(record.id)); },
+    originalProtectedRecords: clone(protectedRecords),
+    records,
     writes,
   };
 }
+
+test('current payroll month shows every calendar day and preserves other projects during import and clear', async ({ page }, testInfo) => {
+  await page.clock.install({ time: new Date('2026-10-13T12:00:00Z') });
+  const database = await mockDatabase(page);
+  await page.goto('/');
+  const upload = dateUpload('text');
+  await page.locator('.mod-export-button--topbar input[type=file]').setInputFiles(upload.file);
+  const month = page.locator('.daily-import__month-bar');
+  await expect(month).toHaveAttribute('data-period-start', '2026-09-26');
+  await expect(month).toHaveAttribute('data-period-end', '2026-10-25');
+  await expect(month).toContainText('3 / 18');
+  const columns = page.locator('.daily-import th[data-date]');
+  await expect(columns).toHaveCount(18);
+  await expect(columns.first()).toHaveAttribute('data-date', '2026-09-26');
+  await expect(columns.last()).toHaveAttribute('data-date', '2026-10-13');
+  const weeks = page.locator('.daily-import__week');
+  await expect(weeks).toHaveCount(4);
+  for (const [index, count] of [2, 7, 7, 2].entries()) {
+    await expect(weeks.nth(index).locator('th[data-date]')).toHaveCount(count);
+  }
+  await expect(page.locator('th[data-date="2026-10-11"] button')).toBeDisabled();
+  await expect(page.locator('th[data-date="2026-10-11"]')).toContainText('Non importé');
+  await expect(page.locator('#daily-analysis-date option')).toHaveCount(3);
+  const chart = page.locator('.mod-presence-chart');
+  const quarterTab = chart.getByRole('button', { name: '3 mois', exact: true });
+  const monthTab = chart.getByRole('button', { name: 'Mois actuel', exact: true });
+  const weekTab = chart.getByRole('button', { name: 'Semaine actuelle', exact: true });
+  await expect(quarterTab).toHaveAttribute('aria-pressed', 'true');
+  await monthTab.click();
+  await expect(monthTab).toHaveAttribute('aria-pressed', 'true');
+  await expect(chart).toContainText('S1');
+  await weekTab.click();
+  await expect(weekTab).toHaveAttribute('aria-pressed', 'true');
+  await expect(chart.locator('svg[role="img"]')).toContainText('lun.');
+  await quarterTab.click();
+  await expect(quarterTab).toHaveAttribute('aria-pressed', 'true');
+  await chart.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('daily-payroll-chart.png') });
+  await page.reload();
+  await expect(columns).toHaveCount(18);
+  await expect(month).toContainText('3 / 18');
+  expect(database.protectedRecords).toEqual(database.originalProtectedRecords);
+  await page.locator('.daily-import__month-bar').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('current-payroll-month.png') });
+  const historyIds = [...database.records.keys()].filter((id) => id.startsWith('rh-pointage-history-'));
+  expect(historyIds.length).toBe(0);
+  const historyBefore = historyIds.map((id) => clone(database.records.get(id)));
+  const cleared = await page.evaluate(async () => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    return store.clearPointageSnapshot();
+  });
+  expect(cleared.mode).toBe('supabase');
+  expect(historyIds.map((id) => database.records.get(id))).toEqual(historyBefore);
+  expect(database.protectedRecords).toEqual(database.originalProtectedRecords);
+  for (const write of database.writes) {
+    const url = new URL(write.url);
+    expect(url.pathname).toBe('/rest/v1/hr_dashboard_store');
+    if (write.method === 'POST') {
+      for (const record of Array.isArray(write.body) ? write.body : [write.body]) {
+        expect(record.id === CURRENT_ID || record.id.startsWith('rh-pointage-history-')).toBe(true);
+      }
+    } else {
+      expect(url.searchParams.get('id')).toMatch(/^eq\.rh-pointage-(analysis$|history-)/);
+    }
+  }
+});
+
+test('the 26th empties the stored current pointage without touching other projects', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-25T12:00:00Z') });
+  const database = await mockDatabase(page);
+  await page.goto('/');
+  await page.locator('.mod-export-button--topbar input[type=file]').setInputFiles(dateUpload('text').file);
+  await expect(page.locator('.daily-import__month-bar')).toContainText('3 / 30');
+  const saved = clone(database.snapshot);
+  const writesBefore = database.writes.length;
+  await page.clock.setSystemTime(new Date('2026-10-26T12:00:00Z'));
+  await page.reload();
+  await expect(page.locator('.daily-import__month-bar')).toHaveAttribute('data-period-start', '2026-10-26');
+  await expect(page.locator('.daily-import__month-bar')).toHaveAttribute('data-period-end', '2026-11-25');
+  await expect(page.locator('.daily-import__month-bar')).toContainText('0 / 1');
+  await expect(page.locator('#daily-analysis-date')).toBeDisabled();
+  await expect(page.locator('.daily-import .rh-table__empty')).toContainText('mois de paie en cours');
+  expect(saved.rawRows.length).toBeGreaterThan(0);
+  expect(database.snapshot.rawRows).toEqual([]);
+  expect(database.snapshot.payrollPeriodStart).toBe('2026-10-26');
+  expect(database.writes.length).toBeGreaterThan(writesBefore);
+  expect(database.protectedRecords).toEqual(database.originalProtectedRecords);
+  const staleSave = await page.evaluate(async (old) => {
+    const store = await import('/src/services/pointageSnapshotStore.js');
+    return store.savePointageSnapshot(old);
+  }, saved);
+  expect(staleSave.mode).toBe('conflict');
+  expect(database.snapshot.rawRows).toEqual([]);
+});
+
+test('an open page empties the previous cycle at midnight on the 26th', async ({ page }) => {
+  await page.clock.install({ time: new Date('2026-10-25T12:00:00Z') });
+  const database = await mockDatabase(page);
+  await page.goto('/');
+  await page.locator('.mod-export-button--topbar input[type=file]').setInputFiles(dateUpload('text').file);
+  await expect(page.locator('.daily-import__month-bar')).toContainText('3 / 30');
+  await page.clock.fastForward(13 * 60 * 60 * 1000);
+  await expect(page.locator('.daily-import__month-bar')).toHaveAttribute('data-period-start', '2026-10-26');
+  await expect.poll(() => database.snapshot.rawRows.length).toBe(0);
+  expect(database.protectedRecords).toEqual(database.originalProtectedRecords);
+});
 
 function sourceMetadata(snapshot) {
   return snapshot.rawRows.map((row) => ({

@@ -3,42 +3,25 @@ import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, normalizeSavedPointageSnapshot, prepareDailyPointage } from '../lib/dailyPointage.js';
 import DailyAttendanceOverview from './DailyAttendanceOverview';
-import { clearPointageSnapshot, savePointageSnapshot } from '../services/pointageSnapshotStore';
+import { clearPointageSnapshot, savePointageSnapshot, loadPointageSnapshot } from '../services/pointageSnapshotStore';
+import { preparePayrollPointage, PAYROLL_RETENTION } from '../lib/payrollPointage.js';
 import { correctDailyPointage, verifyPointageCorrectionCode } from '../lib/pointageCorrection.js';
 import PointageCorrectionForm from './PointageCorrectionForm';
 import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDates.js';
 import DashboardIcon from './DashboardIcon';
+import { getPayrollPeriod, pointageInPeriod, fillPayrollCalendar, payrollPeriodToDate, splitPayrollWeeks } from '../lib/pointagePeriod.js';
 
 function isExcelFile(file) {
   return /\.(xlsx|xls)$/i.test(file?.name || '');
 }
 
-function monthRangeLabel(anchorIsoDate, locale) {
-  const anchor = anchorIsoDate ? new Date(`${anchorIsoDate}T12:00:00`) : new Date();
-  const start = new Date(anchor.getFullYear(), anchor.getMonth(), 26);
-  if (anchor.getDate() < 26) start.setMonth(start.getMonth() - 1);
-  const end = new Date(start.getFullYear(), start.getMonth() + 1, 25);
-  const format = (date) => date.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
-  return `${format(start)} - ${format(end)}`;
+function monthRangeLabel(period, locale) {
+  const format = (date) => new Date(`${date}T12:00:00Z`).toLocaleDateString(locale,
+    { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  return `${format(period.start)} - ${format(period.end)}`;
 }
 
-function getWeekStart(isoDate) {
-  if (!isoDate) return '';
-  const date = new Date(`${isoDate}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return '';
-  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
-  return date.toISOString().slice(0, 10);
-}
-
-function weekRangeLabel(weekStart, locale) {
-  const start = new Date(`${weekStart}T12:00:00Z`);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 6);
-  const format = (date) => date.toLocaleDateString(locale, { day: '2-digit', month: 'short', timeZone: 'UTC' });
-  return `${format(start)} – ${format(end)}`;
-}
-
-function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, onImport, busy, importDisabled, translate, locale }) {
+function DailyPointageTopbarTools({ dates, analysisDate, period, onDateChange, onImport, busy, importDisabled, translate, locale }) {
   const [target, setTarget] = useState(null);
 
   useEffect(() => {
@@ -56,7 +39,7 @@ function DailyPointageTopbarTools({ dates, analysisDate, onDateChange, onImport,
           {!dates.length && <option value="">{translate('daily.noDays')}</option>}
           {dates.map((date) => <option key={date} value={date}>{formatPointageDate(date, locale)}</option>)}
         </select>
-        <small>{monthRangeLabel(analysisDate, locale)}</small>
+        <small>{monthRangeLabel(period, locale)}</small>
       </label>
       <label className="mod-export-button mod-export-button--topbar">
         <DashboardIcon type="upload" />
@@ -84,7 +67,19 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const [listDetail, setListDetail] = useState(null);
   const listDialogRef = useRef(null);
   const dialogRef = useRef(null);
-  const data = useMemo(() => getCurrentFilePointage(snapshot), [snapshot]);
+  const period = useMemo(() => getPayrollPeriod(today), [today]);
+  const visiblePeriod = useMemo(() => payrollPeriodToDate(period, today), [period, today]);
+  const data = useMemo(() => pointageInPeriod(getCurrentFilePointage(snapshot), visiblePeriod), [snapshot, visiblePeriod]);
+  useEffect(() => {
+    if (loading || snapshot?.retentionPolicy !== PAYROLL_RETENTION || snapshot.payrollPeriodStart === period.start) return;
+    let cancelled = false;
+    loadPointageSnapshot().then((result) => {
+      if (cancelled) return;
+      if (result.mode === 'supabase') onSaved(result.data, { resetSelectedDate: true });
+      setMessage(result.message);
+    });
+    return () => { cancelled = true; };
+  }, [period.start, snapshot, loading]);
   function changeAnalysisDate(value) {
     setSelectedDay(value);
     onDateChange?.(value);
@@ -130,22 +125,13 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     ...(data?.rawRows || []).map((row) => row.isoDate),
     ...(data?.sourceWeeklySheets || []).flatMap((sheet) => sheet.dayColumns.map((day) => day.isoDate)),
   ].filter(Boolean))].sort(), [data]);
-  const table = useMemo(() => buildDailyTable(data, importEmployees, dates), [data, importEmployees, dates]);
+  const importedTable = useMemo(() => buildDailyTable(data, importEmployees, dates), [data, importEmployees, dates]);
+  const table = useMemo(() => fillPayrollCalendar(importedTable, visiblePeriod), [importedTable, visiblePeriod]);
   const dayLabel = formatPointageDate;
   const requestedDate = selectedDate || selectedDay;
   const analysisDate = requestedDate && dates.includes(requestedDate) ? requestedDate : getDefaultPointageDate(dates, today);
-  const weeks = useMemo(() => {
-    const grouped = new Map();
-    table.dayColumns.forEach((day) => {
-      const start = getWeekStart(day.isoDate);
-      if (!grouped.has(start)) grouped.set(start, []);
-      grouped.get(start).push(day);
-    });
-    return [...grouped.entries()].map(([start, days]) => ({ start, days }));
-  }, [table.dayColumns]);
-  const activeWeek = weeks.find((week) => week.start === getWeekStart(analysisDate)) || weeks.at(-1);
-  const visibleDayColumns = activeWeek?.days || table.dayColumns;
-  const visibleDates = useMemo(() => new Set(visibleDayColumns.map((day) => day.isoDate)), [visibleDayColumns]);
+  const visibleDayColumns = table.dayColumns;
+  const calendarWeeks = useMemo(() => splitPayrollWeeks(visibleDayColumns), [visibleDayColumns]);
   const filteredRows = table.rows.filter((row) =>
     `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase())
     && (statusFilter === 'ALL' || row.days.some((day) => day.isoDate === analysisDate && day.status === statusFilter)));
@@ -160,6 +146,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     const dailyTotals = [
       '', '', '', '',
       ...table.dayColumns.map((column) => {
+        if (!column.imported) return translate('daily.notImported', 'Non importé');
         const cells = table.rows.map((row) => row.days.find((day) => day.isoDate === column.isoDate)).filter(Boolean);
         const presentCount = cells.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
         const absentCount = cells.filter((day) => day.status === 'ABS').length;
@@ -181,9 +168,9 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     if (headers.length) worksheet['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: headers.length - 1 } }) };
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Pointage');
-    XLSX.writeFile(workbook, `pointage_${analysisDate || today}.xlsx`);
+    XLSX.writeFile(workbook, `pointage_${visiblePeriod.start}_${visiblePeriod.end}.xlsx`);
   }
-  const attendanceHistory = useMemo(() => buildAttendanceByDay(table), [table]);
+  const attendanceHistory = useMemo(() => buildAttendanceByDay(importedTable), [importedTable]);
   const baseMonthDate = useMemo(() => new Date(`${analysisDate || today}T12:00:00`), [analysisDate, today]);
   const attendance = useMemo(() => attendanceHistory.filter((day) => day.isoDate === analysisDate), [attendanceHistory, analysisDate]);
   async function saveCorrection(correction) {
@@ -205,10 +192,10 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     }
     setBusy(true); setMessage(translate('daily.reading'));
     try {
-      const next = await prepareDailyPointage(file, importEmployees, snapshot, rules);
+      const next = await preparePayrollPointage(file, importEmployees, snapshot, rules, today);
       const info = next.importDiagnostics;
       setMessage(translate('daily.saving'));
-      const result = await savePointageSnapshot(next);
+      const result = await savePointageSnapshot(next, { expectedUpdatedAt: snapshot?.storageRevision ?? null });
       if (result.mode !== 'supabase') throw new Error(result.message);
       onSaved(result.data, { resetSelectedDate: true });
       setDetail(null);
@@ -225,6 +212,8 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         duplicates: info.duplicateRows,
         rejected: info.rejectedRows,
       }));
+      if (result.historySaveFailed) setMessage(result.message);
+      else if (info.outsidePeriodRows) setMessage((text) => `${text} ${info.outsidePeriodRows} passages hors période ignorés.`);
     } catch (error) {
       setMessage(error.message || translate('daily.saveFailed'));
     }
@@ -257,6 +246,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     <DailyPointageTopbarTools
       dates={dates}
       analysisDate={analysisDate}
+      period={period}
       onDateChange={changeAnalysisDate}
       onImport={importFile}
       busy={busy || correcting}
@@ -264,7 +254,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
       translate={translate}
       locale={locale}
     />
-    <DailyAttendanceOverview day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={changeAnalysisDate}
+    <DailyAttendanceOverview payrollPeriod={period} day={attendance[0]} history={attendanceHistory} dates={dates} analysisDate={analysisDate} onDateChange={changeAnalysisDate}
       baseEmployees={baseEmployees} baseMonthDate={baseMonthDate} onOpen={setListDetail}
       target={productionModTarget} onTargetChange={onProductionModTargetChange} onImport={importFile}
       busy={busy || correcting} importDisabled={loading} message={message} translate={translate} locale={locale} productionLabels={productionLabels} />
@@ -289,28 +279,26 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         <option value="STC">{translate('daily.importScreen.stc')}</option>
         <option value="EMPTY">{translate('daily.importScreen.empty')}</option>
       </select></label>
-      <button type="button" className="daily-import__download-button" onClick={downloadAttendanceExcel} disabled={!table.dayColumns.length}>
+      <button type="button" className="daily-import__download-button" onClick={downloadAttendanceExcel} disabled={!dates.length}>
         <DashboardIcon type="download" />{translate('daily.importScreen.downloadExcel', 'Télécharger Excel')}
       </button>
       {statusFilter !== 'ALL' && <label className="daily-import__filter">{translate('daily.importScreen.forDate')}<select value={analysisDate} onChange={(event) => changeAnalysisDate(event.target.value)} disabled={!dates.length}>
         {dates.map((date) => <option key={date} value={date}>{dayLabel(date)}</option>)}
       </select></label>}
     </div></div>
-      <div className="daily-import__week-bar">
-        <strong>{activeWeek ? `${translate('daily.week', 'Semaine')} · ${weekRangeLabel(activeWeek.start, locale)}` : translate('daily.noDays')}</strong>
-        <label className="daily-import__filter">{translate('daily.week', 'Semaine')}<select value={activeWeek?.start || ''} onChange={(event) => {
-          const week = weeks.find((item) => item.start === event.target.value);
-          if (week?.days[0]) changeAnalysisDate(week.days[0].isoDate);
-        }} disabled={!weeks.length}>
-          {weeks.map((week) => <option key={week.start} value={week.start}>{weekRangeLabel(week.start, locale)}</option>)}
-        </select></label>
+      <div className="daily-import__month-bar" data-period-start={period.start} data-period-end={period.end}>
+        <div><strong>{translate('daily.currentPayrollMonth', 'Mois de paie en cours')}</strong><span>{monthRangeLabel(visiblePeriod, locale)}</span></div>
+        <span>{translate('daily.importedDayCount', '{count} / {total} jours importés', { count: dates.filter((date) => date <= today).length, total: visiblePeriod.dates.length })}</span>
       </div>
-      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{visibleDayColumns.map((d) => {
+      {calendarWeeks.map((week) => <section key={week.start} className="daily-import__week" data-week-start={week.start}>
+        <h3>{translate('daily.payrollWeek', 'Semaine du {start} au {end}', { start: dayLabel(week.start, locale), end: dayLabel(week.end, locale) })}</h3>
+      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{week.dayColumns.map((d) => {
         const dayRows = table.rows.map((row) => row.days.find((day) => day.isoDate === d.isoDate)).filter(Boolean);
         const presentCount = dayRows.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
         const absentCount = dayRows.filter((day) => day.status === 'ABS').length;
-        return <th key={d.isoDate}><button type="button" className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => changeAnalysisDate(d.isoDate)}><span>{dayLabel(d.isoDate)}</span><small>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</small></button></th>;
-       })}</tr></thead><tbody>{visibleDayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.filter((day) => visibleDates.has(day.isoDate)).map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + visibleDayColumns.length} className="rh-table__empty">{!table.dayColumns.length ? translate('daily.importScreen.createData') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
+        return <th key={d.isoDate} data-date={d.isoDate} data-imported={d.imported}><button type="button" disabled={!d.imported} className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => changeAnalysisDate(d.isoDate)}><span>{new Date(`${d.isoDate}T12:00:00Z`).toLocaleDateString(locale, { weekday: 'short', timeZone: 'UTC' })} {dayLabel(d.isoDate)}</span><small>{d.imported ? <>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</> : translate('daily.notImported', 'Non importé')}</small></button></th>;
+       })}</tr></thead><tbody>{week.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.filter((day) => week.dayColumns.some((column) => column.isoDate === day.isoDate)).map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + week.dayColumns.length} className="rh-table__empty">{!dates.length ? translate('daily.noCurrentMonthData', 'Aucun pointage disponible pour le mois de paie en cours.') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
+      </section>)}
     </article>
     <form className="delete-zone" onSubmit={clearPointage}>
       <div className="delete-zone__copy">

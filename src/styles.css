@@ -315,6 +315,9 @@
   .mod-presence-chart .mod-chart-value { @apply fill-[#17385f] font-black; }
   .mod-presence-chart .mod-chart-caption { @apply fill-[#356b70] text-[9px] font-bold; }
   .mod-presence-chart .mod-chart-divider { stroke: #a8c6c8; stroke-dasharray: 4 4; }
+  .mod-presence-chart__period { @apply whitespace-nowrap rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-900; }
+  .mod-presence-chart--daily { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .mod-presence-chart__note { @apply text-xs text-slate-500; }
   .mod-dashboard__footer { @apply flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-blue-900/60; background: linear-gradient(90deg,#ffffff 0%,#f2f8f7 100%); }
   .mod-dashboard__footer strong { @apply inline-flex items-center gap-2 border-e border-blue-100 pe-4 font-black text-blue-700; }
   .mod-dashboard__footer small { @apply ms-auto text-xs; }
@@ -347,9 +350,10 @@
   .rh-card--table .rh-card__header--table { @apply items-center gap-3; }
   .rh-card--table .rh-card__header--table > div:first-child { @apply shrink-0; }
   .rh-card--table .rh-table-tools { @apply items-center; }
-  .daily-import__week-bar { @apply flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3; }
-  .daily-import__week-bar > strong { @apply text-sm font-bold text-ink; }
-  .daily-import__week-bar .daily-import__filter { @apply min-w-40; }
+  .daily-import__month-bar { @apply flex flex-wrap items-center justify-between gap-3 border-b border-blue-100 bg-blue-50/50 px-4 py-3; }
+  .daily-import__month-bar > div { @apply flex flex-wrap items-center gap-x-4 gap-y-1; }
+  .daily-import__month-bar strong { @apply text-sm font-bold text-ink; }
+  .daily-import__month-bar span { @apply text-xs font-medium text-blue-900/70; }
   .daily-import__filter { @apply grid gap-1.5 text-[10px] font-semibold text-slate-500; }
   .daily-break-setting { @apply mb-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50/80 to-white px-4 py-3 shadow-sm; }
   .daily-break-setting > div:first-child { @apply grid gap-1; }
@@ -708,3 +712,14 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+/* Payroll tables remain grouped by calendar weeks, including partial boundaries. */
+.daily-import__week { margin-top: 20px; }
+.daily-import__week h3 { margin: 0; padding: 12px 16px; font-size: 13px; color: #194e86; background: #f4f8fc; border-block: 1px solid #e0e9f2; }
+.daily-import__week .rh-table { width: 100%; min-width: 1000px; table-layout: fixed; }
+.daily-import__week .rh-table th, .daily-import__week .rh-table td { padding: 10px 6px; white-space: normal; overflow-wrap: anywhere; }
+.daily-import__week .rh-table th:first-child { width: 64px; }
+.daily-import__week .rh-table th:nth-child(2) { width: 155px; }
+.daily-import__week .rh-table th:nth-child(3) { width: 160px; }
+.daily-import__week .rh-table th:nth-child(4) { width: 65px; }
+.daily-import__week .daily-import__date-heading { white-space: normal; min-width: 0; }
+.daily-import__week .daily-import__date-heading small { white-space: normal; font-size: 9px; }

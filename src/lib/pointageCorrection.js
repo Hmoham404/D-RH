@@ -9,7 +9,24 @@ export async function verifyPointageCorrectionCode(value) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('') === RH_CODE_DIGEST;
 }
 
+export function parsePointageCorrectionTime(value) {
+  const input = String(value ?? '').trim();
+  if (!input) return '';
+  const match = input.match(/^(\d{1,2})(?::|h)?(\d{2})?\s*(a\.?m\.?|p\.?m\.?)?$/i);
+  if (!match) throw new Error('Heure invalide. Utilisez 17:00, 5:00 PM ou 5:00 AM.');
+  let hour = Number(match[1]);
+  const minute = Number(match[2] || 0);
+  const meridiem = match[3]?.replaceAll('.', '').toUpperCase();
+  if (minute > 59 || (meridiem ? hour < 1 || hour > 12 : hour > 23)) {
+    throw new Error('Heure invalide. Utilisez 17:00, 5:00 PM ou 5:00 AM.');
+  }
+  if (meridiem) hour = hour % 12 + (meridiem === 'PM' ? 12 : 0);
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
 export async function correctDailyPointage(snapshot, employees, { employeeKey, isoDate, entry = '', exit = '', breakMinutes }) {
+  entry = parsePointageCorrectionTime(entry);
+  exit = parsePointageCorrectionTime(exit);
   const current = getCurrentFilePointage(snapshot);
   const table = buildDailyTable(current, employees, [isoDate]);
   const person = table.rows.find((row) => row.employeeKey === employeeKey);

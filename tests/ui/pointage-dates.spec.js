@@ -121,16 +121,22 @@ test('current payroll month shows every calendar day and preserves other project
   await expect(month).toHaveAttribute('data-period-end', '2026-10-25');
   await expect(month).toContainText('3 / 18');
   const columns = page.locator('.daily-import th[data-date]');
-  await expect(columns).toHaveCount(18);
-  await expect(columns.first()).toHaveAttribute('data-date', '2026-09-26');
-  await expect(columns.last()).toHaveAttribute('data-date', '2026-10-13');
+  const weekSelect = page.locator('#daily-payroll-week');
+  await expect(weekSelect.locator('option')).toHaveCount(4);
   const weeks = page.locator('.daily-import__week');
-  await expect(weeks).toHaveCount(4);
+  await expect(weeks).toHaveCount(1);
   for (const [index, count] of [2, 7, 7, 2].entries()) {
-    await expect(weeks.nth(index).locator('th[data-date]')).toHaveCount(count);
+    await weekSelect.selectOption({ index });
+    await expect(columns).toHaveCount(count);
+    await expect(weeks.locator('th[data-date]')).toHaveCount(count);
+    await expect(weekSelect.locator('option').nth(index)).toContainText(`S${index + 1}`);
   }
+  await weekSelect.selectOption({ index: 2 });
   await expect(page.locator('th[data-date="2026-10-11"] button')).toBeDisabled();
-  await expect(page.locator('th[data-date="2026-10-11"]')).toContainText('Non importé');
+  await expect(weekSelect).toContainText('S3');
+  await weekSelect.selectOption({ index: 1 });
+  await expect(columns.first()).toHaveAttribute('data-date', '2026-09-28');
+  await expect(columns.last()).toHaveAttribute('data-date', '2026-10-04');
   await expect(page.locator('#daily-analysis-date option')).toHaveCount(3);
   const chart = page.locator('.mod-presence-chart');
   const quarterTab = chart.getByRole('button', { name: '3 mois', exact: true });
@@ -148,7 +154,7 @@ test('current payroll month shows every calendar day and preserves other project
   await chart.scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('daily-payroll-chart.png') });
   await page.reload();
-  await expect(columns).toHaveCount(18);
+  await expect(columns).toHaveCount(7);
   await expect(month).toContainText('3 / 18');
   expect(database.protectedRecords).toEqual(database.originalProtectedRecords);
   await page.locator('.daily-import__month-bar').scrollIntoViewIfNeeded();

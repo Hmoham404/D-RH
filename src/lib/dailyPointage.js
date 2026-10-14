@@ -44,11 +44,6 @@ function isEmployeeStartedBy(employee, isoDate) {
   return !hire || hire <= isoDate;
 }
 
-function isEmployeeAbsenceEligibleBy(employee, isoDate) {
-  const hire = getEmployeeHireIso(employee, isoDate);
-  return Boolean(hire) && hire <= isoDate;
-}
-
 function shouldAddEmployeeFromDirectory(employee, observedDates) {
   const key = employeeKey(employee);
   const hireDate = getEmployeeHireIso(employee, observedDates[0] || '');
@@ -130,15 +125,9 @@ export function buildDailyWeeks(analysis, employees) {
         const correction = corrections.get(`${row.employeeKey}|${column.isoDate}`);
         const exitOnly = day && !day.exit && correction?.exit && correction.entry === '';
         const started = isEmployeeStartedBy(employee, column.isoDate);
-        const absenceEligible = isEmployeeAbsenceEligibleBy(employee, column.isoDate);
-        const sourceStatus = String(sourceCell?.status || '').toUpperCase();
-        const sourceIsAbsenceLike = sourceCell && !['POINTAGE', 'AVR'].includes(sourceStatus);
         let status = 'EMPTY';
         let display = '-';
         if (!started && (day || sourceCell)) {
-          status = 'X';
-          display = '-';
-        } else if (sourceIsAbsenceLike && !absenceEligible) {
           status = 'X';
           display = '-';
         } else if (day) {
@@ -189,7 +178,6 @@ export function buildDailyTable(analysis, employees, requestedDates) {
       const existing = row.dayByDate.get(column.isoDate);
       const hireDate = getEmployeeHireIso(row, column.isoDate);
       if (hireDate && hireDate > column.isoDate) return { ...column, status: 'EMPTY', display: '-', raw: '-', workedMinutes: 0, detail: '', entry: '', exit: '' };
-      if (existing?.status === 'ABS' && !hireDate) return { ...column, status: 'EMPTY', display: '-', raw: '-', workedMinutes: 0, detail: '', entry: '', exit: '' };
       if (existing && existing.status !== 'EMPTY') return existing;
       if (hireDate && hireDate <= column.isoDate) return { ...column, status: 'ABS', display: 'ABS', raw: 'ABS', workedMinutes: 0, detail: '', entry: '', exit: '' };
       return { ...column, status: 'EMPTY', display: '-', raw: '-', workedMinutes: 0, detail: '', entry: '', exit: '' };

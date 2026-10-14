@@ -18,7 +18,7 @@ export default function PointageCorrectionForm({ detail, onSave, onBusyChange, d
       if (!await verifyPointageCorrectionCode(accessCode)) throw new Error(translate('daily.importScreen.incorrectCode'));
       await onSave({ employeeKey: detail.employeeKey, isoDate: detail.isoDate, entry, exit, breakMinutes: pause });
     } catch (cause) {
-      setError(translate('daily.importScreen.correctionError'));
+      setError(cause?.message || translate('daily.importScreen.correctionError'));
     } finally {
       setAccessCode('');
       setSaving(false);
@@ -30,8 +30,8 @@ export default function PointageCorrectionForm({ detail, onSave, onBusyChange, d
     <p>{detail.status === 'ABS' ? translate('daily.importScreen.absentCorrection') : translate('daily.importScreen.completeCorrection')}</p>
     <fieldset disabled={saving || disabled}>
       <div className="pointage-correction__hours">
-        <label>{translate('daily.importScreen.entry')}<input type="time" required={!exit} value={entry} onChange={(event) => setEntry(event.target.value)} /></label>
-        <label>{translate('daily.importScreen.exit')}<input type="time" required={!entry} value={exit} onChange={(event) => setExit(event.target.value)} /></label>
+        <label>{translate('daily.importScreen.entry')}<input type="text" inputMode="text" autoComplete="off" placeholder="07:30 ou 5:30 PM" aria-label={`${translate('daily.importScreen.entry')} (24 h ou AM/PM)`} required={!exit} value={entry} onChange={(event) => setEntry(event.target.value)} /></label>
+        <label>{translate('daily.importScreen.exit')}<input type="text" inputMode="text" autoComplete="off" placeholder="17:00 ou 5:00 PM" aria-label={`${translate('daily.importScreen.exit')} (24 h ou AM/PM)`} required={!entry} value={exit} onChange={(event) => setExit(event.target.value)} /></label>
       </div>
       <label>{translate('daily.importScreen.breakCorrectionLabel', 'Pause déduite (min)')}<input aria-label={translate('daily.importScreen.breakCorrectionLabel', 'Pause déduite (min)')} type="number" min="0" max="180" step="1" required value={pause} onChange={(event) => {
         const value = Number(event.target.value);

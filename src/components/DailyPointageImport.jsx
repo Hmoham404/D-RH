@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
-import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, normalizeSavedPointageSnapshot, prepareDailyPointage } from '../lib/dailyPointage.js';
+import { buildAttendanceByDay, buildDailyTable, formatPointageDate, getCurrentFilePointage, normalizeSavedPointageSnapshot } from '../lib/dailyPointage.js';
 import DailyAttendanceOverview from './DailyAttendanceOverview';
 import { clearPointageSnapshot, savePointageSnapshot, loadPointageSnapshot } from '../services/pointageSnapshotStore';
 import { preparePayrollPointage, PAYROLL_RETENTION } from '../lib/payrollPointage.js';
@@ -58,6 +58,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [selectedDay, setSelectedDay] = useState('');
+  const [selectedWeekStart, setSelectedWeekStart] = useState('');
   const [today, setToday] = useState(getLocalPointageDate);
   const [detail, setDetail] = useState(null);
   const [correcting, setCorrecting] = useState(false);
@@ -132,6 +133,9 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   const analysisDate = requestedDate && dates.includes(requestedDate) ? requestedDate : getDefaultPointageDate(dates, today);
   const visibleDayColumns = table.dayColumns;
   const calendarWeeks = useMemo(() => splitPayrollWeeks(visibleDayColumns), [visibleDayColumns]);
+  const selectedWeek = calendarWeeks.find((week) => week.start === selectedWeekStart)
+    || calendarWeeks.find((week) => week.dayColumns.some((day) => day.isoDate === analysisDate))
+    || calendarWeeks.at(-1);
   const filteredRows = table.rows.filter((row) =>
     `${row.id} ${row.fullName}`.toLowerCase().includes(search.toLowerCase())
     && (statusFilter === 'ALL' || row.days.some((day) => day.isoDate === analysisDate && day.status === statusFilter)));
@@ -290,15 +294,24 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         <div><strong>{translate('daily.currentPayrollMonth', 'Mois de paie en cours')}</strong><span>{monthRangeLabel(visiblePeriod, locale)}</span></div>
         <span>{translate('daily.importedDayCount', '{count} / {total} jours importés', { count: dates.filter((date) => date <= today).length, total: visiblePeriod.dates.length })}</span>
       </div>
-      {calendarWeeks.map((week) => <section key={week.start} className="daily-import__week" data-week-start={week.start}>
-        <h3>{translate('daily.payrollWeek', 'Semaine du {start} au {end}', { start: dayLabel(week.start, locale), end: dayLabel(week.end, locale) })}</h3>
-      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{week.dayColumns.map((d) => {
+      <div className="daily-import__week-picker">
+        <label htmlFor="daily-payroll-week">{translate('daily.selectWeek', 'Choisir une semaine')}</label>
+        <select id="daily-payroll-week" aria-label={translate('daily.selectWeek', 'Choisir une semaine')}
+          value={selectedWeek?.start || ''} onChange={(event) => setSelectedWeekStart(event.target.value)} disabled={!calendarWeeks.length}>
+          {calendarWeeks.map((week, index) => <option key={week.start} value={week.start}>
+            S{index + 1} · {dayLabel(week.dayColumns[0].isoDate, locale)} – {dayLabel(week.dayColumns.at(-1).isoDate, locale)}
+          </option>)}
+        </select>
+      </div>
+      {selectedWeek && <section key={selectedWeek.start} className="daily-import__week" data-week-start={selectedWeek.start}>
+        <h3>{translate('daily.payrollWeek', 'Semaine du {start} au {end}', { start: dayLabel(selectedWeek.dayColumns[0].isoDate, locale), end: dayLabel(selectedWeek.dayColumns.at(-1).isoDate, locale) })}</h3>
+      <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('daily.importScreen.departmentService')}</th><th>{translate('daily.importScreen.category')}</th>{selectedWeek.dayColumns.map((d) => {
         const dayRows = table.rows.map((row) => row.days.find((day) => day.isoDate === d.isoDate)).filter(Boolean);
         const presentCount = dayRows.filter((day) => ['POINTAGE', 'AVR'].includes(day.status)).length;
         const absentCount = dayRows.filter((day) => day.status === 'ABS').length;
         return <th key={d.isoDate} data-date={d.isoDate} data-imported={d.imported}><button type="button" disabled={!d.imported} className="daily-import__date-heading" aria-pressed={analysisDate === d.isoDate} onClick={() => changeAnalysisDate(d.isoDate)}><span>{new Date(`${d.isoDate}T12:00:00Z`).toLocaleDateString(locale, { weekday: 'short', timeZone: 'UTC' })} {dayLabel(d.isoDate)}</span><small>{d.imported ? <>{translate('kpi.presents', 'Presents')}: {presentCount} · {translate('kpi.absents', 'Absents')}: {absentCount}</> : translate('daily.notImported', 'Non importé')}</small></button></th>;
-       })}</tr></thead><tbody>{week.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.filter((day) => week.dayColumns.some((column) => column.isoDate === day.isoDate)).map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + week.dayColumns.length} className="rh-table__empty">{!dates.length ? translate('daily.noCurrentMonthData', 'Aucun pointage disponible pour le mois de paie en cours.') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
-      </section>)}
+       })}</tr></thead><tbody>{selectedWeek.dayColumns.length && filteredRows.length ? filteredRows.map((r) => <tr key={r.employeeKey}><td>{r.id}</td><td>{r.fullName}</td><td>{[r.department, r.service].filter(Boolean).filter((value, index, values) => values.indexOf(value) === index).join(' / ') || '-'}</td><td>{r.kind || '-'}</td>{r.days.filter((day) => selectedWeek.dayColumns.some((column) => column.isoDate === day.isoDate)).map((d) => <td key={d.isoDate}>{['POINTAGE', 'AVR', 'ABS'].includes(d.status) ? <button type="button" aria-label={translate('daily.importScreen.viewPunches', '{name}, {date}: view entry and exit', { name: r.fullName, date: dayLabel(d.isoDate) })} className={`rh-cell-badge daily-import__time rh-cell-badge--${d.status.toLowerCase()}`} onClick={() => setDetail({ ...d, fullName: r.fullName, id: r.id, employeeKey: r.employeeKey })}>{d.display}</button> : <span className={`rh-cell-badge rh-cell-badge--${d.status.toLowerCase()}`}>{d.display}</span>}</td>)}</tr>) : <tr><td colSpan={4 + selectedWeek.dayColumns.length} className="rh-table__empty">{!dates.length ? translate('daily.noCurrentMonthData', 'Aucun pointage disponible pour le mois de paie en cours.') : translate('daily.importScreen.noMatches')}</td></tr>}</tbody></table></div>
+      </section>}
     </article>
     <form className="delete-zone" onSubmit={clearPointage}>
       <div className="delete-zone__copy">
@@ -314,7 +327,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     {detail && <dialog ref={dialogRef} className="daily-import__dialog" aria-labelledby="punch-detail-title" onClose={() => setDetail(null)} onCancel={(event) => { if (correcting) event.preventDefault(); }} onClick={(event) => { if (!correcting && event.target === event.currentTarget) dialogRef.current.close(); }}>
       <div className="daily-import__detail">
         <div className="rh-modal__header"><div><h2 id="punch-detail-title">{detail.fullName}</h2><p>{translate('daily.importScreen.employeeNumber')} {detail.id} · {dayLabel(detail.isoDate)}</p></div><button type="button" autoFocus disabled={correcting} className="rh-modal__close" onClick={() => dialogRef.current.close()}>{translate('daily.importScreen.close')}</button></div>
-        <dl className="daily-import__punches"><div><dt>{translate('daily.importScreen.entry')}</dt><dd>{detail.entry.slice(11) || translate('daily.unavailable')}</dd></div><div><dt>{translate('daily.importScreen.exit')}</dt><dd>{detail.exit.slice(11) || translate('daily.importScreen.missingExit')}</dd></div></dl>
+        <dl className="daily-import__punches"><div><dt>{translate('daily.importScreen.entry')}</dt><dd>{detail.entry.slice(11) || translate('daily.unavailable')}</dd></div><div><dt>{translate('daily.importScreen.exit')}</dt><dd>{detail.exit.slice(11) || translate('daily.missingExit', 'Manquante, à vérifier')}</dd></div></dl>
         <p>{translate('daily.importScreen.calculated')} : <strong>{detail.status === 'POINTAGE' ? detail.display : detail.status === 'ABS' ? translate('daily.importScreen.absentStatus') : translate('daily.importScreen.reviewStatus')}</strong></p>
         <p>{translate('daily.importScreen.passages', 'Punches on {date}', { date: dayLabel(detail.isoDate) })} : {detail.detail.split(' | ').map((value) => value.slice(11)).join(' · ') || translate('daily.importScreen.none')}</p>
         {['POINTAGE', 'AVR', 'ABS'].includes(detail.status) && <PointageCorrectionForm key={`${detail.employeeKey}|${detail.isoDate}`} detail={detail} breakMinutes={detail.breakMinutes ?? data?.calculationRules?.breakOverrides?.[`${detail.employeeKey}|${detail.isoDate}`] ?? data?.calculationRules?.breakMinutes ?? pointageBreakMinutes} onSave={saveCorrection} onBusyChange={setCorrecting} disabled={busy || loading} translate={translate} />}

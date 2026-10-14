@@ -83,3 +83,27 @@ suppression refusée par un vidage trompeur, et ne change aucune politique RLS.
 
 À ce stade, le nettoyage et la récupération en base n'ont pas été exécutés :
 l'accès distant a été bloqué par une limite d'usage du contrôle d'autorisation.
+
+## Mise à jour du 14 octobre 2026
+
+Cette section remplace les règles d'accumulation et de rétention ci-dessus. Les
+nouveaux imports utilisent `preparePayrollPointage` : ils gardent uniquement les
+dates du 26 à aujourd'hui, ajoutent les passages, ignorent les doublons et
+préservent les corrections RH. Les dates hors cycle sont exclues ; les fichiers
+sans pointage dans le cycle sont refusés. Le tableau comporte un sélecteur de
+semaine S1, S2, etc., avec les semaines du lundi au dimanche.
+
+Les snapshots marqués `current-payroll-only-v1` remplacent le snapshot courant
+sans créer de copie complète par import. Au passage au prochain cycle, le
+snapshot courant est vidé par mise à jour conditionnelle. Cette opération a
+lieu si l'application est ouverte ce jour-là ou à sa prochaine ouverture.
+
+Le 14 octobre, les archives préexistantes ont été sauvegardées localement, puis
+leurs payloads ont été vidés après vérification. L'inventaire en lecture seule a
+confirmé zéro archive active, 3 117 passages et 19 dates, du 26 septembre au
+14 octobre inclus. Les passages du 11 octobre sont maintenant dans le courant.
+La suppression physique de la dernière copie redondante a été refusée par
+Supabase ; son payload a été vidé sous contrôle d'identifiant et de révision.
+Les lignes vides subsistent et Supabase peut récupérer leur espace plus tard ;
+cette opération ne garantit ni une baisse immédiate de `Database size` ni une
+valeur d'espace libre restante.

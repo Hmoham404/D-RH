@@ -3,7 +3,7 @@
 -- Les nouvelles écritures de pointage doivent conserver le contrat source MDY.
 begin;
 
-create or replace function public.hr_validate_pointage_dates(part jsonb)
+create or replace function public.hr_validate_pointage_dates(part jsonb, previous_part jsonb)
 returns void
 language plpgsql
 set search_path = pg_catalog, public
@@ -29,7 +29,17 @@ begin
   if jsonb_typeof(part->'rawRows') is distinct from 'array' then
     raise exception 'Le pointage doit contenir les cellules source rawRows.' using errcode = '23514';
   end if;
-  for punch in select value from jsonb_array_elements(part->'rawRows') loop
+  -- Unchanged punches were validated when first written. During UPDATE, only
+  -- parse new or changed punches so a one-day correction does not revalidate
+  -- the whole payroll-period snapshot.
+  for punch in
+    select changed.value
+    from (
+      select value from jsonb_array_elements(part->'rawRows') as current_rows(value)
+      except
+      select value from jsonb_array_elements(coalesce(previous_part->'rawRows', '[]'::jsonb)) as previous_rows(value)
+    ) as changed
+  loop
     if coalesce(punch->>'isoDate', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
       or coalesce(punch->>'pointageAt', '') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]$'
       or left(punch->>'pointageAt', 10) is distinct from punch->>'isoDate'
@@ -97,9 +107,18 @@ begin
     return new;
   end if;
   if coalesce(new.payload->>'cleared', 'false') <> 'true' then
-    perform public.hr_validate_pointage_dates(new.payload);
+    perform public.hr_validate_pointage_dates(new.payload,
+      case when tg_op = 'UPDATE' then old.payload else null end);
     if jsonb_typeof(new.payload->'currentFilePointage') = 'object' then
-      perform public.hr_validate_pointage_dates(new.payload->'currentFilePointage');
+      -- Skip the duplicate nested check when the date-validation inputs match
+      -- the root snapshot; compact storage normally uses this representation.
+      if new.payload->'currentFilePointage'->'rawRows' is distinct from new.payload->'rawRows'
+        or new.payload->'currentFilePointage'->>'dateNormalizationVersion' is distinct from new.payload->>'dateNormalizationVersion'
+        or new.payload->'currentFilePointage'->>'sourceDateContract' is distinct from new.payload->>'sourceDateContract'
+        or new.payload->'currentFilePointage'#>>'{calculationRules,dateOrder}' is distinct from new.payload#>>'{calculationRules,dateOrder}' then
+        perform public.hr_validate_pointage_dates(new.payload->'currentFilePointage',
+          case when tg_op = 'UPDATE' then old.payload->'currentFilePointage' else null end);
+      end if;
     end if;
   end if;
   -- A monotonic server revision makes conditional updates reliable even when

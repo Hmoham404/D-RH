@@ -205,6 +205,25 @@ test('server revisions remain monotonic under a frozen client clock and stale CA
   assert.equal(stale.rows.length, 0);
 });
 
+test('updates validate changed punches while retaining the source-date guard', async () => {
+  const id = `rh-pointage-history-delta-${++sequence}`;
+  const original = snapshot([
+    row(),
+    row('mdy-text', { sourceDateValue: '10/02/2026 07:36', sourceDateText: '10/02/2026 07:36',
+      sourceDateIso: '2026-10-02T07:36:00', isoDate: '2026-10-02', pointageAt: '2026-10-02T07:36:00' }),
+  ]);
+  await insert(original, id);
+  const changed = structuredClone(original);
+  changed.rawRows[1].terminal = 'Correction RH';
+  await db.query('update public.hr_dashboard_store set payload=$1::jsonb where id=$2', [JSON.stringify(changed), id]);
+  const invalid = structuredClone(changed);
+  invalid.rawRows[1].isoDate = '2026-01-10';
+  invalid.rawRows[1].pointageAt = '2026-01-10T07:36:00';
+  invalid.rawRows[1].sourceDateIso = '2026-01-10T07:36:00';
+  await assert.rejects(db.query('update public.hr_dashboard_store set payload=$1::jsonb where id=$2', [JSON.stringify(invalid), id]),
+    /Date du pointage differente de la source MDY/);
+});
+
 test('unrelated dashboard payloads keep their data and timestamps', async () => {
   const payload = { arbitrary: ['10/01/2026'], totals: { active: 1 } };
   const inserted = (await insert(payload, 'rh-homepage', '2026-10-04T12:00:00Z')).rows[0];

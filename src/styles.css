@@ -318,6 +318,29 @@
   .mod-presence-chart__period { @apply whitespace-nowrap rounded-md bg-blue-50 px-3 py-2 text-xs font-bold text-blue-900; }
   .mod-presence-chart--daily { grid-template-rows: auto minmax(0, 1fr) auto; }
   .mod-presence-chart__note { @apply text-xs text-slate-500; }
+  .mod-chart-controls { @apply flex flex-wrap items-center justify-end gap-2; }
+  .mod-chart-modes { @apply grid grid-cols-2 overflow-hidden rounded-lg border border-[#d9e5eb] bg-white shadow-sm; }
+  .mod-chart-modes button { @apply min-h-9 px-3 text-xs font-bold text-blue-900 transition-colors hover:bg-blue-50; }
+  .mod-chart-modes button + button { @apply border-s border-blue-100; }
+  .mod-chart-modes .is-active { @apply bg-[#164e8a] text-white shadow-sm hover:bg-[#164e8a]; }
+  .mod-chart-absence-meta { @apply flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[10px] font-semibold text-slate-500; }
+  .mod-chart-target-key { @apply inline-flex items-center gap-1.5; }
+  .mod-chart-target-key i { @apply size-2 rounded-full bg-amber-400; }
+  .mod-chart-target-key strong { @apply text-amber-700; }
+  .mod-presence-chart .mod-chart-target line { stroke: #d59a16; stroke-dasharray: 5 4; stroke-width: 1.8; }
+  .mod-presence-chart .mod-chart-target rect { fill: #fff6d9; stroke: #f2d783; }
+  .mod-presence-chart .mod-chart-target text { fill: #8b5e00; font-size: 8px; font-weight: 800; }
+  .mod-presence-chart line.mod-chart-absence-line { stroke-width: 3; stroke-linecap: round; }
+  .mod-presence-chart line.mod-chart-absence-line--below { stroke: #159466; }
+  .mod-presence-chart line.mod-chart-absence-line--target { stroke: #d59a16; }
+  .mod-presence-chart line.mod-chart-absence-line--above { stroke: #dc3b45; }
+  .mod-presence-chart circle.mod-chart-absence-point--below { fill: #159466; }
+  .mod-presence-chart circle.mod-chart-absence-point--target { fill: #e0a11a; }
+  .mod-presence-chart circle.mod-chart-absence-point--above { fill: #dc3b45; }
+  .mod-presence-chart text.mod-chart-value--below { fill: #117a56; }
+  .mod-presence-chart text.mod-chart-value--target { fill: #986700; }
+  .mod-presence-chart text.mod-chart-value--above { fill: #bd2633; }
+  .mod-presence-chart .mod-chart-date-label { @apply text-[7px]; }
   .mod-dashboard__footer { @apply flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-blue-900/60; background: linear-gradient(90deg,#ffffff 0%,#f2f8f7 100%); }
   .mod-dashboard__footer strong { @apply inline-flex items-center gap-2 border-e border-blue-100 pe-4 font-black text-blue-700; }
   .mod-dashboard__footer small { @apply ms-auto text-xs; }
@@ -339,6 +362,10 @@
     .mod-dashboard__rates { @apply grid-cols-1; }
     .mod-rate-card { @apply h-auto min-h-56; }
     .mod-chart-tabs { @apply w-full; }
+    .mod-chart-controls { @apply w-full justify-start; }
+    .mod-chart-modes { @apply w-full; }
+    .mod-chart-modes button { @apply flex-1; }
+    .mod-chart-absence-meta { @apply w-full justify-between; }
     .mod-metric, .mod-rate-card { @apply h-auto min-h-56; }
     .mod-presence-chart { @apply min-h-0; }
     .mod-presence-chart svg { @apply h-auto; }
@@ -729,3 +756,69 @@
 .daily-import__week .rh-table td:nth-child(2) { font-weight: 650; }
 .daily-import__week .daily-import__date-heading { white-space: normal; min-width: 0; }
 .daily-import__week .daily-import__date-heading small { white-space: normal; font-size: 9px; }
+
+/* Compact, readable payroll-week grid. Keep day columns content-sized rather than
+   stretching a short (two or three day) week across the whole monitor. */
+.daily-import__week-picker { padding: 14px 18px; background: #fff; }
+.daily-import__week-picker label { color: #64748b; font-size: 11px; letter-spacing: .02em; }
+.daily-import__week-picker select { min-height: 40px; border-color: #d8e3ef; border-radius: 10px; box-shadow: 0 1px 2px #0f27420a; }
+.daily-import__week h3 { padding: 13px 18px; background: linear-gradient(90deg, #f1f7ff, #f8fbff 65%, #fff); color: #173b65; font-size: 13px; font-weight: 750; }
+.daily-import__week-wrap { border: 0; border-radius: 0; overflow-x: auto; scrollbar-color: #b8cbe0 #f3f7fb; }
+.daily-import__week .daily-import__week-table { width: 100% !important; min-width: 1000px; max-width: none; margin-inline: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.daily-import__week .daily-import__week-table th,
+.daily-import__week .daily-import__week-table td { padding: 11px 12px; border-bottom: 1px solid #e9eff6; overflow-wrap: normal; }
+.daily-import__week .daily-import__week-table th { height: 72px; background: #f8fafc; color: #52677f; font-size: 11px; letter-spacing: .045em; }
+.daily-import__week .daily-import__week-table th:first-child,
+.daily-import__week .daily-import__week-table td:first-child { width: 76px; }
+.daily-import__week .daily-import__week-table th:nth-child(2),
+.daily-import__week .daily-import__week-table td:nth-child(2) { width: 190px; }
+.daily-import__week .daily-import__week-table th:nth-child(3),
+.daily-import__week .daily-import__week-table td:nth-child(3) { width: 220px; }
+.daily-import__week .daily-import__week-table th:nth-child(4),
+.daily-import__week .daily-import__week-table td:nth-child(4) { width: 90px; }
+.daily-import__week .daily-import__week-table th:nth-child(n+5),
+.daily-import__week .daily-import__week-table td:nth-child(n+5) { width: 152px; text-align: center; }
+.daily-import__week .daily-import__week-table th:nth-child(n+5) { padding: 8px 10px; }
+.daily-import__week .daily-import__week-table tbody tr { transition: background-color .16s ease; }
+.daily-import__week .daily-import__week-table tbody tr:nth-child(even) { background: #fbfdff; }
+.daily-import__week .daily-import__week-table tbody tr:hover { background: #f1f7ff; }
+.daily-import__week .daily-import__week-table td { height: 62px; color: #334155; font-size: 13px; }
+.daily-import__week .daily-import__week-table td:nth-child(2) { color: #102a43; font-weight: 750; letter-spacing: .01em; }
+.daily-import__week .daily-import__week-table td:nth-child(3) { color: #53677f; font-size: 12px; line-height: 1.45; }
+.daily-import__week .daily-import__week-table td[data-status="EMPTY"] { color: #cbd5e1; }
+.daily-import__week .daily-import__date-heading { display: grid; width: 100%; justify-items: center; gap: 5px; padding: 8px 6px; border-radius: 9px; color: #334e68; font-size: 12px; font-weight: 750; line-height: 1.25; }
+.daily-import__week .daily-import__date-heading span { text-transform: capitalize; }
+.daily-import__week .daily-import__date-heading small { margin: 0; color: #718399; font-size: 10px; font-weight: 550; letter-spacing: 0; }
+.daily-import__week .daily-import__date-heading[aria-pressed="true"] { background: #eaf3ff; color: #15528a; box-shadow: inset 0 0 0 1px #d3e6fb; }
+.daily-import__week .daily-import__date-heading[aria-pressed="true"] small { color: #4e78a3; }
+.daily-import__week .daily-import__time { min-width: 72px; min-height: 32px; justify-content: center; border-radius: 8px; font-size: 12px; font-variant-numeric: tabular-nums; font-weight: 800; letter-spacing: .025em; }
+.daily-import__employee-id { color: #718096 !important; font-variant-numeric: tabular-nums; font-weight: 650; }
+.daily-import__category { display: inline-flex; min-width: 42px; justify-content: center; border-radius: 6px; background: #eef4fb; padding: 4px 7px; color: #476581; font-size: 10px; font-weight: 750; }
+.daily-import__category--mod { background: #eaf3ff; color: #225b93; }
+.daily-import__category--moi { background: #f1edff; color: #6653a3; }
+.daily-import__week .rh-table__empty { padding: 38px 18px; }
+.daily-import__week-wrap { background: #fff; }
+.daily-import__week .daily-import__week-table thead th { background: #f8fafc; border-color: #e9eff6; color: #52677f; }
+.daily-import__week .daily-import__week-table thead th:nth-child(n+5) { background: #f8fafc; }
+.daily-import__week .daily-import__week-table .daily-import__date-heading { color: #334e68; }
+.daily-import__week .daily-import__week-table .daily-import__date-heading small { color: #718399; }
+.daily-import__week .daily-import__week-table .daily-import__date-heading:hover:not(:disabled) { background: #f1f7ff; }
+.daily-import__week .daily-import__week-table .daily-import__date-heading[aria-pressed="true"] { background: #eaf3ff; box-shadow: inset 0 0 0 1px #d3e6fb; color: #15528a; }
+.daily-import__week .daily-import__week-table .daily-import__date-heading[aria-pressed="true"] small { color: #4e78a3; }
+.daily-import__week .daily-import__week-table tbody tr:nth-child(odd) td { background: #fff; }
+.daily-import__week .daily-import__week-table tbody tr:nth-child(even) td { background: #fbfdff; }
+.daily-import__week .daily-import__week-table tbody tr:hover td { background: #f1f7ff; }
+.daily-import__week .daily-import__week-table tbody td { border-color: #e9eff6; }
+.daily-import__week .daily-import__week-table tbody td:nth-child(2) { color: #102a43; }
+.daily-import__week .daily-import__week-table tbody td:nth-child(3) { color: #53677f; }
+@media (max-width: 680px) {
+  .daily-import__week-picker { align-items: stretch; flex-direction: column; }
+  .daily-import__week-picker select { width: 100%; min-width: 0; }
+  .daily-import__week h3 { padding-inline: 14px; }
+  .daily-import__week .daily-import__week-table th:nth-child(2),
+  .daily-import__week .daily-import__week-table td:nth-child(2) { width: 150px; }
+  .daily-import__week .daily-import__week-table th:nth-child(3),
+  .daily-import__week .daily-import__week-table td:nth-child(3) { width: 170px; }
+  .daily-import__week .daily-import__week-table th:nth-child(n+5),
+  .daily-import__week .daily-import__week-table td:nth-child(n+5) { width: 132px; }
+}

@@ -7,6 +7,10 @@ const code = (value) => /^\d+$/.test(String(value || '').trim()) ? String(Number
 const employeeKey = (employee) => code(employee.zk || employee.id || employee.finalCode || employee.saber);
 const clock = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 const iso = (date) => date.toISOString().slice(0, 10);
+const clockMinutes = (value) => {
+  const match = String(value || '').match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+};
 
 function getEmployeeHireIso(employee, referenceIsoDate = '') {
   const hireValue = [employee?.hiredAt, employee?.hired_at, employee?.Date_Embauche,
@@ -123,13 +127,22 @@ export function buildDailyWeeks(analysis, employees) {
         const day = days.get(`${row.employeeKey}|${column.isoDate}`);
         const sourceCell = sourceCells.get(`${row.employeeKey}|${column.isoDate}`);
         const correction = corrections.get(`${row.employeeKey}|${column.isoDate}`);
-        const exitOnly = day && !day.exit && correction?.exit && correction.entry === '';
         const started = isEmployeeStartedBy(employee, column.isoDate);
         let status = 'EMPTY';
         let display = '-';
+        let correctionMinutes = null;
         if (!started && (day || sourceCell)) {
           status = 'X';
           display = '-';
+        } else if (correction) {
+          const entryMinutes = clockMinutes(correction.entry);
+          const exitMinutes = clockMinutes(correction.exit);
+          const pause = Math.max(0, Number(correction.breakMinutes) || 0);
+          correctionMinutes = entryMinutes !== null && exitMinutes !== null && exitMinutes > entryMinutes
+            ? Math.max(0, exitMinutes - entryMinutes - pause) : 0;
+          status = entryMinutes !== null && exitMinutes !== null && exitMinutes > entryMinutes ? 'POINTAGE' : 'AVR';
+          display = status === 'POINTAGE' ? clock(correctionMinutes) : correction.entry || correction.exit || 'AVR';
+          total += correctionMinutes;
         } else if (day) {
           const review = day.state !== 'OK' || day.matchState !== 'matched';
           status = review ? 'AVR' : 'POINTAGE';
@@ -145,9 +158,13 @@ export function buildDailyWeeks(analysis, employees) {
           }
         }
         const sourceTime = !day && ['POINTAGE', 'AVR'].includes(status) && String(display).match(/^(\d+):(\d{2})$/);
-        const workedMinutes = day?.roundedMinutes || (sourceTime ? Number(sourceTime[1]) * 60 + Number(sourceTime[2]) : 0);
-        if (!day) total += workedMinutes;
-        return { ...column, status, display, raw: display, workedMinutes, breakMinutes: day?.breakMinutes, detail: day?.punchesDisplay || '', entry: exitOnly ? '' : day?.entry || '', exit: exitOnly ? day.entry : day?.exit || '' };
+        const workedMinutes = correctionMinutes ?? day?.roundedMinutes ?? (sourceTime ? Number(sourceTime[1]) * 60 + Number(sourceTime[2]) : 0);
+        if (!day && correctionMinutes === null) total += workedMinutes;
+        return { ...column, status, display, raw: display, workedMinutes,
+          breakMinutes: correction ? Number(correction.breakMinutes) || 0 : day?.breakMinutes,
+          detail: correction ? 'Correction RH' : day?.punchesDisplay || '',
+          entry: correction?.entry ? `${column.isoDate} ${correction.entry}:00` : correction ? '' : day?.entry || '',
+          exit: correction?.exit ? `${column.isoDate} ${correction.exit}:00` : correction ? '' : day?.exit || '' };
       });
       return { ...row, hiredAt: employee.hiredAt || employee.hired_at || employee.Date_Embauche || employee.dateEmbauche || employee.date_embauche || employee.hireDate || '', days: cells, totalHours: clock(total), control: cells.some((day) => day.status === 'AVR') ? 'À vérifier' : '' };
     }).filter((row) => row.days.some((day) => day.status !== 'EMPTY'))

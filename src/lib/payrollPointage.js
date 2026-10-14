@@ -17,22 +17,21 @@ export function emptyPayrollSnapshot(today = getLocalPointageDate(), rules = {})
   };
 }
 
-// Daily exports supplement the month. Identical passages are idempotent; RH
-// corrections take precedence over subsequent reimports of the source file.
+// Daily exports supplement the month. Identical passages are idempotent, and
+// a reimported date returns to its source data and clears that date's RH fixes.
 export async function preparePayrollPointage(file, employees, previous, rules, today = getLocalPointageDate()) {
   const incoming = await prepareDailyPointage(file, employees, null, rules);
   const period = payrollPeriodToDate(getPayrollPeriod(today), today);
   const current = pointageInPeriod(getCurrentFilePointage(previous), period);
   const addition = pointageInPeriod(getCurrentFilePointage(incoming), period);
   if (!addition.rawRows.length) throw new Error('Aucun passage du fichier dans le mois de paie en cours, du 26 à aujourd’hui. Import annulé.');
-  const corrections = current?.manualCorrections || [];
-  const corrected = new Set(corrections.map((item) => `${item.employeeKey}|${item.isoDate}`));
+  const incomingDates = new Set(addition.rawRows.map((row) => row.isoDate));
+  const corrections = (current?.manualCorrections || []).filter((item) => !incomingDates.has(item.isoDate));
   const rows = new Map();
   const key = (row) => `${row.employeeKey || row.sourceId}|${row.pointageAt}`;
   (current?.rawRows || []).forEach((row) => rows.set(key(row), row));
   let repeated = 0;
   addition.rawRows.forEach((row) => {
-    if (corrected.has(`${row.employeeKey}|${row.isoDate}`)) return;
     if (rows.has(key(row))) { repeated++; return; }
     rows.set(key(row), row);
   });
@@ -54,8 +53,8 @@ export async function preparePayrollPointage(file, employees, previous, rules, t
     currentFilePointage: null, importDiagnostics: null, dateRebuildRequired: true,
     calculationRules: { ...rules, dateOrder: 'mdy', breakOverrides } };
   const rebuilt = await normalizeSavedPointageSnapshot(seed, employees, rules.breakMinutes);
-  const incomingDates = [...new Set(addition.rawRows.map((row) => row.isoDate))].sort();
-  const diagnostics = { ...incoming.importDiagnostics, incomingDates,
+  const incomingDateList = [...incomingDates].sort();
+  const diagnostics = { ...incoming.importDiagnostics, incomingDates: incomingDateList,
     incomingUsable: addition.rawRows.length, duplicateRows: incoming.importDiagnostics.duplicateRows + repeated,
     outsidePeriodRows: incoming.rawRows.length - addition.rawRows.length };
   // All derived aggregates were rebuilt together, from the same retained rows.

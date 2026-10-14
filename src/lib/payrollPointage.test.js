@@ -37,15 +37,15 @@ test('only the current 26-to-today window is retained and a wholly out-of-period
   const newMonth = await preparePayrollPointage(file([[1, '10/26/2026 08:00']]), employees, next, rules, '2026-10-26');
   assert.deepEqual(newMonth.rawRows.map((r) => r.isoDate), ['2026-10-26']);
 });
-test('an original file reimport does not undo an RH correction', async () => {
+test('reimporting a corrected date restores the source import and clears that date correction', async () => {
   const source = file([[1, '10/12/2026 08:00'], [1, '10/12/2026 17:00']]);
   const first = await preparePayrollPointage(source, employees, null, rules, '2026-10-13');
   const corrected = await correctDailyPointage(first, employees, { employeeKey: '1', isoDate: '2026-10-12', entry: '08:00', exit: '16:00', breakMinutes: 0 });
   const next = await preparePayrollPointage(source, employees, corrected, rules, '2026-10-13');
   const table = buildDailyTable(getCurrentFilePointage(next), employees, ['2026-10-12']);
-  assert.equal(table.rows.find((r) => r.employeeKey === '1').days[0].workedMinutes, 480);
+  assert.equal(table.rows.find((r) => r.employeeKey === '1').days[0].workedMinutes, 510);
   assert.equal(next.rawRows.length, 2);
-  assert.equal(next.manualCorrections.length, 1);
+  assert.equal(next.manualCorrections.length, 0);
 });
 test('calendar weeks are Monday to Sunday with no duplicate or out-of-period date', () => {
   const dates = payrollPeriodToDate(getPayrollPeriod('2026-10-13'), '2026-10-13').dates;

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import DashboardIcon from './DashboardIcon';
 import { getPayrollPeriod, splitPayrollWeeks } from '../lib/pointagePeriod.js';
+import { buildPayrollAbsenceDataset, getAbsenceTargetBand, MOD_ABSENCE_TARGET } from '../lib/presenceTrend.js';
 
 function getModRateFromDay(day) {
   const mod = (day?.departments || [])
@@ -117,27 +118,50 @@ function buildChartDataset(history, analysisDate, period, locale, translate) {
   };
 }
 
-export default function PayrollPresenceChart({ history = [], analysisDate, locale, translate }) {
+export default function PayrollPresenceChart({ history = [], analysisDate, payrollPeriod, locale, translate }) {
   const [period, setPeriod] = useState('quarter');
-  const dataset = buildChartDataset(history, analysisDate, period, locale, translate);
-  const labels = dataset.labels.length ? dataset.labels : ['MOD'];
-  const values = (dataset.values.length ? dataset.values : [null]).map((value) => value ?? null);
-  const captions = dataset.captions;
+  const [metric, setMetric] = useState('presence');
+  const isAbsence = metric === 'absence';
+  const activePayrollPeriod = payrollPeriod || getPayrollPeriod(analysisDate || undefined);
+  const absencePoints = isAbsence ? buildPayrollAbsenceDataset(history, activePayrollPeriod) : [];
+  const presenceDataset = isAbsence ? null : buildChartDataset(history, analysisDate, period, locale, translate);
+  const chartDates = isAbsence ? absencePoints.map((point) => point.isoDate) : [];
+  const absenceLabels = chartDates.map((isoDate, index) => {
+    const date = getUtcDate(isoDate);
+    const day = date.getUTCDate();
+    const fullDate = index === 0 || day === 1 || index === chartDates.length - 1;
+    const nearFullDate = chartDates.some((other, otherIndex) => Math.abs(otherIndex - index) <= 1
+      && (otherIndex === 0 || getUtcDate(other).getUTCDate() === 1 || otherIndex === chartDates.length - 1));
+    if (!fullDate && (index % 4 !== 0 || nearFullDate)) return '';
+    return fullDate
+      ? new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(date)
+      : String(day).padStart(2, '0');
+  });
+  const labels = isAbsence ? absenceLabels : (presenceDataset.labels.length ? presenceDataset.labels : ['MOD']);
+  const values = isAbsence ? absencePoints.map((point) => point.value) : (presenceDataset.values.length ? presenceDataset.values : [null]);
+  const captions = isAbsence ? [] : presenceDataset.captions;
   const plottableValues = values.map((value) => Number.isFinite(value) ? value : null);
   const x = (index) => 48 + index * 492 / Math.max(1, values.length - 1);
-  const y = (value) => 210 - value * 1.5;
-  const points = plottableValues.map((value, index) => value === null ? null : [x(index), y(value)]);
-  const segments = [];
-  points.forEach((point, index) => {
-    if (!point) return;
-    if (index === 0 || !points[index - 1]) segments.push([]);
-    segments.at(-1).push(point);
-  });
-  const tabs = [
+  const observedMax = Math.max(MOD_ABSENCE_TARGET * 2, ...plottableValues.filter(Number.isFinite));
+  const yMax = isAbsence ? Math.min(100, Math.ceil(observedMax / 5) * 5) : 100;
+  const y = (value) => 210 - value / yMax * 150;
+  const yTicks = isAbsence ? [0, 0.25, 0.5, 0.75, 1].map((fraction) => yMax * fraction) : [0, 25, 50, 75, 100];
+  const formatRate = (value) => `${Number(value.toFixed(isAbsence ? 1 : 0)).toLocaleString(locale)}%`;
+  const periods = [
     { key: 'quarter', label: translate('daily.overview.quarter') },
     { key: 'month', label: translate('daily.overview.month') },
     { key: 'week', label: translate('daily.overview.week') },
   ];
+  const periodStart = activePayrollPeriod.start;
+  const periodEnd = activePayrollPeriod.end;
+  const payrollRange = (date) => new Intl.DateTimeFormat(locale, { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(getUtcDate(date));
+  const targetBand = (value) => getAbsenceTargetBand(value);
+  const segments = [];
+  plottableValues.forEach((value, index) => {
+    if (value === null) return;
+    if (index === 0 || plottableValues[index - 1] === null) segments.push([]);
+    segments.at(-1).push([x(index), y(value), value]);
+  });
 
   return (
     <article className="mod-presence-chart">
@@ -145,53 +169,84 @@ export default function PayrollPresenceChart({ history = [], analysisDate, local
         <div>
           <span className="mod-section-icon"><DashboardIcon type="chart" /></span>
           <div>
-            <h2>{translate('daily.overview.evolution')}</h2>
+            <h2>{translate(isAbsence ? 'daily.overview.evolutionAbsence' : 'daily.overview.evolution')}</h2>
           </div>
         </div>
-        <div className="mod-chart-tabs" aria-label={translate('daily.overview.periodAria')}>
-          {tabs.map((tab) => (
+        <div className="mod-chart-controls">
+          <div className="mod-chart-modes" role="group" aria-label={translate('daily.overview.curveMetricAria')}>
+          {[
+            { key: 'presence', label: translate('daily.overview.attendanceCurve') },
+            { key: 'absence', label: translate('daily.overview.absenceCurve') },
+          ].map((tab) => (
             <button
               key={tab.key}
-              className={period === tab.key ? 'is-active' : ''}
+              className={metric === tab.key ? 'is-active' : ''}
               type="button"
-              aria-pressed={period === tab.key}
-              onClick={() => setPeriod(tab.key)}
+              aria-pressed={metric === tab.key}
+              onClick={() => setMetric(tab.key)}
             >
               {tab.label}
             </button>
           ))}
+          </div>
+          {isAbsence ? <div className="mod-chart-absence-meta">
+            <span className="mod-chart-target-key"><i />{translate('daily.overview.absenceTarget')} <strong>5%</strong></span>
+            <span>{translate('daily.overview.payrollCycle')}: {payrollRange(periodStart)} – {payrollRange(periodEnd)}</span>
+          </div> : <div className="mod-chart-tabs" aria-label={translate('daily.overview.periodAria')}>
+            {periods.map((tab) => (
+              <button key={tab.key} className={period === tab.key ? 'is-active' : ''} type="button"
+                aria-pressed={period === tab.key} onClick={() => setPeriod(tab.key)}>{tab.label}</button>
+            ))}
+          </div>}
         </div>
       </header>
-      <svg viewBox="0 0 570 300" role="img" aria-label={values.map((value, index) => `${labels[index]}: ${value === null ? 'sans donnees' : `${Math.round(value)}%`}`).join(', ')}>
+      <svg viewBox="0 0 570 300" role="img" aria-label={values.map((value, index) => `${isAbsence ? chartDates[index] : labels[index]}: ${value === null ? 'sans donnees' : formatRate(value)}`).join(', ')}>
         <defs>
           <linearGradient id="presenceEvolutionFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#2f80ed" stopOpacity=".32" />
             <stop offset="100%" stopColor="#2f80ed" stopOpacity=".04" />
           </linearGradient>
+          <linearGradient id="absenceEvolutionFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#f59e0b" stopOpacity=".18" />
+            <stop offset="100%" stopColor="#f59e0b" stopOpacity=".015" />
+          </linearGradient>
         </defs>
-        {[0, 25, 50, 75, 100].map((value) => (
+        {yTicks.map((value) => (
           <g key={value}>
             <line x1="26" x2="556" y1={y(value)} y2={y(value)} />
-            <text x="18" y={y(value) + 4} textAnchor="end">{value}%</text>
+            <text x="18" y={y(value) + 4} textAnchor="end">{formatRate(value)}</text>
           </g>
         ))}
-        {period === 'quarter' && <>
+        {isAbsence && <g className="mod-chart-target">
+          <line x1="26" x2="556" y1={y(MOD_ABSENCE_TARGET)} y2={y(MOD_ABSENCE_TARGET)} />
+          <rect x="518" y={y(MOD_ABSENCE_TARGET) - 10} width="37" height="18" rx="5" />
+          <text x="536.5" y={y(MOD_ABSENCE_TARGET) + 3} textAnchor="middle">5%</text>
+        </g>}
+        {!isAbsence && period === 'quarter' && <>
           <line className="mod-chart-divider" x1={x(3) - 34} x2={x(3) - 34} y1="42" y2="240" />
           <line className="mod-chart-divider" x1={x(7) - 20} x2={x(7) - 20} y1="42" y2="240" />
         </>}
         {segments.map((segment, index) => (
           <g key={index}>
-            <path d={`M${segment[0][0]},210 L${segment.map((point) => point.join(',')).join(' L')} L${segment.at(-1)[0]},210 Z`} fill="url(#presenceEvolutionFill)" />
-            <polyline points={segment.map((point) => point.join(',')).join(' ')} />
+            <path d={`M${segment[0][0]},210 L${segment.map((point) => `${point[0]},${point[1]}`).join(' L')} L${segment.at(-1)[0]},210 Z`}
+              fill={`url(#${isAbsence ? 'absenceEvolutionFill' : 'presenceEvolutionFill'})`} />
+            {isAbsence ? segment.slice(1).map((point, indexInSegment) => {
+              const previous = segment[indexInSegment];
+              const band = targetBand((point[2] + previous[2]) / 2);
+              return <line key={`${index}-${indexInSegment}`} className={`mod-chart-absence-line mod-chart-absence-line--${band}`}
+                x1={previous[0]} y1={previous[1]} x2={point[0]} y2={point[1]} />;
+            }) : <polyline points={segment.map((point) => `${point[0]},${point[1]}`).join(' ')} />}
           </g>
         ))}
         {values.map((value, index) => (
           <g key={index}>
             {value !== null && <>
-              <circle cx={x(index)} cy={y(value)} r="3.6" />
-              <text className="mod-chart-value" x={x(index)} y={y(value) - 9} textAnchor="middle">{Math.round(value)}%</text>
+              <circle className={isAbsence ? `mod-chart-absence-point mod-chart-absence-point--${targetBand(value)}` : ''}
+                cx={x(index)} cy={y(value)} r="3.6" />
+              <text className={`mod-chart-value${isAbsence ? ` mod-chart-value--${targetBand(value)}` : ''}`}
+                x={x(index)} y={y(value) - 9} textAnchor="middle">{formatRate(value)}</text>
             </>}
-            <text x={x(index)} y="248" textAnchor="middle">{labels[index]}</text>
+            {labels[index] && <text className={isAbsence ? 'mod-chart-date-label' : ''} x={x(index)} y="248" textAnchor="middle">{labels[index]}</text>}
           </g>
         ))}
         {captions.map((caption) => (

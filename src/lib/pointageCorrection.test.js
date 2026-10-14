@@ -13,7 +13,7 @@ async function snapshot(rows, previous = null) {
   return prepareDailyPointage({ name: 'test.xlsx', arrayBuffer: async () => XLSX.write(book, { type: 'array', bookType: 'xlsx' }) }, employees, previous, rules);
 }
 const table = (value) => buildDailyTable(getCurrentFilePointage(value), employees, ['2026-09-15']);
-test('RH correction replaces odd punches, recalculates totals and retains original punches for audit', async () => {
+test('RH correction overlays the source punches and recalculates the day without rewriting the import', async () => {
   const original = await snapshot([[4, 'Employé A', '09/15/2026 07:09']]);
   const copy = JSON.stringify(original);
   const next = await correctDailyPointage(original, employees, { employeeKey: '4', isoDate: '2026-09-15', entry: '07:00', exit: '16:00' });
@@ -21,8 +21,8 @@ test('RH correction replaces odd punches, recalculates totals and retains origin
   const day = table(restored).rows[0].days[0];
   assert.equal(day.status, 'POINTAGE');
   assert.equal(day.display, '09:00');
-  assert.equal(restored.rawRows.filter((row) => row.employeeKey === '4').length, 2);
-  assert.equal(restored.currentFilePointage.rawRows.length, 2);
+  assert.equal(restored.rawRows.filter((row) => row.employeeKey === '4').length, 1);
+  assert.equal(restored.currentFilePointage.rawRows.length, 1);
   assert.equal(restored.manualCorrections[0].before.punches.length, 1);
   assert.equal(restored.manualCorrections[0].before.status, 'AVR');
   assert.equal(restored.generatedAt, original.generatedAt);
@@ -83,7 +83,7 @@ test('green attendance can be corrected repeatedly, made odd and completed again
     assert.equal(day.workedMinutes, 0);
     assert.equal(day.entry.slice(11, 16), hours.entry);
     assert.equal(day.exit.slice(11, 16), hours.exit);
-    assert.equal(partial.currentFilePointage.rawRows.length, 1);
+    assert.equal(partial.currentFilePointage.rawRows.length, 2);
     const completed = await correctDailyPointage(partial, employees, change);
     assert.equal(table(completed).rows[0].days[0].status, 'POINTAGE');
     assert.equal(table(completed).rows[0].days[0].display, '09:30');

@@ -8,10 +8,57 @@ import { canonicalizePointageSnapshotDates } from '../lib/pointageSnapshotDates.
 import { compactPointageStorage, expandPointageStorage } from '../lib/pointageStorage.js';
 import { PAYROLL_RETENTION, emptyPayrollSnapshot } from '../lib/payrollPointage.js';
 import { getPayrollPeriod } from '../lib/pointagePeriod.js';
+import { getLocalPointageDate } from '../lib/pointageDates.js';
 
 const TABLE_NAME = 'hr_dashboard_store';
 const CURRENT_RECORD_ID = 'rh-pointage-analysis';
 const HISTORY_RECORD_PREFIX = 'rh-pointage-history-';
+const CORRECTION_RECORD_PREFIX = 'rh-pointage-correction-';
+
+function pointageCorrectionRecordId(correction) {
+  const correctedAt = Date.parse(correction.correctedAt || '') || Date.now();
+  const nonce = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+  return `${CORRECTION_RECORD_PREFIX}${correction.isoDate}-${encodeURIComponent(String(correction.employeeKey))}-${correctedAt}-${nonce}`;
+}
+
+export async function savePointageCorrection(correction) {
+  if (!hasSupabaseEnv || !supabase) {
+    return { mode: 'local-disabled', message: `${getSupabaseConfigIssue() || 'Supabase indisponible.'} La correction n est pas sauvegardee.` };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(correction?.isoDate || '') || !String(correction?.employeeKey || '')) {
+    return { mode: 'local-disabled', message: 'Correction RH invalide.' };
+  }
+  try {
+    // Each RH edit is one tiny append-only row, independent of the large import snapshot.
+    const id = pointageCorrectionRecordId(correction);
+    const { error } = await supabase.from(TABLE_NAME).insert({ id,
+      payload: { kind: 'rh-pointage-correction-v1', employeeKey: correction.employeeKey,
+        isoDate: correction.isoDate, correction }, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    return { mode: 'supabase', data: correction, corrections: [correction] };
+  } catch (error) {
+    return { mode: 'local-disabled', message: formatSupabaseError(error, 'Sauvegarde correction RH') };
+  }
+}
+export async function clearPointageCorrectionsForDates(dates) {
+  if (!hasSupabaseEnv || !supabase) return { mode: 'local-disabled', message: getSupabaseConfigIssue() || 'Supabase indisponible.' };
+  const dateSet = new Set((dates || []).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)));
+  if (!dateSet.size) return { mode: 'supabase' };
+  try {
+    const { data: rows, error: readError } = await supabase.from(TABLE_NAME).select('id')
+      .like('id', `${CORRECTION_RECORD_PREFIX}%`);
+    if (readError) throw readError;
+    const ids = (rows || []).filter((row) => dateSet.has(row.id.slice(CORRECTION_RECORD_PREFIX.length, CORRECTION_RECORD_PREFIX.length + 10)))
+      .map((row) => row.id);
+    if (!ids.length) return { mode: 'supabase' };
+    const { error } = await supabase.from(TABLE_NAME)
+      .update({ payload: { cleared: true }, updated_at: new Date().toISOString() }).in('id', ids);
+    if (error) throw error;
+    return { mode: 'supabase' };
+  } catch (error) {
+    return { mode: 'local-disabled', message: formatSupabaseError(error, 'Nettoyage corrections RH') };
+  }
+}
 function getSnapshotDates(snapshot) {
   const rawDates = Array.isArray(snapshot?.rawRows)
     ? snapshot.rawRows.map((row) => row.isoDate).filter(Boolean)
@@ -206,7 +253,7 @@ async function clearStoredPointageRecords(filter) {
 
 async function persistSnapshotRows(normalized, resetBeforeSave = false, options = {}) {
   if (normalized.retentionPolicy === PAYROLL_RETENTION && normalized.payrollPeriodStart !== getPayrollPeriod().start) {
-    return { data: null, mode: 'conflict', message: 'Le mois de paie a changé. Rechargez la page avant de sauvegarder.' };
+    return { data: null, mode: 'conflict', message: 'Le mois de paie a changÃ©. Rechargez la page avant de sauvegarder.' };
   }
   writeLocalSnapshot(normalized);
   upsertLocalHistoryEntry(normalized);
@@ -385,9 +432,26 @@ export async function loadPointageSnapshot() {
       const empty = emptyPayrollSnapshot(undefined, data.payload.calculationRules);
       const result = await savePointageSnapshot(empty, { expectedUpdatedAt: data.updated_at });
       if (result.mode !== 'supabase') return result;
-      return { ...result, message: 'Nouveau mois de paie : le pointage précédent a été vidé.' };
+      return { ...result, message: 'Nouveau mois de paie : le pointage prÃ©cÃ©dent a Ã©tÃ© vidÃ©.' };
     }
-    const normalized = withStorageMetadata(normalizeSnapshot(data.payload), data);
+    let normalized = withStorageMetadata(normalizeSnapshot(data.payload), data);
+    const { data: correctionRows, error: correctionsError } = await supabase.from(TABLE_NAME)
+      .select('payload').like('id', `${CORRECTION_RECORD_PREFIX}%`);
+    if (correctionsError) throw correctionsError;
+    const periodStart = getPayrollPeriod().start;
+    const today = getLocalPointageDate();
+    const savedCorrections = (correctionRows || []).flatMap((row) => row.payload?.cleared ? []
+      : row.payload?.correction ? [row.payload.correction] : row.payload?.corrections || [])
+      .filter((item) => item?.isoDate >= periodStart && item?.isoDate <= today);
+    const correctionKey = (item) => `${item.employeeKey}|${item.isoDate}|${item.correctedAt || JSON.stringify(item.after || {})}`;
+    const allCorrections = [...(normalized.manualCorrections || []), ...(normalized.currentFilePointage?.manualCorrections || []), ...savedCorrections]
+      .filter((item) => item?.isoDate >= periodStart && item?.isoDate <= today)
+      .sort((a, b) => String(a.correctedAt || '').localeCompare(String(b.correctedAt || '')));
+    const uniqueCorrections = [...new Map(allCorrections.map((item) => [correctionKey(item), item])).values()];
+    normalized = { ...normalized, manualCorrections: uniqueCorrections,
+      currentFilePointage: normalized.currentFilePointage
+        ? { ...normalized.currentFilePointage, manualCorrections: uniqueCorrections }
+        : normalized.currentFilePointage };
     writeLocalSnapshot(normalized);
     upsertLocalHistoryEntry(normalized);
 

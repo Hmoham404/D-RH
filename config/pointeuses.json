@@ -1,5 +1,14 @@
 {
   "timeoutMs": 3000,
+  "siteOrigins": [
+    "https://d-rh-hn7b.vercel.app",
+    "https://d-rh.vercel.app",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
+    "http://127.0.0.1:5176"
+  ],
   "devices": [
     { "name": "MYC INJECTION", "host": "10.10.100.201", "port": 4370 },
     { "name": "MYC DIRECTION", "host": "10.10.100.202", "port": 4370 },

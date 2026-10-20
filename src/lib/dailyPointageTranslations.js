@@ -1,5 +1,8 @@
+import { pointeusesTranslations } from './pointeusesTranslations.js';
+
 export const dailyPointageTranslations = {
   fr: {
+    pointeuses: pointeusesTranslations.fr,
     payrollChartHint: 'Un point par journée importée. Les jours sans données restent vides.',
     currentPayrollMonth: 'Mois de paie en cours', importedDayCount: '{count} / {total} jours importés', notImported: 'Non importé', noCurrentMonthData: 'Aucun pointage importé pour le mois de paie en cours.',
     overview: {
@@ -49,6 +52,7 @@ export const dailyPointageTranslations = {
     departments: { administration: 'Administration', production: 'Production', maintenance: 'Maintenance', guarding: 'Gardiennage', cleaning: 'Nettoyage', project: 'Projet', unknown: 'Non renseigné', unknownService: 'Service non renseigné' },
   },
   en: {
+    pointeuses: pointeusesTranslations.en,
     payrollChartHint: 'One point per imported day. Days without data remain blank.',
     currentPayrollMonth: 'Current payroll month', importedDayCount: '{count} / {total} days imported', notImported: 'Not imported', noCurrentMonthData: 'No attendance imported for the current payroll month.',
     overview: {
@@ -98,6 +102,7 @@ export const dailyPointageTranslations = {
     departments: { administration: 'Administration', production: 'Production', maintenance: 'Maintenance', guarding: 'Security', cleaning: 'Cleaning', project: 'Project', unknown: 'Unspecified', unknownService: 'Unspecified service' },
   },
   ar: {
+    pointeuses: pointeusesTranslations.ar,
     payrollChartHint: 'نقطة واحدة لكل يوم مستورد. تبقى الأيام دون بيانات فارغة.',
     currentPayrollMonth: 'شهر الأجور الحالي', importedDayCount: '{count} / {total} يوم مستورد', notImported: 'غير مستورد', noCurrentMonthData: 'لا توجد بيانات حضور مستوردة لشهر الأجور الحالي.',
     overview: {
@@ -146,6 +151,7 @@ export const dailyPointageTranslations = {
     departments: { administration: 'الإدارة', production: 'الإنتاج', maintenance: 'الصيانة', guarding: 'الحراسة', cleaning: 'النظافة', project: 'المشروع', unknown: 'غير محدد', unknownService: 'مصلحة غير محددة' },
   },
   it: {
+    pointeuses: pointeusesTranslations.it,
     payrollChartHint: 'Un punto per ogni giorno importato. I giorni senza dati rimangono vuoti.',
     currentPayrollMonth: 'Mese paga corrente', importedDayCount: '{count} / {total} giorni importati', notImported: 'Non importato', noCurrentMonthData: 'Nessuna presenza importata per il mese paga corrente.',
     overview: {
@@ -194,6 +200,7 @@ export const dailyPointageTranslations = {
     departments: { administration: 'Amministrazione', production: 'Produzione', maintenance: 'Manutenzione', guarding: 'Vigilanza', cleaning: 'Pulizie', project: 'Progetto', unknown: 'Non specificato', unknownService: 'Servizio non specificato' },
   },
   zh: {
+    pointeuses: pointeusesTranslations.zh,
     payrollChartHint: '每个已导入日期对应一个点。无数据的日期保持空白。',
     currentPayrollMonth: '当前工资月', importedDayCount: '已导入 {count} / {total} 天', notImported: '未导入', noCurrentMonthData: '当前工资月尚无导入的考勤数据。',
     overview: {

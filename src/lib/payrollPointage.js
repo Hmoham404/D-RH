@@ -19,14 +19,14 @@ export function emptyPayrollSnapshot(today = getLocalPointageDate(), rules = {})
 
 // Daily exports supplement the month. Identical passages are idempotent, and
 // a reimported date returns to its source data and clears that date's RH fixes.
-export async function preparePayrollPointage(file, employees, previous, rules, today = getLocalPointageDate()) {
+export async function preparePayrollPointage(file, employees, previous, rules, today = getLocalPointageDate(), { preserveCorrections = false } = {}) {
   const incoming = await prepareDailyPointage(file, employees, null, rules);
   const period = payrollPeriodToDate(getPayrollPeriod(today), today);
   const current = pointageInPeriod(getCurrentFilePointage(previous), period);
   const addition = pointageInPeriod(getCurrentFilePointage(incoming), period);
   if (!addition.rawRows.length) throw new Error('Aucun passage du fichier dans le mois de paie en cours, du 26 à aujourd’hui. Import annulé.');
   const incomingDates = new Set(addition.rawRows.map((row) => row.isoDate));
-  const corrections = (current?.manualCorrections || []).filter((item) => !incomingDates.has(item.isoDate));
+  const corrections = (current?.manualCorrections || []).filter((item) => preserveCorrections || !incomingDates.has(item.isoDate));
   const rows = new Map();
   const key = (row) => `${row.employeeKey || row.sourceId}|${row.pointageAt}`;
   (current?.rawRows || []).forEach((row) => rows.set(key(row), row));

@@ -11,6 +11,11 @@
     "test:ui": "playwright test",
     "test:sql": "node --test tests/sql/*.test.js",
     "pointeuses:diagnostic": "node scripts/check-pointeuses.mjs",
+    "pointeuses:setup": "python -m pip install --target .pointage-tools/python -r config/pointeuses-requirements.txt --disable-pip-version-check",
+    "pointeuses:bridge": "node scripts/pointeuses-bridge.mjs",
+    "pointeuses:start": "powershell -NoProfile -File scripts/start-pointeuses.ps1",
+    "test:pointeuses": "node --test tests/pointeuses/*.test.mjs",
+    "test:pointeuses:reader": "python -m unittest discover -s tests/pointeuses -p *_test.py",
     "pointage:generate": "powershell -ExecutionPolicy Bypass -File scripts/generate-classeur1-pointage.ps1"
   },
   "dependencies": {

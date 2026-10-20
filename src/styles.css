@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+.pointeuse-sync { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border: 1px solid #dce4ed; border-radius: 12px; background: #fff; }
+.pointeuse-sync__copy { min-width: 0; }
+.pointeuse-sync__copy strong { font-size: 13px; color: #102a43; }
+.pointeuse-sync__copy p { margin: 4px 0 0; font-size: 12px; color: #53677f; }
+.pointeuse-sync__copy .pointeuse-sync__notice { color: #98620a; }
+.pointeuse-sync__actions { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.pointeuse-sync__actions label { display: flex; align-items: center; gap: 8px; font-size: 12px; white-space: nowrap; }
+@media (max-width: 760px) { .pointeuse-sync { align-items: stretch; flex-direction: column; padding: 16px; } .pointeuse-sync__actions { flex-wrap: wrap; justify-content: space-between; gap: 12px; } }
+
 @theme {
   --font-sans: "Manrope Variable", "Segoe UI", sans-serif;
   --color-ink: #041532;

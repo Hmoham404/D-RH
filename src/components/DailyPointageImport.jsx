@@ -9,6 +9,8 @@ import { correctDailyPointage, verifyPointageCorrectionCode } from '../lib/point
 import PointageCorrectionForm from './PointageCorrectionForm';
 import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDates.js';
 import DashboardIcon from './DashboardIcon';
+import PointeusesSyncPanel from './PointeusesSyncPanel';
+import { preparePointeuseImport } from '../lib/pointeuseImport.js';
 import { getPayrollPeriod, pointageInPeriod, fillPayrollCalendar, payrollPeriodToDate, splitPayrollWeeks } from '../lib/pointagePeriod.js';
 
 function isExcelFile(file) {
@@ -188,6 +190,19 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     setListDetail(null);
     setMessage(translate('daily.importScreen.corrected', 'Correction saved for {name} on {date}.', { name: detail.fullName, date: dayLabel(correction.isoDate) }));
   }
+  async function syncPointeuses(records) {
+    if (busy || correcting || clearing || loading || !importEmployees.length) throw new Error('Pointage indisponible');
+    setBusy(true);
+    try {
+      const prepared = await preparePointeuseImport(records, snapshot, importEmployees, rules, today);
+      if (!prepared.added) return { added: 0 };
+      const result = await savePointageSnapshot(prepared.snapshot, { expectedUpdatedAt: snapshot?.storageRevision ?? null });
+      if (result.mode !== 'supabase') throw new Error(result.message);
+      // Clock reads supplement the source without invalidating RH corrections.
+      onSaved(result.data, { resetSelectedDate: false });
+      return { added: prepared.added };
+    } finally { setBusy(false); }
+  }
   async function importFile(event) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -251,6 +266,8 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     }
   }
   return <div className="daily-import">
+    <PointeusesSyncPanel disabled={loading || busy || correcting || clearing || !importEmployees.length}
+      onSync={syncPointeuses} translate={translate} />
     <DailyPointageTopbarTools
       dates={dates}
       analysisDate={analysisDate}

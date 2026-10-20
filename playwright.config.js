@@ -8,6 +8,6 @@ export default defineConfig({
     command: 'npm run dev -- --host 127.0.0.1 --port 5176 --strictPort',
     url: 'http://127.0.0.1:5176',
     reuseExistingServer: false,
-    env: { VITE_SUPABASE_URL: 'https://ui-test.supabase.co', VITE_SUPABASE_ANON_KEY: 'sb_publishable_ui_test' },
+    env: { VITE_SUPABASE_URL: 'https://ui-test.supabase.co', VITE_SUPABASE_ANON_KEY: 'sb_publishable_ui_test', VITE_POINTAGE_BRIDGE_URL: 'http://127.0.0.1:8788' },
   },
 });

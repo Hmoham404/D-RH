@@ -991,7 +991,7 @@ const SIDEBAR_ITEMS = [
   },
 ];
 
-const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'employees', 'departments', 'reports']);
+const EMPLOYEE_ALLOWED_SECTIONS = new Set(['settings', 'pointage', 'employees', 'departments', 'reports']);
 
 const EMPLOYEE_FORM_FIELDS = [
   { key: 'finalCode', label: 'Code final' },
@@ -5264,6 +5264,7 @@ export default function App() {
   const isStcSection = activeSection === 'reports';
   const isAbsenceSection = activeSection === 'absences';
   const isSettingsSection = activeSection === 'settings';
+  const isPointageWorkspace = isSettingsSection || activeSection === 'pointage';
   const baseServiceCount = useMemo(
     () =>
       new Set(
@@ -5416,7 +5417,7 @@ export default function App() {
   }
 
   return (
-    <main className={`rh-shell${sidebarOpen ? ' is-sidebar-open' : ''}${isSettingsSection ? ' rh-shell--pointage' : ''}`}>
+    <main className={`rh-shell${sidebarOpen ? ' is-sidebar-open' : ''}${isPointageWorkspace ? ' rh-shell--pointage' : ''}`}>
       <div
         className={`rh-overlay${sidebarOpen ? ' is-visible' : ''}`}
         onClick={() => setSidebarOpen(false)}
@@ -5451,7 +5452,7 @@ export default function App() {
 
           <div className="pointage-topbar-title"><strong>{isSettingsSection ? translate('topbar.greeting', 'Bonjour ZK Dashboard') : sidebarItems.find((item) => item.key === activeSection)?.label}</strong>{!isSettingsSection && <span>{sidebarItems.find((item) => item.key === activeSection)?.note}</span>}</div>
           <div className="rh-topbar__actions">
-            {isSettingsSection && <div id="daily-pointage-topbar-tools" className="daily-pointage-topbar-tools" />}
+            {isPointageWorkspace && <div id="daily-pointage-topbar-tools" className="daily-pointage-topbar-tools" />}
 
             <LanguageSwitcher
               language={language}
@@ -5459,7 +5460,7 @@ export default function App() {
               title={translate('switcher.title', 'Traduction')}
             />
 
-            {!isSettingsSection && <label className="rh-topbar__date">
+            {!isPointageWorkspace && <label className="rh-topbar__date">
               <span>{translate('topbar.dateSelected', 'Date selectionnee')}</span>
               <select
                 value={selectedDate}
@@ -5485,9 +5486,9 @@ export default function App() {
           </div>
         </header>
 
-        <section className={`rh-content${isSettingsSection ? ' rh-content--empty' : ''}`}>
-          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} selectedDate={selectedDate} onDateChange={setSelectedDate} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next, { resetSelectedDate = false } = {}) => { setSnapshot(next); setSelectedDate((previous) => !resetSelectedDate && getAvailableDates(next).includes(previous) ? previous : getDefaultSelectedDate(next)); }} />}
-          {isEmployeeSection || isDepartmentSection || isStcSection || isSettingsSection ? null : (
+        <section className={`rh-content${isPointageWorkspace ? ' rh-content--empty' : ''}`}>
+          {isPointageWorkspace && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} selectedDate={selectedDate} onDateChange={setSelectedDate} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next, { resetSelectedDate = false } = {}) => { setSnapshot(next); setSelectedDate((previous) => !resetSelectedDate && getAvailableDates(next).includes(previous) ? previous : getDefaultSelectedDate(next)); }} />}
+          {isEmployeeSection || isDepartmentSection || isStcSection || isPointageWorkspace ? null : (
             <>
               <div className="rh-hero">
             <div>
@@ -5683,7 +5684,7 @@ export default function App() {
             </>
           )}
 
-          {isSettingsSection ? null : isEmployeeSection || isDepartmentSection || isStcSection || isAbsenceSection ? (
+          {isPointageWorkspace ? null : isEmployeeSection || isDepartmentSection || isStcSection || isAbsenceSection ? (
             isEmployeeSection ? (
               <EmployeeBaseSurface
                 employees={employees}

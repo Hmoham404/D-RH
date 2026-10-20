@@ -52,6 +52,16 @@ test('site reads the PC connector, saves clock punches once and preserves attend
   await expect(page.locator('.daily-import .rh-table tbody tr')).toHaveCount(1);
   expect(state.current.payload.rawRows.map((row) => row.pointageAt)).toEqual(initialRecords.map((row) => row.timestamp));
   expect(state.writes).toHaveLength(1);
+  const pointageNavigation = page.getByRole('navigation').getByRole('button', { name: /Pointage quotidien/ });
+  await expect(pointageNavigation).toBeEnabled();
+  await pointageNavigation.click();
+  await expect(pointageNavigation).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.pointage-topbar-title')).toContainText('Pointage quotidien');
+  await expect(panel).toBeVisible();
+  await expect(page.locator('.daily-import')).toHaveCount(1);
+  await expect(page.locator('#daily-pointage-topbar-tools')).toBeVisible();
+  expect(state.readCount).toBe(1);
+  expect(state.writes).toHaveLength(1);
   await page.screenshot({ path: 'test-results/pointeuses-desktop.png' });
 
   await panel.getByRole('button', { name: 'Synchroniser les pointeuses' }).click();
@@ -74,6 +84,12 @@ test('mobile site reports unreachable clocks without inventing attendance or ove
   await page.goto('/');
   const panel = page.getByRole('region', { name: 'Connexion aux pointeuses MYC' });
   await expect(panel).toContainText('Aucune pointeuse joignable depuis ce PC.');
+  await page.getByRole('button', { name: 'Menu', exact: true }).click();
+  const pointageNavigation = page.getByRole('navigation').getByRole('button', { name: /Pointage quotidien/ });
+  await pointageNavigation.click();
+  await expect(pointageNavigation).toHaveAttribute('aria-current', 'page');
+  await expect(page.locator('.rh-sidebar')).not.toHaveClass(/is-open/);
+  await expect(panel).toBeVisible();
   expect(state.writes).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/pointeuses-mobile.png' });

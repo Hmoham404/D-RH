@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / '.pointage-tools' / 'python'))
 def read_device(device, first_day, last_day, timeout, zk_factory, connection_only=False):
     connection = None
     result = {'name': device['name'], 'host': device['host'], 'connected': False}
+    attempts = []
     try:
         address = ipaddress.ip_address(device['host'])
         if address.version != 4 or not address.is_private:
@@ -24,10 +25,27 @@ def read_device(device, first_day, last_day, timeout, zk_factory, connection_onl
         # The communication key is distinct from a Windows/server password.
         key_name = device.get('communicationKeyEnv', 'POINTAGE_COMM_KEY_' + device['host'].split('.')[-1])
         key = int(os.environ.get(key_name, '0'))
-        client = zk_factory(device['host'], port=int(device['port']), timeout=timeout,
-                            password=key, force_udp=bool(device.get('forceUdp', False)),
-                            ommit_ping=True, verbose=False)
-        connection = client.connect()
+        # pyzk 0.9 keeps TCP enabled after a failed TCP probe. Explicitly try
+        # UDP next; never start two sessions on the same terminal concurrently.
+        modes = [True] if device.get('forceUdp', False) else [False, True]
+        for force_udp in modes:
+            protocol = 'UDP' if force_udp else 'TCP'
+            try:
+                client = zk_factory(device['host'], port=int(device['port']), timeout=timeout,
+                                    password=key, force_udp=force_udp,
+                                    ommit_ping=True, verbose=False)
+                connection = client.connect()
+                result['protocol'] = protocol
+                attempts.append({'protocol': protocol, 'code': 'connected'})
+                break
+            except Exception as error:
+                code = 'communication_key' if 'auth' in str(error).lower() else 'unreachable'
+                attempts.append({'protocol': protocol, 'code': code})
+                if code == 'communication_key':
+                    return {**result, 'code': code, 'attempts': attempts}, []
+        if connection is None:
+            return {**result, 'code': 'unreachable', 'attempts': attempts}, []
+        result['attempts'] = attempts
         if connection_only:
             return {**result, 'connected': True}, []
         logs = connection.get_attendance()

@@ -34,6 +34,12 @@ Le ZK Dashboard garde son propre import et sa synchronisation periodique.
 Apres une mise a jour du script, redemarrer le connecteur local pour activer
 le nouveau point d'entree `/v1/connection`.
 
+Le lecteur tente TCP puis UDP si la connexion TCP echoue. Un refus de cle
+de communication interrompt la tentative ; une lecture deja connectee ne lance
+pas une deuxieme session sur un autre protocole. `forceUdp: true` sur un terminal
+limite les essais a UDP. Le resultat local conserve le protocole et les etapes
+de connexion sans exporter les messages sensibles du SDK.
+
 ```powershell
 npm run pointeuses:setup
 npm run pointeuses:start

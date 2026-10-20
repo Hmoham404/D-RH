@@ -11,6 +11,36 @@ DEVICE = {'name': 'Fixture', 'host': '10.10.100.201', 'port': 4370}
 
 
 class ReaderTest(unittest.TestCase):
+    def test_udp_fallback_reads_when_tcp_connection_fails(self):
+        calls = []
+        class Clock:
+            def __init__(self, udp): self.udp = udp
+            def connect(self):
+                calls.append('udp-connect' if self.udp else 'tcp-connect')
+                if not self.udp: raise TimeoutError('timed out')
+                return self
+            def get_attendance(self):
+                calls.append('attendance')
+                return [SimpleNamespace(user_id='003', timestamp=datetime(2026, 10, 1, 8, 0, 0), status=1, punch=0)]
+            def disconnect(self): calls.append('disconnect')
+        device, records = reader.read_device(DEVICE, date(2026, 10, 1), date(2026, 10, 2), 3,
+                                              lambda *a, **kw: Clock(kw['force_udp']))
+        self.assertTrue(device['connected'])
+        self.assertEqual(device['protocol'], 'UDP')
+        self.assertEqual(len(records), 1)
+        self.assertEqual(calls, ['tcp-connect', 'udp-connect', 'attendance', 'disconnect'])
+        self.assertEqual(device['attempts'], [{'protocol': 'TCP', 'code': 'unreachable'}, {'protocol': 'UDP', 'code': 'connected'}])
+
+    def test_authentication_refusal_does_not_retry_another_session(self):
+        calls = []
+        class Clock:
+            def connect(self): calls.append('connect'); raise RuntimeError('Unauthenticated')
+        device, records = reader.read_device(DEVICE, date(2026, 10, 1), date(2026, 10, 2), 3,
+                                              lambda *a, **kw: Clock())
+        self.assertEqual(device['code'], 'communication_key')
+        self.assertEqual(calls, ['connect'])
+        self.assertEqual(records, [])
+
     def test_connection_test_never_downloads_attendance(self):
         calls = []
         class Clock:

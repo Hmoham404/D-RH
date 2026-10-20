@@ -321,6 +321,10 @@ export async function prepareDailyPointage(file, employees, previous, rules) {
 export function getCurrentFilePointage(snapshot) {
   if (!snapshot) return null;
   const canonical = canonicalizePointageSnapshotDates(snapshot);
+  return getCanonicalCurrentFilePointage(canonical);
+}
+
+function getCanonicalCurrentFilePointage(canonical) {
   if (canonical.currentFilePointage) return canonical.currentFilePointage;
   const dates = canonical.importDiagnostics?.incomingDates;
   const sourceWeeklySheets = canonical.sourceWeeklySheets?.length ? canonical.sourceWeeklySheets
@@ -336,7 +340,7 @@ export function getCurrentFilePointage(snapshot) {
 export async function normalizeSavedPointageSnapshot(snapshot, employees, requestedBreakMinutes) {
   if (!snapshot) return snapshot;
   const canonical = canonicalizePointageSnapshotDates(snapshot);
-  const current = getCurrentFilePointage(canonical);
+  const current = getCanonicalCurrentFilePointage(canonical);
   const breakMinutes = Number.isFinite(Number(requestedBreakMinutes))
     ? Number(requestedBreakMinutes) : Number(current?.calculationRules?.breakMinutes ?? 24);
   const needsRebuild = canonical.dateRebuildRequired || current?.dateRebuildRequired

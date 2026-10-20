@@ -219,14 +219,6 @@ function writeLocalHistory(entries) {
   void entries;
 }
 
-function upsertLocalHistoryEntry(snapshot) {
-  const nextEntry = toHistoryEntry(snapshot);
-  if (!nextEntry) return;
-
-  const currentHistory = readLocalHistory().filter((entry) => entry.importId !== nextEntry.importId);
-  writeLocalHistory([nextEntry, ...currentHistory]);
-}
-
 function clearLocalPointageSnapshot() {
 }
 
@@ -256,7 +248,6 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false, options 
     return { data: null, mode: 'conflict', message: 'Le mois de paie a changÃ©. Rechargez la page avant de sauvegarder.' };
   }
   writeLocalSnapshot(normalized);
-  upsertLocalHistoryEntry(normalized);
   const configIssue = getSupabaseConfigIssue();
 
   if (!hasSupabaseEnv || !supabase) {
@@ -392,7 +383,16 @@ async function persistSnapshotRows(normalized, resetBeforeSave = false, options 
   };
 }
 
-export async function loadPointageSnapshot() {
+let pendingSnapshotLoad = null;
+
+export function loadPointageSnapshot() {
+  if (!pendingSnapshotLoad) {
+    pendingSnapshotLoad = fetchPointageSnapshot().finally(() => { pendingSnapshotLoad = null; });
+  }
+  return pendingSnapshotLoad;
+}
+
+async function fetchPointageSnapshot() {
   const localSnapshot = readLocalSnapshot();
   const configIssue = getSupabaseConfigIssue();
 
@@ -405,11 +405,13 @@ export async function loadPointageSnapshot() {
   }
 
   try {
-    const { data, error } = await supabase
-      .from(TABLE_NAME)
-      .select('payload, updated_at')
-      .eq('id', CURRENT_RECORD_ID)
-      .maybeSingle();
+    // Corrections and source snapshot are independent reads. Start them in the
+    // same network round trip rather than waiting for the large JSON first.
+    const [{ data, error }, correctionsResult] = await Promise.all([
+      supabase.from(TABLE_NAME).select('payload, updated_at')
+        .eq('id', CURRENT_RECORD_ID).maybeSingle(),
+      supabase.from(TABLE_NAME).select('payload').like('id', `${CORRECTION_RECORD_PREFIX}%`),
+    ]);
 
     if (error) {
       return {
@@ -435,8 +437,7 @@ export async function loadPointageSnapshot() {
       return { ...result, message: 'Nouveau mois de paie : le pointage prÃ©cÃ©dent a Ã©tÃ© vidÃ©.' };
     }
     let normalized = withStorageMetadata(normalizeSnapshot(data.payload), data);
-    const { data: correctionRows, error: correctionsError } = await supabase.from(TABLE_NAME)
-      .select('payload').like('id', `${CORRECTION_RECORD_PREFIX}%`);
+    const { data: correctionRows, error: correctionsError } = correctionsResult;
     if (correctionsError) throw correctionsError;
     const periodStart = getPayrollPeriod().start;
     const today = getLocalPointageDate();
@@ -453,7 +454,6 @@ export async function loadPointageSnapshot() {
         ? { ...normalized.currentFilePointage, manualCorrections: uniqueCorrections }
         : normalized.currentFilePointage };
     writeLocalSnapshot(normalized);
-    upsertLocalHistoryEntry(normalized);
 
     return {
       data: normalized,

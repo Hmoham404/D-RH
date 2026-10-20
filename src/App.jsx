@@ -4662,6 +4662,11 @@ export default function App() {
       if (activeBreakMinutes !== pointageBreakMinutes) setPointageBreakMinutes(activeBreakMinutes);
       let normalizedSnapshot = await normalizeSavedPointageSnapshot(snapshotResult.data, employeesResult.data || [], activeBreakMinutes);
       if (cancelled) return;
+      // Display the freshly loaded data before any optional repair has made
+      // its write/readback round trips. Keep writes disabled until it settles.
+      setEmployees(Array.isArray(employeesResult.data) ? employeesResult.data : []);
+      setSnapshot(normalizedSnapshot || null);
+      setSelectedDate(getDefaultSelectedDate(normalizedSnapshot));
       let snapshotRepairMessage = '';
       if (normalizedSnapshot && (snapshotResult.data?.storageNeedsDateRepair
         || hasPointageDateChanges(snapshotResult.data, normalizedSnapshot)
@@ -4684,14 +4689,14 @@ export default function App() {
       }
       if (cancelled) return;
 
-      setEmployees(Array.isArray(employeesResult.data) ? employeesResult.data : []);
       setSnapshot(normalizedSnapshot || null);
       setStatusMessage(
         snapshotRepairMessage || (employeesResult.mode !== 'supabase' && employeesResult.message
           ? employeesResult.message
           : snapshotResult.message || employeesResult.message || translate('messages.dashboardReady', 'Dashboard RH pret.')),
       );
-      setSelectedDate(getDefaultSelectedDate(normalizedSnapshot));
+      setSelectedDate((previous) => getAvailableDates(normalizedSnapshot).includes(previous)
+        ? previous : getDefaultSelectedDate(normalizedSnapshot));
       setIsLoading(false);
     }
 
@@ -4837,9 +4842,10 @@ export default function App() {
     }
   }, [availableDates, selectedDate, snapshot]);
 
+  const dailyWeeks = useMemo(() => snapshot ? buildDailyWeeks(snapshot, employees) : [], [snapshot, employees]);
   const selectedWeek = useMemo(() => getSelectedWeek(
-    { weeklySheets: snapshot ? buildDailyWeeks(snapshot, employees) : [] }, selectedDate,
-  ), [snapshot, employees, selectedDate]);
+    { weeklySheets: dailyWeeks }, selectedDate,
+  ), [dailyWeeks, selectedDate]);
   const sourceRowsForDate = useMemo(() => getSelectedRows(snapshot, selectedDate), [snapshot, selectedDate]);
   const sourceSummaryForDate = useMemo(
     () => snapshot?.dailySummaries?.find((item) => item.isoDate === selectedDate) || null,

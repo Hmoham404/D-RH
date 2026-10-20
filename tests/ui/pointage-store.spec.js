@@ -25,6 +25,10 @@ async function storageHarness(page) {
   await page.route('**/rest/v1/hr_dashboard_store*', async (route) => {
     const request = route.request();
     const url = new URL(request.url());
+    if (request.method() === 'GET' && url.searchParams.get('id')?.startsWith('like.rh-pointage-correction-')) {
+      await route.fulfill({ json: [] });
+      return;
+    }
     if (request.method() === 'POST') {
       const body = request.postDataJSON();
       const rows = Array.isArray(body) ? body : [body];

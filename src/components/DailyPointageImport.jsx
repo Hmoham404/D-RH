@@ -229,7 +229,7 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
   }
   async function clearPointage(event) {
     event.preventDefault();
-    if (busy || correcting || clearing) return;
+    if (busy || correcting || clearing || loading) return;
     setClearError('');
     setClearing(true);
     try {
@@ -324,8 +324,8 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
         {clearError && <p role="alert">{clearError}</p>}
       </div>
       <div className="delete-zone__actions">
-        <input className="delete-zone__input" type="password" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder={translate('daily.importScreen.code')} value={clearCode} onChange={(event) => setClearCode(event.target.value)} disabled={busy || correcting || clearing} />
-        <button className="danger-button" type="submit" disabled={busy || correcting || clearing || !clearCode.trim()}>{clearing ? translate('daily.importScreen.clearing') : translate('daily.importScreen.clear')}</button>
+        <input className="delete-zone__input" type="password" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder={translate('daily.importScreen.code')} value={clearCode} onChange={(event) => setClearCode(event.target.value)} disabled={busy || correcting || clearing || loading} />
+        <button className="danger-button" type="submit" disabled={busy || correcting || clearing || loading || !clearCode.trim()}>{clearing ? translate('daily.importScreen.clearing') : translate('daily.importScreen.clear')}</button>
       </div>
     </form>
     {detail && <dialog ref={dialogRef} className="daily-import__dialog" aria-labelledby="punch-detail-title" onClose={() => setDetail(null)} onCancel={(event) => { if (correcting) event.preventDefault(); }} onClick={(event) => { if (!correcting && event.target === event.currentTarget) dialogRef.current.close(); }}>

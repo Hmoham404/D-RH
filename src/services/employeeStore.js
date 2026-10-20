@@ -553,7 +553,18 @@ function removeEmployeeLocally(employee, fallbackRecordId = '') {
   };
 }
 
-export async function loadEmployees() {
+let pendingEmployeesLoad = null;
+
+// Share only concurrent reads (including React StrictMode's startup effects).
+// Once settled, the next call always reads the current server state again.
+export function loadEmployees() {
+  if (!pendingEmployeesLoad) {
+    pendingEmployeesLoad = fetchEmployees().finally(() => { pendingEmployeesLoad = null; });
+  }
+  return pendingEmployeesLoad;
+}
+
+async function fetchEmployees() {
   const storedEmployees = readLocalEmployees();
   const localCacheExists = hasLocalEmployeesCache();
   const localFallbackEmployees = localCacheExists
@@ -579,13 +590,19 @@ export async function loadEmployees() {
       const activeIds = [...activeRecordIds];
       // Supabase caps each response page. Fetch the authoritative active IDs in
       // small batches so larger directories are never silently truncated.
-      for (let offset = 0; offset < activeIds.length; offset += 100) {
-        const { data, error } = await supabase
-          .from(TABLE_NAME)
-          .select('*')
-          .in('record_id', activeIds.slice(offset, offset + 100));
-        if (error) throw error;
-        directoryRows.push(...(data || []));
+      // Independent batches can travel together. Bound concurrency so a large
+      // directory does not flood the API, while retaining every active record.
+      for (let offset = 0; offset < activeIds.length; offset += 400) {
+        const batches = [];
+        for (let start = offset; start < Math.min(offset + 400, activeIds.length); start += 100) {
+          batches.push(supabase.from(TABLE_NAME).select('*')
+            .in('record_id', activeIds.slice(start, start + 100)));
+        }
+        const results = await Promise.all(batches);
+        for (const { data, error } of results) {
+          if (error) throw error;
+          directoryRows.push(...(data || []));
+        }
       }
     } else {
       // Legacy installs without an active-ID list need explicit pagination too.

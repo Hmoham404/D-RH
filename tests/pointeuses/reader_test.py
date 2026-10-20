@@ -11,6 +11,19 @@ DEVICE = {'name': 'Fixture', 'host': '10.10.100.201', 'port': 4370}
 
 
 class ReaderTest(unittest.TestCase):
+    def test_connection_test_never_downloads_attendance(self):
+        calls = []
+        class Clock:
+            def connect(self): calls.append('connect'); return self
+            def get_attendance(self): raise AssertionError('Connection test must not download attendance')
+            def disconnect(self): calls.append('disconnect')
+        device, records = reader.read_device(DEVICE, date(2026, 10, 1), date(2026, 10, 2), 3,
+                                              lambda *a, **kw: Clock(), connection_only=True)
+        self.assertTrue(device['connected'])
+        self.assertNotIn('recordCount', device)
+        self.assertEqual(records, [])
+        self.assertEqual(calls, ['connect', 'disconnect'])
+
     def test_only_attendance_fields_are_exported_and_session_is_closed(self):
         calls = []
         class Clock:

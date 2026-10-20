@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / '.pointage-tools' / 'python'))
 
 
-def read_device(device, first_day, last_day, timeout, zk_factory):
+def read_device(device, first_day, last_day, timeout, zk_factory, connection_only=False):
     connection = None
     result = {'name': device['name'], 'host': device['host'], 'connected': False}
     try:
@@ -28,6 +28,8 @@ def read_device(device, first_day, last_day, timeout, zk_factory):
                             password=key, force_udp=bool(device.get('forceUdp', False)),
                             ommit_ping=True, verbose=False)
         connection = client.connect()
+        if connection_only:
+            return {**result, 'connected': True}, []
         logs = connection.get_attendance()
         records = [{'userId': str(item.user_id),
                     'timestamp': item.timestamp.strftime('%Y-%m-%dT%H:%M:%S'),
@@ -52,6 +54,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--from-date', required=True)
     parser.add_argument('--through-date', required=True)
+    parser.add_argument('--connection-only', action='store_true')
     options = parser.parse_args()
     first_day = date.fromisoformat(options.from_date)
     last_day = date.fromisoformat(options.through_date)
@@ -69,7 +72,7 @@ def main():
     with contextlib.redirect_stdout(io.StringIO()):
         with ThreadPoolExecutor(max_workers=3) as executor:
             results = list(executor.map(
-                lambda device: read_device(device, first_day, last_day, timeout, ZK), config['devices']))
+                lambda device: read_device(device, first_day, last_day, timeout, ZK, options.connection_only), config['devices']))
     devices = [result[0] for result in results]
     response = {'ok': any(device['connected'] for device in devices), 'devices': devices,
                 'records': [record for _, records in results for record in records]}

@@ -8,8 +8,9 @@ const execute = promisify(execFile);
 export const BRIDGE_PROTOCOL = 'myc-pointage-bridge-v1';
 const readerPath = fileURLToPath(new URL('./read-pointeuses.py', import.meta.url));
 
-async function collectAttendance({ from, through }) {
+async function collectAttendance({ from, through, connectionOnly = false }) {
   const args = [readerPath, '--from-date', from, '--through-date', through];
+  if (connectionOnly) args.push('--connection-only');
   let output;
   try {
     output = await execute(process.env.POINTAGE_PYTHON || 'python', args, {
@@ -52,9 +53,9 @@ export function createBridgeServer({ allowedOrigins, collect = collectAttendance
     response.setHeader('Access-Control-Allow-Private-Network', 'true');
     if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
     if (request.url === '/health' && request.method === 'GET') {
-      reply(200, { ready: true, reading: Boolean(pending) }); return;
+      reply(200, { ready: true, reading: Boolean(pending), capabilities: ['attendance', 'connection-test'] }); return;
     }
-    if (request.url !== '/v1/attendance' || request.method !== 'POST') {
+    if (!['/v1/attendance', '/v1/connection'].includes(request.url) || request.method !== 'POST') {
       reply(404, { code: 'not_found' }); return;
     }
     if (request.headers['x-pointage-client'] !== 'rh' || !request.headers['content-type']?.startsWith('application/json')) {
@@ -76,11 +77,12 @@ export function createBridgeServer({ allowedOrigins, collect = collectAttendance
       if (!validDate(from) || !validDate(through) || days < 0 || days > 31) {
         reply(400, { code: 'invalid_period' }); return;
       }
-      const period = `${from}|${through}`;
+      const connectionOnly = request.url === '/v1/connection';
+      const period = `${request.url}|${from}|${through}`;
       if (pending && pendingPeriod !== period) { reply(409, { code: 'reading' }); return; }
       if (!pending) {
         pendingPeriod = period;
-        pending = Promise.resolve().then(() => collect({ from, through }))
+        pending = Promise.resolve().then(() => collect({ from, through, ...(connectionOnly ? { connectionOnly: true } : {}) }))
           .finally(() => { pending = null; pendingPeriod = ''; });
       }
       const result = await pending;

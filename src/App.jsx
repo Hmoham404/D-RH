@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import * as XLSX from 'xlsx';
 import DailyPointageImport from './components/DailyPointageImport';
+import PointeusesTestPage from './components/PointeusesTestPage';
 import DashboardIcon from './components/DashboardIcon';
 import { KpiCard, ProductionFocusSection, ProductionModTargetGauge } from './components/AttendanceDashboard';
 import { analyzeEmployeeBaseFile } from './lib/employeeBaseImport';
@@ -5452,7 +5453,7 @@ export default function App() {
 
           <div className="pointage-topbar-title"><strong>{isSettingsSection ? translate('topbar.greeting', 'Bonjour ZK Dashboard') : sidebarItems.find((item) => item.key === activeSection)?.label}</strong>{!isSettingsSection && <span>{sidebarItems.find((item) => item.key === activeSection)?.note}</span>}</div>
           <div className="rh-topbar__actions">
-            {isPointageWorkspace && <div id="daily-pointage-topbar-tools" className="daily-pointage-topbar-tools" />}
+            {isSettingsSection && <div id="daily-pointage-topbar-tools" className="daily-pointage-topbar-tools" />}
 
             <LanguageSwitcher
               language={language}
@@ -5487,7 +5488,8 @@ export default function App() {
         </header>
 
         <section className={`rh-content${isPointageWorkspace ? ' rh-content--empty' : ''}`}>
-          {isPointageWorkspace && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} selectedDate={selectedDate} onDateChange={setSelectedDate} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next, { resetSelectedDate = false } = {}) => { setSnapshot(next); setSelectedDate((previous) => !resetSelectedDate && getAvailableDates(next).includes(previous) ? previous : getDefaultSelectedDate(next)); }} />}
+          {isSettingsSection && <DailyPointageImport employees={monthlyBaseEmployees} importEmployees={employees} baseEmployees={employees} selectedDate={selectedDate} onDateChange={setSelectedDate} snapshot={snapshot} loading={isLoading} translate={translate} locale={locale} productionLabels={productionLabels} productionModTarget={productionModTarget} onProductionModTargetChange={setProductionModTarget} pointageBreakMinutes={pointageBreakMinutes} onPointageBreakMinutesChange={setPointageBreakMinutes} onSaved={(next, { resetSelectedDate = false } = {}) => { setSnapshot(next); setSelectedDate((previous) => !resetSelectedDate && getAvailableDates(next).includes(previous) ? previous : getDefaultSelectedDate(next)); }} />}
+          {activeSection === 'pointage' && <PointeusesTestPage employees={employees} snapshot={snapshot} loading={isLoading} onSaved={setSnapshot} pointageBreakMinutes={pointageBreakMinutes} language={language} locale={locale} />}
           {isEmployeeSection || isDepartmentSection || isStcSection || isPointageWorkspace ? null : (
             <>
               <div className="rh-hero">

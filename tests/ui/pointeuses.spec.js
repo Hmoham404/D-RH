@@ -7,18 +7,19 @@ const initialRecords = ['08:00:19', '17:00:22'].map((time) => ({
 }));
 
 async function databaseAndClocks(page) {
-  const state = { current: null, writes: [], records: clone(initialRecords), readCount: 0, unreachable: false, failSave: false };
+  const state = { current: null, writes: [], records: clone(initialRecords), readCount: 0, testCount: 0, unreachable: false, failSave: false };
   await page.clock.install({ time: new Date('2026-10-20T12:00:00Z') });
   await page.route('http://127.0.0.1:8788/**', async (route) => {
     const headers = { 'Access-Control-Allow-Origin': 'http://127.0.0.1:5176',
       'Access-Control-Allow-Headers': 'Content-Type, X-Pointage-Client', 'Access-Control-Allow-Methods': 'POST, OPTIONS' };
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
-    state.readCount++;
+    const isTest = new URL(route.request().url()).pathname === '/v1/connection';
+    if (isTest) state.testCount++; else state.readCount++;
     expect(route.request().postDataJSON()).toEqual({ from: '2026-09-26', through: '2026-10-20' });
     return route.fulfill({ status: state.unreachable ? 503 : 200, headers, json: {
       protocol: 'myc-pointage-bridge-v1', ok: !state.unreachable,
       devices: [201, 202, 203].map((value) => ({ host: `10.10.100.${value}`, connected: !state.unreachable, code: state.unreachable ? 'unreachable' : undefined })),
-      records: state.unreachable ? [] : state.records,
+      records: state.unreachable || isTest ? [] : state.records,
     } });
   });
   await page.route('**/rest/v1/**', async (route) => {
@@ -52,16 +53,6 @@ test('site reads the PC connector, saves clock punches once and preserves attend
   await expect(page.locator('.daily-import .rh-table tbody tr')).toHaveCount(1);
   expect(state.current.payload.rawRows.map((row) => row.pointageAt)).toEqual(initialRecords.map((row) => row.timestamp));
   expect(state.writes).toHaveLength(1);
-  const pointageNavigation = page.getByRole('navigation').getByRole('button', { name: /Pointage quotidien/ });
-  await expect(pointageNavigation).toBeEnabled();
-  await pointageNavigation.click();
-  await expect(pointageNavigation).toHaveAttribute('aria-current', 'page');
-  await expect(page.locator('.pointage-topbar-title')).toContainText('Pointage quotidien');
-  await expect(panel).toBeVisible();
-  await expect(page.locator('.daily-import')).toHaveCount(1);
-  await expect(page.locator('#daily-pointage-topbar-tools')).toBeVisible();
-  expect(state.readCount).toBe(1);
-  expect(state.writes).toHaveLength(1);
   await page.screenshot({ path: 'test-results/pointeuses-desktop.png' });
 
   await panel.getByRole('button', { name: 'Synchroniser les pointeuses' }).click();
@@ -89,8 +80,61 @@ test('mobile site reports unreachable clocks without inventing attendance or ove
   await pointageNavigation.click();
   await expect(pointageNavigation).toHaveAttribute('aria-current', 'page');
   await expect(page.locator('.rh-sidebar')).not.toHaveClass(/is-open/);
-  await expect(panel).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Aucun pointage reçu' })).toBeVisible();
+  await expect(page.locator('.clock-device__status')).toHaveText(['Non testée', 'Non testée', 'Non testée']);
+  await page.getByRole('button', { name: 'Lire les pointages', exact: true }).click();
+  await expect(page.locator('.clock-test [role="status"]')).toContainText('Aucune pointeuse ne répond depuis ce PC.');
+  await expect(page.locator('.clock-device__status')).toHaveText(['Sans réponse', 'Sans réponse', 'Sans réponse']);
+  await expect(page.locator('.clock-test__preview tbody tr')).toHaveCount(0);
   expect(state.writes).toEqual([]);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/pointeuses-mobile.png' });
+});
+
+test('dedicated test workspace starts empty and only saves explicitly requested real read results', async ({ page }) => {
+  const state = await databaseAndClocks(page);
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await page.goto('/');
+  // Existing dashboard attendance must never populate the test preview.
+  await expect(page.getByRole('region', { name: 'Connexion aux pointeuses MYC' })).toContainText('2 nouveaux passages enregistrés.');
+  expect(state.writes).toHaveLength(1);
+  await page.getByRole('navigation').getByRole('button', { name: /Pointage quotidien/ }).click();
+  await expect(page.getByRole('heading', { name: 'Aucun pointage reçu' })).toBeVisible();
+  await expect(page.locator('.clock-device__status')).toHaveText(['Non testée', 'Non testée', 'Non testée']);
+  await expect(page.locator('.daily-import, .dashboard-gauges')).toHaveCount(0);
+  expect(state.readCount).toBe(1);
+  expect(state.writes).toHaveLength(1);
+  await page.screenshot({ path: 'test-results/pointeuses-test-empty.png' });
+  await page.getByRole('button', { name: 'Tester la connexion', exact: true }).click();
+  await expect(page.locator('.clock-test [role="status"]')).toContainText('3/3 pointeuses joignables.');
+  expect(state.testCount).toBe(1);
+  expect(state.readCount).toBe(1);
+  expect(state.writes).toHaveLength(1);
+  await expect(page.getByRole('heading', { name: 'Aucun pointage reçu' })).toBeVisible();
+  state.records.push({ ...initialRecords[0], timestamp: '2026-10-20T08:05:00' });
+  await page.getByRole('button', { name: 'Lire les pointages', exact: true }).click();
+  await expect(page.locator('.clock-test__preview tbody tr')).toHaveCount(3);
+  expect(state.writes).toHaveLength(1);
+  await page.getByRole('button', { name: 'Enregistrer dans le pointage', exact: true }).click();
+  await expect(page.locator('.clock-test [role="status"]')).toContainText('1 nouveaux passages enregistrés.');
+  expect(state.writes).toHaveLength(2);
+  expect(state.current.payload.rawRows).toHaveLength(3);
+  await page.getByRole('button', { name: 'Enregistrer dans le pointage', exact: true }).click();
+  await expect(page.locator('.clock-test [role="status"]')).toContainText('Tous ces passages sont déjà enregistrés.');
+  expect(state.writes).toHaveLength(2);
+  state.records.push({ ...initialRecords[0], timestamp: '2026-10-20T17:05:00' });
+  state.failSave = true;
+  await page.getByRole('button', { name: 'Lire les pointages', exact: true }).click();
+  await expect(page.locator('.clock-test__preview tbody tr')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Enregistrer dans le pointage', exact: true }).click();
+  await expect(page.locator('.clock-test [role="status"]')).toContainText('Enregistrement impossible.');
+  await expect(page.locator('.clock-test__preview tbody tr')).toHaveCount(4);
+  expect(state.current.payload.rawRows).toHaveLength(3);
+  // A subsequent failed test clears the old preview and never writes empty data.
+  state.unreachable = true;
+  const writes = state.writes.length;
+  await page.getByRole('button', { name: 'Tester la connexion', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Aucun pointage reçu' })).toBeVisible();
+  await expect(page.locator('.clock-device__status')).toHaveText(['Sans réponse', 'Sans réponse', 'Sans réponse']);
+  expect(state.writes).toHaveLength(writes);
 });

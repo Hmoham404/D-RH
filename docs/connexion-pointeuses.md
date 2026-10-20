@@ -19,6 +19,21 @@ prouve pas l'acces au reseau des pointeuses.
 
 ## Demarrage du connecteur sur le PC MYC
 
+La rubrique **Pointage quotidien** est un espace de test distinct du ZK Dashboard.
+Elle commence avec trois terminaux **Non testee** et un tableau vide. Elle n'affiche
+pas les compteurs d'une ancienne capture ni les pointages deja presents dans la base.
+
+1. **Tester la connexion** ouvre et ferme une session par terminal, sans lire les passages.
+2. **Lire les pointages** recupere les passages du cycle de paie en cours dans le tableau de test.
+3. **Enregistrer dans le pointage** ajoute les nouveaux passages a Supabase, en conservant
+   les corrections RH et les donnees existantes. Les doublons ne sont pas reecrits.
+
+Les tests et lectures de cette rubrique sont manuels. Une nouvelle tentative vide
+l'apercu precedent ; un echec de sauvegarde conserve les passages pour reessayer.
+Le ZK Dashboard garde son propre import et sa synchronisation periodique.
+Apres une mise a jour du script, redemarrer le connecteur local pour activer
+le nouveau point d'entree `/v1/connection`.
+
 ```powershell
 npm run pointeuses:setup
 npm run pointeuses:start

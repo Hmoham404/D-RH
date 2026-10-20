@@ -74,3 +74,22 @@ test('an unreachable device is reported as failure, never as a successful empty 
   assert.equal(response.status, 503);
   assert.equal((await response.json()).devices[0].connected, false);
 });
+
+test('connection testing uses a separate read-only operation and cannot share an attendance request', async (t) => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const calls = [];
+  const { url, read } = await fixture(t, async (requested) => {
+    calls.push(requested);
+    await gate;
+    return { ok: true, devices: [{ host: '10.10.100.201', connected: true }], records: [] };
+  });
+  const connection = fetch(`${url}/v1/connection`, { method: 'POST',
+    headers: { Origin: origin, 'Content-Type': 'application/json', 'X-Pointage-Client': 'rh' }, body: JSON.stringify(period) });
+  // Wait for the connection test to be active before attempting an attendance read.
+  while (!calls.length) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.equal((await read()).status, 409);
+  release();
+  assert.equal((await connection).status, 200);
+  assert.deepEqual(calls, [{ ...period, connectionOnly: true }]);
+});

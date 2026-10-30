@@ -101,6 +101,21 @@ export function isEmployeeHiredInMonth(employee, referenceDate = new Date()) {
   return year === referenceDate.getFullYear() && month === referenceDate.getMonth() + 1;
 }
 
+// Reconstruct the workforce on a calendar day, including employees whose
+// current STC status took effect only after that day. Undated STC stays excluded.
+export function isEmployeeActiveOnDate(employee, referenceDate = new Date()) {
+  const departure = getDatedDeparture(employee);
+  const status = String(employee.status ?? '').trim().toLowerCase();
+  if (status !== 'actif' && !(status === 'stc' && departure)) return false;
+  const rawHire = employee.hiredAt || employee.hired_at || '';
+  return isEmployeeActiveInMonth({
+    ...employee,
+    status: 'Actif',
+    hiredAt: normalizeEmployeeRhDate(rawHire) || rawHire,
+    inactiveFrom: departure ? isoDate(departure) : employee.inactiveFrom || employee.inactive_from,
+  }, referenceDate);
+}
+
 export function isEmployeeActiveInMonth(employee, referenceDate = new Date()) {
   if (String(employee.status ?? '').trim().toLowerCase() !== 'actif' || Number.isNaN(referenceDate.getTime())) return false;
   const rawExit = String(employee.inactiveFrom ?? employee.inactive_from ?? '').trim();

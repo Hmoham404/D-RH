@@ -324,7 +324,7 @@
   .mod-period-picker--topbar small { @apply text-xs; }
   .mod-export-button--topbar { @apply min-h-11 rounded-md px-4 text-xs shadow-sm; }
   .mod-dashboard__main { @apply grid items-stretch gap-4 xl:grid-cols-[.98fr_1.02fr]; }
-  .mod-dashboard__grid { @apply grid items-stretch gap-4 lg:grid-cols-2 lg:grid-rows-[auto_repeat(2,minmax(20rem,1fr))]; }
+  .mod-dashboard__grid { @apply grid content-start items-stretch self-start gap-4 lg:grid-cols-2; }
   .mod-safety-card, .mod-metric, .mod-rate-card, .mod-presence-chart, .mod-dashboard__footer { @apply min-w-0 rounded-2xl border border-[#d9e5eb] bg-white shadow-[0_10px_28px_-20px_rgba(16,43,82,.42)]; }
   .mod-safety-card { @apply grid h-full grid-cols-[auto_1fr_auto] items-center gap-x-5 gap-y-3 p-5 lg:col-span-2; background: linear-gradient(120deg,#ffffff 0%,#f3faf8 100%); }
   .mod-safety-card__icon, .mod-metric__icon, .mod-rate-card__icon, .mod-section-icon { @apply grid size-12 shrink-0 place-items-center rounded-full bg-[#eef5ff] text-blue-600; }
@@ -400,6 +400,7 @@
   .mod-chart-target-key strong { @apply text-amber-700; }
   .mod-presence-chart .mod-chart-target line { stroke: #d59a16; stroke-dasharray: 5 4; stroke-width: 1.8; }
   .mod-presence-chart .mod-chart-target rect { fill: #fff6d9; stroke: #f2d783; }
+  .mod-presence-chart .mod-chart-target .mod-chart-target__band { fill: #f5c453; fill-opacity: .2; stroke: none; }
   .mod-presence-chart .mod-chart-target text { fill: #8b5e00; font-size: 8px; font-weight: 800; }
   .mod-presence-chart line.mod-chart-absence-line { stroke-width: 3; stroke-linecap: round; }
   .mod-presence-chart line.mod-chart-absence-line--below { stroke: #159466; }
@@ -412,6 +413,17 @@
   .mod-presence-chart text.mod-chart-value--target { fill: #986700; }
   .mod-presence-chart text.mod-chart-value--above { fill: #bd2633; }
   .mod-presence-chart .mod-chart-date-label { @apply text-[7px]; }
+  .mod-presence-chart--with-daily { grid-template-rows: auto minmax(0, 1fr) auto; }
+  .mod-presence-chart--with-daily > svg { height: auto; max-height: 340px; }
+  .mod-daily-presence-chart { @apply grid min-w-0 gap-3 border-t border-[#dce6ee] pt-5; grid-template-rows: auto minmax(0, 1fr) auto; }
+  .mod-daily-presence-chart > svg { height: auto; max-height: 340px; }
+  .mod-daily-presence-chart header p { @apply mt-1 text-xs; }
+  .mod-daily-presence-chart__area { fill: #168b83; fill-opacity: .08; }
+  .mod-daily-presence-chart text { font-size: 11px; }
+  .mod-daily-presence-chart .mod-chart-value { font-size: 12px; }
+  .mod-daily-presence-chart .mod-daily-presence-chart__last-date { @apply fill-[#17385f] font-extrabold; }
+  .mod-daily-presence-chart circle:focus { outline: none; stroke: #071a55; }
+  .mod-daily-presence-chart footer { @apply flex flex-wrap justify-between gap-2 text-[10px] font-medium text-slate-500; }
   .mod-dashboard__footer { @apply flex flex-wrap items-center gap-4 px-5 py-3 text-sm text-blue-900/60; background: linear-gradient(90deg,#ffffff 0%,#f2f8f7 100%); }
   .mod-dashboard__footer strong { @apply inline-flex items-center gap-2 border-e border-blue-100 pe-4 font-black text-blue-700; }
   .mod-dashboard__footer small { @apply ms-auto text-xs; }
@@ -440,6 +452,8 @@
     .mod-metric, .mod-rate-card { @apply h-auto min-h-56; }
     .mod-presence-chart { @apply min-h-0; }
     .mod-presence-chart svg { @apply h-auto; }
+    .mod-daily-presence-chart text { font-size: 18px; }
+    .mod-daily-presence-chart .mod-chart-value { font-size: 20px; }
   }
 
   /* Tables and employee management. */

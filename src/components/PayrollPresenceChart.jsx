@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import DashboardIcon from './DashboardIcon';
+import DailyModWorkforceChart from './DailyModWorkforceChart';
 import { getPayrollPeriod, splitPayrollWeeks } from '../lib/pointagePeriod.js';
-import { buildPayrollAbsenceDataset, getAbsenceTargetBand, MOD_ABSENCE_TARGET } from '../lib/presenceTrend.js';
+import { buildPayrollAbsenceDataset, getDailyModChartPeriod, getAbsenceTargetBand, MOD_ABSENCE_TARGET, MOD_ABSENCE_TARGET_MAX } from '../lib/presenceTrend.js';
 
 function getModRateFromDay(day) {
   const mod = (day?.departments || [])
@@ -118,11 +119,13 @@ function buildChartDataset(history, analysisDate, period, locale, translate) {
   };
 }
 
-export default function PayrollPresenceChart({ history = [], analysisDate, payrollPeriod, locale, translate }) {
+export default function PayrollPresenceChart({ history = [], baseEmployees = [], analysisDate, payrollPeriod, locale, translate }) {
   const [period, setPeriod] = useState('quarter');
   const [metric, setMetric] = useState('presence');
   const isAbsence = metric === 'absence';
-  const activePayrollPeriod = payrollPeriod || getPayrollPeriod(analysisDate || undefined);
+  const activePayrollPeriod = isAbsence
+    ? getDailyModChartPeriod(analysisDate || undefined)
+    : payrollPeriod || getPayrollPeriod(analysisDate || undefined);
   const absencePoints = isAbsence ? buildPayrollAbsenceDataset(history, activePayrollPeriod) : [];
   const presenceDataset = isAbsence ? null : buildChartDataset(history, analysisDate, period, locale, translate);
   const chartDates = isAbsence ? absencePoints.map((point) => point.isoDate) : [];
@@ -147,6 +150,7 @@ export default function PayrollPresenceChart({ history = [], analysisDate, payro
   const y = (value) => 210 - value / yMax * 150;
   const yTicks = isAbsence ? [0, 0.25, 0.5, 0.75, 1].map((fraction) => yMax * fraction) : [0, 25, 50, 75, 100];
   const formatRate = (value) => `${Number(value.toFixed(isAbsence ? 1 : 0)).toLocaleString(locale)}%`;
+  const targetLabel = `${formatRate(MOD_ABSENCE_TARGET)} – ${formatRate(MOD_ABSENCE_TARGET_MAX)}`;
   const periods = [
     { key: 'quarter', label: translate('daily.overview.quarter') },
     { key: 'month', label: translate('daily.overview.month') },
@@ -164,7 +168,7 @@ export default function PayrollPresenceChart({ history = [], analysisDate, payro
   });
 
   return (
-    <article className="mod-presence-chart">
+    <article className={`mod-presence-chart${isAbsence ? ' mod-presence-chart--with-daily' : ''}`}>
       <header>
         <div>
           <span className="mod-section-icon"><DashboardIcon type="chart" /></span>
@@ -190,7 +194,7 @@ export default function PayrollPresenceChart({ history = [], analysisDate, payro
           ))}
           </div>
           {isAbsence ? <div className="mod-chart-absence-meta">
-            <span className="mod-chart-target-key"><i />{translate('daily.overview.absenceTarget')} <strong>5%</strong></span>
+            <span className="mod-chart-target-key"><i />{translate('daily.overview.absenceTarget')} <strong>{targetLabel}</strong></span>
             <span>{translate('daily.overview.payrollCycle')}: {payrollRange(periodStart)} – {payrollRange(periodEnd)}</span>
           </div> : <div className="mod-chart-tabs" aria-label={translate('daily.overview.periodAria')}>
             {periods.map((tab) => (
@@ -218,9 +222,11 @@ export default function PayrollPresenceChart({ history = [], analysisDate, payro
           </g>
         ))}
         {isAbsence && <g className="mod-chart-target">
+          <rect className="mod-chart-target__band" x="26" y={y(MOD_ABSENCE_TARGET_MAX)} width="530" height={y(MOD_ABSENCE_TARGET) - y(MOD_ABSENCE_TARGET_MAX)} />
           <line x1="26" x2="556" y1={y(MOD_ABSENCE_TARGET)} y2={y(MOD_ABSENCE_TARGET)} />
-          <rect x="518" y={y(MOD_ABSENCE_TARGET) - 10} width="37" height="18" rx="5" />
-          <text x="536.5" y={y(MOD_ABSENCE_TARGET) + 3} textAnchor="middle">5%</text>
+          <line x1="26" x2="556" y1={y(MOD_ABSENCE_TARGET_MAX)} y2={y(MOD_ABSENCE_TARGET_MAX)} />
+          <rect x="492" y={y((MOD_ABSENCE_TARGET + MOD_ABSENCE_TARGET_MAX) / 2) - 10} width="64" height="18" rx="5" />
+          <text x="524" y={y((MOD_ABSENCE_TARGET + MOD_ABSENCE_TARGET_MAX) / 2) + 3} textAnchor="middle">{targetLabel}</text>
         </g>}
         {!isAbsence && period === 'quarter' && <>
           <line className="mod-chart-divider" x1={x(3) - 34} x2={x(3) - 34} y1="42" y2="240" />
@@ -253,6 +259,7 @@ export default function PayrollPresenceChart({ history = [], analysisDate, payro
           <text key={caption.label} className="mod-chart-caption" x={caption.x} y="278" textAnchor="middle">{caption.label}</text>
         ))}
       </svg>
+      {isAbsence && <DailyModWorkforceChart employees={baseEmployees} analysisDate={analysisDate} locale={locale} translate={translate} />}
     </article>
   );
 }

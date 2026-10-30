@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { formatPointageDate } from '../lib/dailyPointage.js';
-import { getEmployeeStcPeriod, isEmployeeHiredInMonth, isEmployeeStcInPeriod } from '../lib/employeeStatus.js';
+import { getEmployeeStcPeriod, isEmployeeActiveOnDate, isEmployeeHiredInMonth, isEmployeeStcInPeriod } from '../lib/employeeStatus.js';
 import { KpiCard, ProductionFocusSection } from './AttendanceDashboard';
 import AttendanceCharts from './AttendanceCharts';
 import PayrollPresenceChart from './PayrollPresenceChart';
@@ -78,6 +78,9 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
   const productionPresent = present.filter(isProduction);
   const productionAbsent = absent.filter(isProduction);
   const modPeople = production.filter(isMod);
+  const activeModPeople = baseEmployees
+    .filter((employee) => isProduction(employee) && isMod(employee) && isEmployeeActiveOnDate(employee, baseMonthDate))
+    .map((employee) => ({ ...toPerson(employee), status: 'Actif' }));
   const modPresent = present.filter((person) => isProduction(person) && isMod(person));
   const modAbsent = productionAbsent.filter(isMod);
   const recruits = baseEmployees.filter((employee) => isEmployeeHiredInMonth(employee, baseMonthDate)).map(toPerson);
@@ -92,7 +95,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
     'production-present': { title: t('daily.productionPresent'), people: productionPresent },
     'production-absent': { title: t('daily.productionAbsent'), people: productionAbsent },
     'production-new': { title: t('daily.productionNew'), people: productionRecruits },
-    'production-stc': { title: t('daily.productionStc'), people: productionStc },
+    'production-stc': { title: t('daily.productionStc'), people: productionStc, type: 'stc' },
   };
   const productionKinds = ['MOI', 'MOD'].map((kind) => {
     const members = production.filter((person) => person.kind === kind);
@@ -115,7 +118,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
   });
   const modRate = percent(modPresent.length, modPeople.length);
   const modAbsentRate = percent(modAbsent.length, modPeople.length);
-  const open = (title, peopleList) => onOpen({ title, people: peopleList, date: analysisDate });
+  const open = (title, peopleList, type = 'attendance') => onOpen({ title, people: peopleList, date: analysisDate, type });
   const safeTarget = Math.max(1, Math.round(Number(target || 65)));
   const targetCoverage = percent(modPresent.length, safeTarget);
 
@@ -134,7 +137,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
             <div className="mod-safety-card__gain"><b>+1</b><span>{t('daily.overview.eachDay')}<br />{t('daily.overview.accidentFree')}</span></div>
           </article>
 
-          <RingMetric title={t('daily.overview.staffCount')} value={number(modPeople.length || production.length)} caption={t('daily.overview.totalMod')} tone="blue" onClick={() => open(t('daily.overview.staffCount'), modPeople.length ? modPeople : production)} />
+          <RingMetric title={t('daily.overview.staffCount')} value={number(activeModPeople.length)} caption={t('daily.overview.totalMod')} tone="blue" onClick={() => open(t('daily.overview.staffCount'), activeModPeople)} />
           <RingMetric title={t('daily.overview.presentMod')} value={number(modPresent.length)} caption={t('daily.overview.onSite')} tone="green" onClick={() => open(t('daily.overview.presentMod'), modPresent)} />
 
           <div className="mod-dashboard__rates">
@@ -154,7 +157,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
           </div>
         </div>
 
-        <PayrollPresenceChart history={history} analysisDate={analysisDate} payrollPeriod={payrollPeriod} locale={locale} translate={t} />
+        <PayrollPresenceChart history={history} baseEmployees={baseEmployees} analysisDate={analysisDate} payrollPeriod={payrollPeriod} locale={locale} translate={t} />
       </div>
 
       <footer className="mod-dashboard__footer">
@@ -174,7 +177,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
           <KpiCard tone="orange" label={t('kpi.absents')} value={number(absent.length)} note={formatPercent(absent.length, workforce.length)} onClick={() => open(t('kpi.absents'), absent)} />
           <KpiCard tone="red" label={t('kpi.late')} value={number(late.length)} note={formatPercent(late.length, present.length)} onClick={() => open(t('kpi.late'), late)} />
           <KpiCard tone="slate" label={t('kpi.recruitments')} value={number(recruits.length)} note={monthLabel} onClick={() => open(t('kpi.recruitments'), recruits)} />
-          <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={stcPeriodLabel} onClick={() => open(t('kpi.stcMonth'), stc)} />
+          <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={stcPeriodLabel} onClick={() => open(t('kpi.stcMonth'), stc, 'stc')} />
         </section>
         <ProductionFocusSection
           dashboardCharts={<AttendanceCharts history={history} analysisDate={analysisDate} absent={absent.length} late={late.length} stc={stc.length} locale={locale} translate={t} />}

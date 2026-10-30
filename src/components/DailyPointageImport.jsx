@@ -11,6 +11,7 @@ import { getDefaultPointageDate, getLocalPointageDate } from '../lib/pointageDat
 import DashboardIcon from './DashboardIcon';
 import PointeusesSyncPanel from './PointeusesSyncPanel';
 import { preparePointeuseImport } from '../lib/pointeuseImport.js';
+import { normalizeEmployeeRhDate } from '../lib/employeeBaseImport.js';
 import { getPayrollPeriod, pointageInPeriod, fillPayrollCalendar, payrollPeriodToDate, splitPayrollWeeks } from '../lib/pointagePeriod.js';
 
 function isExcelFile(file) {
@@ -357,7 +358,29 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
     {listDetail && <dialog ref={listDialogRef} className="daily-import__dialog daily-import__dialog--list" aria-labelledby="attendance-detail-title" onClose={() => setListDetail(null)} onClick={(event) => { if (event.target === event.currentTarget) listDialogRef.current.close(); }}>
       <div className="daily-import__detail">
         <div className="rh-modal__header"><div><h2 id="attendance-detail-title">{listDetail.title}</h2><p>{dayLabel(listDetail.date)} · {translate('daily.importScreen.peopleCount', '{count} people', { count: listDetail.people.length })}</p></div><button type="button" autoFocus className="rh-modal__close" onClick={() => listDialogRef.current.close()}>{translate('daily.importScreen.close')}</button></div>
-        <div className="rh-table-wrap"><table className="rh-table"><thead><tr><th>{translate('daily.importScreen.employeeId')}</th><th>{translate('daily.importScreen.name')}</th><th>{translate('table.department', 'Department')}</th><th>MOD / MOI</th><th>{translate('daily.importScreen.status')}</th><th>{translate('daily.importScreen.entry')}</th><th>{translate('daily.importScreen.late')}</th></tr></thead><tbody>{listDetail.people.length ? listDetail.people.map((person) => <tr key={person.employeeKey}><td>{person.id}</td><td>{person.fullName}</td><td>{person.department}</td><td>{person.kind}</td><td>{{ POINTAGE: translate('status.present', 'Present'), AVR: translate('status.verify', 'To verify'), EMPTY: translate('status.noData', 'No data') }[person.status] || person.status}</td><td>{person.entry || '-'}</td><td>{person.delay ? translate('daily.importScreen.minutes', '{count} min', { count: person.delay }) : '-'}</td></tr>) : <tr><td colSpan={7} className="rh-table__empty">{translate('daily.importScreen.noPeople')}</td></tr>}</tbody></table></div>
+        <div className="rh-table-wrap">
+          <table className="rh-table">
+            <thead><tr>
+              <th>{translate('daily.importScreen.employeeId')}</th>
+              <th>{translate('daily.importScreen.name')}</th>
+              <th>{translate('table.department', 'Department')}</th>
+              <th>MOD / MOI</th>
+              <th>{translate('daily.importScreen.status')}</th>
+              {listDetail.type === 'stc'
+                ? <th>{translate('daily.importScreen.stcDate')}</th>
+                : <><th>{translate('daily.importScreen.entry')}</th><th>{translate('daily.importScreen.late')}</th></>}
+            </tr></thead>
+            <tbody>{listDetail.people.length ? listDetail.people.map((person) => (
+              <tr key={person.employeeKey}>
+                <td>{person.id}</td><td>{person.fullName}</td><td>{person.department}</td><td>{person.kind}</td>
+                <td>{{ POINTAGE: translate('status.present', 'Present'), AVR: translate('status.verify', 'To verify'), EMPTY: translate('status.noData', 'No data') }[person.status] || person.status}</td>
+                {listDetail.type === 'stc'
+                  ? <td>{normalizeEmployeeRhDate(person.inactiveFrom || person.inactive_from) || '-'}</td>
+                  : <><td>{person.entry || '-'}</td><td>{person.delay ? translate('daily.importScreen.minutes', '{count} min', { count: person.delay }) : '-'}</td></>}
+              </tr>
+            )) : <tr><td colSpan={listDetail.type === 'stc' ? 6 : 7} className="rh-table__empty">{translate('daily.importScreen.noPeople')}</td></tr>}</tbody>
+          </table>
+        </div>
       </div>
     </dialog>}
   </div>;

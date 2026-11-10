@@ -21,6 +21,9 @@ export const dailyPointageTranslations = {
       objective: 'Objectif', modPresent: 'MOD présents', coverage: 'Couverture', save: 'Enregistrer l’objectif', cancel: 'Annuler',
     },
     importScreen: {
+      statusCorrectionLabel: 'Statut de la journée', statusCorrectionHelp: 'Choisissez une présence, une absence ou un motif de congé / repos pour cette journée.',
+      justifiedCorrectionHelp: 'Ce motif retire cette journée du compteur ABS, sans ajouter de présence ni d’heures travaillées.', absenceCorrectionHelp: 'Cette journée reste comptée dans les ABS.',
+      correctionStatuses: { POINTAGE: 'Présence (horaires)', ABS: 'Absence non justifiée (ABS)', CONGE: 'Congé', CSS: 'Congé sans solde', CM: 'Congé maladie', REPOS: 'Repos' },
       period: 'Période d’analyse', export: 'Importer Excel', recorded: 'Pointage enregistré', search: 'Rechercher un employé', nameOrId: 'Nom ou matricule...', status: 'Statut',
       all: 'Tous les statuts', absent: 'ABS uniquement', verify: 'À vérifier', complete: 'Pointages complets', stc: 'STC uniquement', empty: 'Sans pointage', forDate: 'Pour le',
       employeeId: 'ID employé', name: 'Nom', departmentService: 'Département / Service', category: 'Catégorie',
@@ -75,6 +78,9 @@ export const dailyPointageTranslations = {
     },
     importScreen: {
       period: 'Analysis period', export: 'Import Excel', recorded: 'Recorded attendance', search: 'Search employees', nameOrId: 'Name or employee ID...', status: 'Status',
+      statusCorrectionLabel: 'Day status', statusCorrectionHelp: 'Choose attendance, absence or a leave / rest reason for this day.',
+      justifiedCorrectionHelp: 'This reason removes the day from the ABS count without adding attendance or worked hours.', absenceCorrectionHelp: 'This day remains in the ABS count.',
+      correctionStatuses: { POINTAGE: 'Attendance (hours)', ABS: 'Unjustified absence (ABS)', CONGE: 'Leave', CSS: 'Unpaid leave', CM: 'Sick leave', REPOS: 'Rest day' },
       all: 'All statuses', absent: 'ABS only', verify: 'Needs review', complete: 'Complete punches', stc: 'STC only', empty: 'No attendance', forDate: 'For date',
       employeeId: 'Employee ID', name: 'Name', departmentService: 'Department / Service', category: 'Category',
       stcDate: 'STC date',
@@ -128,6 +134,9 @@ export const dailyPointageTranslations = {
     },
     importScreen: {
       period: 'فترة التحليل', export: 'استيراد Excel', recorded: 'الحضور المسجل', search: 'ابحث عن موظف', nameOrId: 'الاسم أو الرقم الوظيفي...', status: 'الحالة',
+      statusCorrectionLabel: 'حالة اليوم', statusCorrectionHelp: 'اختر الحضور أو الغياب أو سبب الإجازة / الراحة لهذا اليوم.',
+      justifiedCorrectionHelp: 'يُستبعد هذا اليوم من عدد ABS دون إضافة حضور أو ساعات عمل.', absenceCorrectionHelp: 'يبقى هذا اليوم ضمن عدد ABS.',
+      correctionStatuses: { POINTAGE: 'حضور (ساعات)', ABS: 'غياب غير مبرر (ABS)', CONGE: 'إجازة', CSS: 'إجازة دون أجر', CM: 'إجازة مرضية', REPOS: 'راحة' },
       all: 'كل الحالات', absent: 'الغياب فقط', verify: 'يتطلب المراجعة', complete: 'الحضور المكتمل', stc: 'STC فقط', empty: 'دون تسجيل حضور', forDate: 'للتاريخ',
       employeeId: 'الرقم الوظيفي', name: 'الاسم', departmentService: 'القسم / الخدمة', category: 'الفئة',
       stcDate: 'تاريخ المغادرة',
@@ -181,6 +190,9 @@ export const dailyPointageTranslations = {
     importScreen: {
       period: 'Periodo di analisi', export: 'Importa Excel', recorded: 'Presenze registrate', search: 'Cerca dipendenti', nameOrId: 'Nome o matricola...', status: 'Stato',
       all: 'Tutti gli stati', absent: 'Solo ABS', verify: 'Da verificare', complete: 'Timbrature complete', stc: 'Solo STC', empty: 'Senza timbratura', forDate: 'Per la data',
+      statusCorrectionLabel: 'Stato della giornata', statusCorrectionHelp: 'Scegli presenza, assenza o un motivo di congedo / riposo per questa giornata.',
+      justifiedCorrectionHelp: 'Questo motivo esclude la giornata dal conteggio ABS senza aggiungere presenze o ore lavorate.', absenceCorrectionHelp: 'Questa giornata resta nel conteggio ABS.',
+      correctionStatuses: { POINTAGE: 'Presenza (orari)', ABS: 'Assenza ingiustificata (ABS)', CONGE: 'Congedo', CSS: 'Congedo non retribuito', CM: 'Malattia', REPOS: 'Riposo' },
       employeeId: 'Matricola', name: 'Nome', departmentService: 'Reparto / Servizio', category: 'Categoria',
       stcDate: 'Data STC',
       createData: 'Importa un file per creare le presenze dei dipendenti nella base HR.', noMatches: 'Nessun dipendente HR corrisponde alla ricerca.',
@@ -233,6 +245,9 @@ export const dailyPointageTranslations = {
     importScreen: {
       period: '分析周期', export: '导入 Excel', recorded: '已记录的考勤', search: '搜索员工', nameOrId: '姓名或工号...', status: '状态',
       all: '全部状态', absent: '仅ABS', verify: '待核查', complete: '完整打卡', stc: '仅STC', empty: '无打卡记录', forDate: '日期',
+      statusCorrectionLabel: '当日状态', statusCorrectionHelp: '为当天选择出勤、缺勤或休假 / 休息原因。',
+      justifiedCorrectionHelp: '此原因将当天从 ABS 计数中移除，不增加出勤人数或工作时数。', absenceCorrectionHelp: '当天仍计入 ABS。',
+      correctionStatuses: { POINTAGE: '出勤（时间）', ABS: '无故缺勤（ABS）', CONGE: '休假', CSS: '无薪假', CM: '病假', REPOS: '休息' },
       employeeId: '员工编号', name: '姓名', departmentService: '部门 / 服务', category: '类别',
       stcDate: '离职日期',
       createData: '导入文件以创建人事数据库中的员工考勤记录。', noMatches: '人事数据库中没有符合搜索条件的员工。',

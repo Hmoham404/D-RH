@@ -1967,6 +1967,8 @@ function getDayStatusMeta(day) {
       return { code: 'CM', label: 'Conge maladie', tone: 'violet', isPresent: false };
     case 'CONGE':
       return { code: 'CONGE', label: 'Conge', tone: 'violet', isPresent: false };
+    case 'CSS':
+      return { code: 'CSS', label: 'Congé sans solde', tone: 'violet', isPresent: false };
     case 'REPOS':
       return { code: 'REPOS', label: 'Repos', tone: 'slate', isPresent: false };
     case 'STC':
@@ -2336,7 +2338,7 @@ function getNextEmployeeCodeValue(employees) {
   return String(maxValue + 1).padStart(width, '0');
 }
 
-const TRACKED_ABSENCE_CODES = new Set(['ABS', 'CM', 'CONGE', 'REPOS']);
+const TRACKED_ABSENCE_CODES = new Set(['ABS', 'CM', 'CONGE', 'CSS', 'REPOS']);
 const HIDDEN_ABSENCE_MARKERS = new Set(['X', 'STC']);
 
 function isHiddenAbsenceMarker(value) {
@@ -2359,7 +2361,7 @@ function isTrackedAbsenceRow(row) {
 }
 
 function buildAbsenceSummary(rows) {
-  const statusOrder = ['ABS', 'CM', 'CONGE', 'REPOS'];
+  const statusOrder = ['ABS', 'CM', 'CONGE', 'CSS', 'REPOS'];
   const counts = new Map();
 
   rows.forEach((row) => {

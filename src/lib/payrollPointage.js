@@ -2,6 +2,7 @@ import { prepareDailyPointage, getCurrentFilePointage, normalizeSavedPointageSna
 import { getPayrollPeriod, payrollPeriodToDate, pointageInPeriod } from './pointagePeriod.js';
 import { getLocalPointageDate } from './pointageDates.js';
 import { POINTAGE_DATE_VERSION, POINTAGE_SOURCE_DATE_CONTRACT } from './pointageDateSource.js';
+import { justifiedPointageCorrectionKeys, pointageCorrectionKey } from './pointageStatus.js';
 
 export const PAYROLL_RETENTION = 'current-payroll-only-v1';
 
@@ -18,7 +19,7 @@ export function emptyPayrollSnapshot(today = getLocalPointageDate(), rules = {})
 }
 
 // Daily exports supplement the month. Identical passages are idempotent, and
-// a reimported date returns to its source data and clears that date's RH fixes.
+// a reimported date resets hour fixes while retaining current RH leave/rest decisions.
 export async function preparePayrollPointage(file, employees, previous, rules, today = getLocalPointageDate(), { preserveCorrections = false } = {}) {
   const incoming = await prepareDailyPointage(file, employees, null, rules);
   const period = payrollPeriodToDate(getPayrollPeriod(today), today);
@@ -26,7 +27,10 @@ export async function preparePayrollPointage(file, employees, previous, rules, t
   const addition = pointageInPeriod(getCurrentFilePointage(incoming), period);
   if (!addition.rawRows.length) throw new Error('Aucun passage du fichier dans le mois de paie en cours, du 26 à aujourd’hui. Import annulé.');
   const incomingDates = new Set(addition.rawRows.map((row) => row.isoDate));
-  const corrections = (current?.manualCorrections || []).filter((item) => preserveCorrections || !incomingDates.has(item.isoDate));
+  const previousCorrections = current?.manualCorrections || [];
+  const justifiedKeys = justifiedPointageCorrectionKeys(previousCorrections);
+  const corrections = previousCorrections.filter((item) => preserveCorrections || !incomingDates.has(item.isoDate)
+    || justifiedKeys.has(pointageCorrectionKey(item)));
   const rows = new Map();
   const key = (row) => `${row.employeeKey || row.sourceId}|${row.pointageAt}`;
   (current?.rawRows || []).forEach((row) => rows.set(key(row), row));

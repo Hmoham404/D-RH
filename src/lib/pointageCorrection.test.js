@@ -97,3 +97,50 @@ test('an empty or incorrect RH code is rejected', async () => {
   assert.equal(await verifyPointageCorrectionCode('incorrect'), false);
   assert.equal(await verifyPointageCorrectionCode('123X'), true);
 });
+
+for (const status of ['CONGE', 'CSS', 'CM', 'REPOS']) {
+  test(`${status} justifies an ABS without creating presence or hours and survives recalculation`, async () => {
+    const directory = employees.map((employee) => ({ ...employee, hiredAt: '2026-01-01' }));
+    const original = await snapshot([[4, 'Employé A', '09/15/2026 07:00'], [4, 'Employé A', '09/15/2026 16:00']]);
+    const build = (value) => buildDailyTable(getCurrentFilePointage(value), directory, ['2026-09-15']);
+    assert.equal(buildAttendanceByDay(build(original))[0].absences.length, 1);
+    const next = await correctDailyPointage(original, directory, {
+      employeeKey: '6', isoDate: '2026-09-15', status, entry: 'invalid stale hour', exit: '17:00',
+    });
+    const { normalizeSavedPointageSnapshot } = await import('./dailyPointage.js');
+    const reloaded = await normalizeSavedPointageSnapshot(JSON.parse(JSON.stringify(next)), directory, 30);
+    const result = build(reloaded);
+    const day = result.rows.find((row) => row.employeeKey === '6').days[0];
+    assert.equal(day.status, status);
+    assert.equal(day.workedMinutes, 0);
+    assert.equal(day.entry, '');
+    assert.equal(day.exit, '');
+    assert.equal(result.rows.find((row) => row.employeeKey === '6').totalHours, '00:00');
+    const attendance = buildAttendanceByDay(result)[0];
+    assert.equal(attendance.absences.length, 0);
+    assert.equal(attendance.departments[0].present, 1);
+    assert.equal(attendance.late.length, 0);
+    assert.deepEqual(reloaded.rawRows, original.rawRows);
+    assert.equal(next.manualCorrections[0].before.status, 'ABS');
+    assert.equal(next.manualCorrections[0].after.status, status);
+
+    const revised = await correctDailyPointage(reloaded, directory, {
+      employeeKey: '6', isoDate: '2026-09-15', entry: '08:00', exit: '16:00',
+    });
+    assert.equal(build(revised).rows[1].days[0].status, 'POINTAGE');
+    const absent = await correctDailyPointage(revised, directory, { employeeKey: '6', isoDate: '2026-09-15', status: 'ABS' });
+    assert.equal(buildAttendanceByDay(build(absent))[0].absences.length, 1);
+  });
+}
+
+test('a justified day overrides existing punches, preserves them and rejects unknown statuses', async () => {
+  const original = await snapshot([[4, 'Employé A', '09/15/2026 08:00'], [4, 'Employé A', '09/15/2026 17:00']]);
+  const change = { employeeKey: '4', isoDate: '2026-09-15', status: 'REPOS' };
+  const next = await correctDailyPointage(original, employees, change);
+  assert.equal(table(next).rows[0].days[0].status, 'REPOS');
+  assert.equal(table(next).rows[0].days[0].workedMinutes, 0);
+  assert.equal(table(next).rows[0].totalHours, '00:00');
+  assert.equal(buildAttendanceByDay(table(next))[0].departments[0].present, 0);
+  assert.deepEqual(next.rawRows, original.rawRows);
+  await assert.rejects(correctDailyPointage(original, employees, { ...change, status: 'UNKNOWN' }), /Statut/);
+});

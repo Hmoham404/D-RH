@@ -9,6 +9,7 @@ import { compactPointageStorage, expandPointageStorage } from '../lib/pointageSt
 import { PAYROLL_RETENTION, emptyPayrollSnapshot } from '../lib/payrollPointage.js';
 import { getPayrollPeriod } from '../lib/pointagePeriod.js';
 import { getLocalPointageDate } from '../lib/pointageDates.js';
+import { justifiedPointageCorrectionKeys, pointageCorrectionKey } from '../lib/pointageStatus.js';
 
 const TABLE_NAME = 'hr_dashboard_store';
 const CURRENT_RECORD_ID = 'rh-pointage-analysis';
@@ -45,10 +46,14 @@ export async function clearPointageCorrectionsForDates(dates) {
   const dateSet = new Set((dates || []).filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)));
   if (!dateSet.size) return { mode: 'supabase' };
   try {
-    const { data: rows, error: readError } = await supabase.from(TABLE_NAME).select('id')
+    const { data: rows, error: readError } = await supabase.from(TABLE_NAME).select('id,payload')
       .like('id', `${CORRECTION_RECORD_PREFIX}%`);
     if (readError) throw readError;
+    const correctionsForRow = (row) => row.payload?.cleared ? []
+      : row.payload?.correction ? [row.payload.correction] : row.payload?.corrections || [];
+    const justifiedKeys = justifiedPointageCorrectionKeys((rows || []).flatMap(correctionsForRow));
     const ids = (rows || []).filter((row) => dateSet.has(row.id.slice(CORRECTION_RECORD_PREFIX.length, CORRECTION_RECORD_PREFIX.length + 10)))
+      .filter((row) => !correctionsForRow(row).some((correction) => justifiedKeys.has(pointageCorrectionKey(correction))))
       .map((row) => row.id);
     if (!ids.length) return { mode: 'supabase' };
     const { error } = await supabase.from(TABLE_NAME)

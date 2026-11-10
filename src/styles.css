@@ -179,6 +179,8 @@
   .rh-cell-badge--prestation { @apply bg-cyan-50 text-cyan-700; }
   .rh-cell-badge--avr, .rh-panel-badge--orange { @apply bg-amber-50 text-amber-700; }
   .rh-cell-badge--abs, .rh-panel-badge--red { @apply bg-rose-50 text-rose-700; }
+  .rh-cell-badge--conge, .rh-cell-badge--css, .rh-cell-badge--cm { @apply bg-violet-50 text-violet-700; }
+  .rh-cell-badge--repos { @apply bg-slate-100 text-slate-600; }
   .rh-cell-badge--stc, .rh-panel-badge--blue { @apply bg-blue-50 text-blue-700; }
   .rh-cell-badge--empty, .rh-cell-badge--x, .rh-panel-badge--slate { @apply bg-slate-100 text-slate-500; }
   .rh-panel-badge--violet { @apply bg-violet-50 text-violet-700; }
@@ -818,6 +820,7 @@
   .pointage-correction fieldset { @apply grid min-w-0 gap-3; }
   .pointage-correction label { @apply grid min-w-0 gap-2 text-xs font-semibold text-slate-600; }
   .pointage-correction__hours { @apply grid grid-cols-2 gap-3; }
+  .pointage-correction .pointage-correction__status-help { @apply rounded-lg bg-blue-50 p-3 text-blue-800; }
   .pointage-correction input:not([type=number]) { @apply min-w-0; }
   .pointage-correction .pointage-correction__error { @apply rounded-lg bg-rose-50 p-3 text-rose-700; }
 }

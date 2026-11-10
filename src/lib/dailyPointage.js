@@ -2,6 +2,7 @@ import { analyzePointageFile } from './pointageImport.js';
 import { canonicalizePointageSnapshotDates, preservePointageSourceMetadata, POINTAGE_DATE_VERSION } from './pointageSnapshotDates.js';
 import { POINTAGE_SOURCE_DATE_CONTRACT } from './pointageDateSource.js';
 import * as XLSX from 'xlsx';
+import { JUSTIFIED_POINTAGE_STATUSES, pointageStatusLabel } from './pointageStatus.js';
 
 const code = (value) => /^\d+$/.test(String(value || '').trim()) ? String(Number(value)) : String(value || '').trim();
 const employeeKey = (employee) => code(employee.zk || employee.id || employee.finalCode || employee.saber);
@@ -134,6 +135,10 @@ export function buildDailyWeeks(analysis, employees) {
         if (!started && (day || sourceCell)) {
           status = 'X';
           display = '-';
+        } else if (correction && ['ABS', ...JUSTIFIED_POINTAGE_STATUSES].includes(correction.status)) {
+          status = correction.status;
+          display = status === 'ABS' ? 'ABS' : pointageStatusLabel(status);
+          correctionMinutes = 0;
         } else if (correction) {
           const entryMinutes = clockMinutes(correction.entry);
           const exitMinutes = clockMinutes(correction.exit);
@@ -162,7 +167,7 @@ export function buildDailyWeeks(analysis, employees) {
         if (!day && correctionMinutes === null) total += workedMinutes;
         return { ...column, status, display, raw: display, workedMinutes,
           breakMinutes: correction ? Number(correction.breakMinutes) || 0 : day?.breakMinutes,
-          detail: correction ? 'Correction RH' : day?.punchesDisplay || '',
+          detail: day?.punchesDisplay || '',
           entry: correction?.entry ? `${column.isoDate} ${correction.entry}:00` : correction ? '' : day?.entry || '',
           exit: correction?.exit ? `${column.isoDate} ${correction.exit}:00` : correction ? '' : day?.exit || '' };
       });

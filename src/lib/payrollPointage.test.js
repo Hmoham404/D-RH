@@ -55,3 +55,21 @@ test('calendar weeks are Monday to Sunday with no duplicate or out-of-period dat
   assert.deepEqual(weeks.flatMap((w) => w.dayColumns.map((d) => d.isoDate)), dates);
   assert.equal(emptyPayrollSnapshot('2026-10-26', rules).payrollPeriodStart, '2026-10-26');
 });
+
+test('reimport preserves the latest leave/rest decision but does not resurrect a replaced leave', async () => {
+  const source = file([[1, '10/12/2026 08:00'], [1, '10/12/2026 17:00']]);
+  const first = await preparePayrollPointage(source, employees, null, rules, '2026-10-13');
+  const change = { employeeKey: '2', isoDate: '2026-10-12' };
+  for (const status of ['CONGE', 'CSS', 'CM', 'REPOS']) {
+    const justified = await correctDailyPointage(first, employees, { ...change, status });
+    const reimported = await preparePayrollPointage(source, employees, justified, rules, '2026-10-13');
+    const day = buildDailyTable(getCurrentFilePointage(reimported), employees, [change.isoDate]).rows[1].days[0];
+    assert.equal(day.status, status);
+    assert.equal(day.workedMinutes, 0);
+    assert.equal(reimported.manualCorrections.length, 1);
+    const replaced = await correctDailyPointage(justified, employees, { ...change, entry: '08:00', exit: '16:00' });
+    const reset = await preparePayrollPointage(source, employees, replaced, rules, '2026-10-13');
+    assert.equal(reset.manualCorrections.length, 0);
+    assert.equal(buildDailyTable(getCurrentFilePointage(reset), employees, [change.isoDate]).rows[1].days[0].status, 'ABS');
+  }
+});

@@ -370,7 +370,9 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
               <th>{translate('daily.importScreen.status')}</th>
               {listDetail.type === 'stc'
                 ? <th>{translate('daily.importScreen.stcDate')}</th>
-                : <><th>{translate('daily.importScreen.entry')}</th><th>{translate('daily.importScreen.late')}</th></>}
+                : listDetail.type === 'recruitment'
+                  ? <th>{translate('employeeFields.hiredAt', 'Date de recrutement')}</th>
+                  : <><th>{translate('daily.importScreen.entry')}</th><th>{translate('daily.importScreen.late')}</th></>}
             </tr></thead>
             <tbody>{listDetail.people.length ? listDetail.people.map((person) => (
               <tr key={person.employeeKey}>
@@ -378,9 +380,11 @@ export default function DailyPointageImport({ employees, importEmployees = emplo
                 <td>{{ POINTAGE: translate('status.present', 'Present'), AVR: translate('status.verify', 'To verify'), EMPTY: translate('status.noData', 'No data') }[person.status] || person.status}</td>
                 {listDetail.type === 'stc'
                   ? <td>{normalizeEmployeeRhDate(person.inactiveFrom || person.inactive_from) || '-'}</td>
-                  : <><td>{person.entry || '-'}</td><td>{person.delay ? translate('daily.importScreen.minutes', '{count} min', { count: person.delay }) : '-'}</td></>}
+                  : listDetail.type === 'recruitment'
+                    ? <td>{normalizeEmployeeRhDate(person.hiredAt || person.hired_at) || '-'}</td>
+                    : <><td>{person.entry || '-'}</td><td>{person.delay ? translate('daily.importScreen.minutes', '{count} min', { count: person.delay }) : '-'}</td></>}
               </tr>
-            )) : <tr><td colSpan={listDetail.type === 'stc' ? 6 : 7} className="rh-table__empty">{translate('daily.importScreen.noPeople')}</td></tr>}</tbody>
+            )) : <tr><td colSpan={listDetail.type === 'stc' || listDetail.type === 'recruitment' ? 6 : 7} className="rh-table__empty">{translate('daily.importScreen.noPeople')}</td></tr>}</tbody>
           </table>
         </div>
       </div>

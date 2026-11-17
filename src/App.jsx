@@ -3394,11 +3394,12 @@ function BusBaseSurface({
   const chartPointX = chartRow ? 78 + ((chartRow.total / chartXMaximum) * 482) : 78;
   const chartPointY = chartRow ? 204 - ((chartRow.present / chartYMaximum) * 148) : 204;
   const chartCapacityX = chartCapacity ? 78 + ((chartCapacity / chartXMaximum) * 482) : null;
-  const comparisonBusRows = filteredRows.filter((row) => /^bus\b/i.test(row.bus)).slice(0, 4);
+  const comparisonBusRows = filteredRows.filter((row) => normalizeLookupText(row.bus) !== 'SANS BUS');
+  const comparisonChartWidth = 620 + Math.max(0, comparisonBusRows.length - 4) * 142;
   const comparisonXMaximum = Math.max(10, ...comparisonBusRows.flatMap((row) => [row.total, getCapacity(row)]));
   const comparisonYMaximum = Math.max(10, ...comparisonBusRows.map((row) => row.present));
   const comparisonMaximum = Math.max(10, ...comparisonBusRows.flatMap((row) => [row.total, row.today, getCapacity(row)]));
-  const comparisonColors = ['#2563eb', '#0f9f6e', '#8b5cf6', '#f59e0b'];
+  const comparisonColors = ['#2563eb', '#0f9f6e', '#8b5cf6', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
 
   function getCapacityRate(row) {
     const capacity = getCapacity(row);
@@ -3529,7 +3530,6 @@ function BusBaseSurface({
             <header>
               <div>
                 <h2>{t.donut.title}</h2>
-                <p>{t.donut.subtitle}</p>
               </div>
             </header>
             <div className="bus-donut-layout">
@@ -3552,7 +3552,6 @@ function BusBaseSurface({
             <header>
               <div>
                 <h2>{t.detail.title}</h2>
-                <p>{t.detail.subtitle}</p>
               </div>
               <input
                 type="search"
@@ -3564,20 +3563,16 @@ function BusBaseSurface({
             <div className="bus-lollipop-chart">
               <header>
                 <h3>{t.detail.chart}</h3>
-                <div><span className="is-active" />{t.detail.active} <span className="is-reserved" />{t.detail.present} <span className="is-capacity" />{t.detail.capacity}
-                  {comparisonBusRows.map((row, index) => <span className="bus-lollipop-chart__bus-key" key={row.bus}><i style={{ backgroundColor: comparisonColors[index % comparisonColors.length] }} />{row.bus.replace(/^BUS\s*/i, '')}</span>)}
-                  {comparisonBusRows.some((row) => getCapacity(row) > 0 && row.total > getCapacity(row)) && <span className="bus-lollipop-chart__overcapacity-key"><i />{t.status.overloaded}</span>}
-                </div>
               </header>
               {comparisonBusRows.length ? (
                 <div className="bus-lollipop-chart__surface">
-                  <svg viewBox="0 0 620 264" role="img" aria-label={`${t.detail.active}, ${t.detail.present}, ${t.detail.capacity}`}>
+                  <svg viewBox={`0 0 ${comparisonChartWidth} 264`} style={{ minWidth: `${Math.max(560, comparisonBusRows.length * 95)}px` }} role="img" aria-label={`${t.detail.active}, ${t.detail.present}, ${t.detail.capacity}`}>
                     {[0, 1, 2, 3, 4].map((step) => {
                       const y = 202 - step * 37;
                       const value = Math.round((comparisonMaximum * step) / 4);
-                      return <g key={`tick-${step}`}><line x1="62" x2="576" y1={y} y2={y} /><text x="51" y={y + 4} textAnchor="end">{value}</text></g>;
+                      return <g key={`tick-${step}`}><line x1="62" x2={comparisonChartWidth - 44} y1={y} y2={y} /><text x="51" y={y + 4} textAnchor="end">{value}</text></g>;
                     })}
-                    <line className="bus-lollipop-chart__axis" x1="62" x2="582" y1="202" y2="202" />
+                    <line className="bus-lollipop-chart__axis" x1="62" x2={comparisonChartWidth - 38} y1="202" y2="202" />
                     <line className="bus-lollipop-chart__axis" x1="62" x2="62" y1="212" y2="44" />
                     <text className="bus-lollipop-chart__axis-label" x="18" y="125" textAnchor="middle" transform="rotate(-90 18 125)">{t.detail.number}</text>
                     {comparisonBusRows.map((row, index) => {

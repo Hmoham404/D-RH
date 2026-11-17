@@ -94,7 +94,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
     'production-total': { title: t('kpi.productionWorkforce'), people: production },
     'production-present': { title: t('daily.productionPresent'), people: productionPresent },
     'production-absent': { title: t('daily.productionAbsent'), people: productionAbsent },
-    'production-new': { title: t('daily.productionNew'), people: productionRecruits },
+    'production-new': { title: t('daily.productionNew'), people: productionRecruits, type: 'recruitment' },
     'production-stc': { title: t('daily.productionStc'), people: productionStc, type: 'stc' },
   };
   const productionKinds = ['MOI', 'MOD'].map((kind) => {
@@ -176,7 +176,7 @@ export default function DailyAttendanceOverview({ day, history, analysisDate, pa
           <KpiCard tone="green" label={t('kpi.presents')} value={number(present.length)} note={formatPercent(present.length, workforce.length)} onClick={() => open(t('kpi.presents'), present)} />
           <KpiCard tone="orange" label={t('kpi.absents')} value={number(absent.length)} note={formatPercent(absent.length, workforce.length)} onClick={() => open(t('kpi.absents'), absent)} />
           <KpiCard tone="red" label={t('kpi.late')} value={number(late.length)} note={formatPercent(late.length, present.length)} onClick={() => open(t('kpi.late'), late)} />
-          <KpiCard tone="slate" label={t('kpi.recruitments')} value={number(recruits.length)} note={monthLabel} onClick={() => open(t('kpi.recruitments'), recruits)} />
+          <KpiCard tone="slate" label={t('kpi.recruitments')} value={number(recruits.length)} note={monthLabel} onClick={() => open(t('kpi.recruitments'), recruits, 'recruitment')} />
           <KpiCard tone="blue" label={t('kpi.stcMonth')} value={number(stc.length)} note={stcPeriodLabel} onClick={() => open(t('kpi.stcMonth'), stc, 'stc')} />
         </section>
         <ProductionFocusSection
